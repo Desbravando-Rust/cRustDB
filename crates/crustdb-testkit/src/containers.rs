@@ -38,7 +38,15 @@ pub struct MysqlContainer {
     pub user: String,
     pub password: String,
     pub alias: String,
-    _guard: ContainerAsync<GenericImage>,
+    guard: ContainerAsync<GenericImage>,
+}
+
+impl MysqlContainer {
+    /// Stops and starts the container (connections drop; the host port may change).
+    pub async fn restart(&self) {
+        self.guard.stop_with_timeout(Some(1)).await.unwrap();
+        self.guard.start().await.unwrap();
+    }
 }
 
 pub struct SshContainer {
@@ -208,7 +216,7 @@ pub async fn start_mysql(tls: Option<&TestCerts>, network: Option<&str>) -> Mysq
         user: "root".into(),
         password: PASSWORD.into(),
         alias,
-        _guard: c,
+        guard: c,
     }
 }
 

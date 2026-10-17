@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use crustdb_core::driver::{CancelHandle, ExecMode, Fetched, Param, ResultHeader, Session};
@@ -6,14 +6,19 @@ use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{Completion, Product, ServerVersion};
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Opts};
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 
+use crate::conn_task::{self, ConnCmd, Reply};
 use crate::connect::{err, map_err};
 
 pub struct MysqlSession {
-    conn: Conn,
+    tx: mpsc::Sender<ConnCmd>,
+    task: JoinHandle<()>,
     opts: Opts,
+    connection_id: u32,
     version: ServerVersion,
-    affected: Option<u64>,
+    active: bool,
 }
 
 fn parse_version(raw: String) -> ServerVersion {
@@ -42,18 +47,39 @@ fn parse_version(raw: String) -> ServerVersion {
 
 impl MysqlSession {
     pub(crate) fn new(conn: Conn, opts: Opts, raw_version: String) -> Self {
+        let connection_id = conn.id();
+        let (tx, rx) = mpsc::channel(1);
+        let task = tokio::spawn(conn_task::run(conn, opts.clone(), rx));
         Self {
-            conn,
+            tx,
+            task,
             opts,
+            connection_id,
             version: parse_version(raw_version),
-            affected: None,
+            active: false,
         }
+    }
+
+    /// D37: discards a paused result before a new command, reporting a failed drain.
+    async fn settle(&mut self) -> Result<(), DriverError> {
+        if self.active {
+            self.finish().await?;
+        }
+        Ok(())
+    }
+
+    /// Sends a command and awaits its reply; a dead task is a lost connection.
+    async fn call<T>(&self, cmd: impl FnOnce(Reply<T>) -> ConnCmd) -> Result<T, DriverError> {
+        let lost = || err(ErrorKind::Connect, "connection task ended");
+        let (reply, rx) = oneshot::channel();
+        self.tx.send(cmd(reply)).await.map_err(|_| lost())?;
+        rx.await.map_err(|_| lost())?
     }
 }
 
-struct MysqlCancel {
-    opts: Opts,
-    connection_id: u32,
+pub(crate) struct MysqlCancel {
+    pub(crate) opts: Opts,
+    pub(crate) connection_id: u32,
 }
 
 #[async_trait]
@@ -82,46 +108,64 @@ impl Session for MysqlSession {
     fn cancel_handle(&self) -> Box<dyn CancelHandle> {
         Box::new(MysqlCancel {
             opts: self.opts.clone(),
-            connection_id: self.conn.id(),
+            connection_id: self.connection_id,
         })
     }
     fn has_active_result(&self) -> bool {
-        self.affected.is_some()
+        self.active
     }
+    /// Finishes any active result first (D37), so a paused cursor is lost.
     async fn ping(&mut self) -> Result<Duration, DriverError> {
-        let t = Instant::now();
-        self.conn.ping().await.map_err(map_err)?;
-        Ok(t.elapsed())
+        self.settle().await?;
+        self.call(|reply| ConnCmd::Ping { reply }).await
     }
-    // ponytail: minimal run-to-completion; the result-streaming task replaces this.
-    async fn start(&mut self, sql: &str, _: ExecMode) -> Result<ResultHeader, DriverError> {
-        self.affected = None;
-        self.conn.query_drop(sql).await.map_err(map_err)?;
-        self.affected = Some(self.conn.affected_rows());
-        Ok(ResultHeader { columns: vec![] })
+    async fn start(&mut self, sql: &str, mode: ExecMode) -> Result<ResultHeader, DriverError> {
+        self.settle().await?;
+        let sql = sql.to_owned();
+        let h = self
+            .call(|reply| ConnCmd::Start { sql, mode, reply })
+            .await?;
+        self.active = true;
+        Ok(h)
     }
-    async fn start_params(&mut self, _: &str, _: &[Param]) -> Result<ResultHeader, DriverError> {
-        Err(unsupported())
+    async fn start_params(
+        &mut self,
+        sql: &str,
+        params: &[Param],
+    ) -> Result<ResultHeader, DriverError> {
+        self.settle().await?;
+        let (sql, params) = (sql.to_owned(), params.to_vec());
+        let h = self
+            .call(|reply| ConnCmd::StartParams { sql, params, reply })
+            .await?;
+        self.active = true;
+        Ok(h)
     }
-    async fn fetch(&mut self, _: usize) -> Result<Fetched, DriverError> {
-        Err(unsupported())
+    async fn fetch(&mut self, max_rows: usize) -> Result<Fetched, DriverError> {
+        let r = self
+            .call(|reply| ConnCmd::Fetch { n: max_rows, reply })
+            .await;
+        if r.as_ref().map_or(true, |f| f.exhausted) {
+            self.active = false;
+        }
+        r
     }
     async fn finish(&mut self) -> Result<Completion, DriverError> {
-        Ok(Completion {
-            affected_rows: self.affected.take(),
-        })
+        self.active = false;
+        self.call(|reply| ConnCmd::Finish { reply }).await
     }
-    async fn explain_rows(&mut self, _: &str) -> Result<Option<u64>, DriverError> {
-        Err(unsupported())
+    async fn explain_rows(&mut self, sql: &str) -> Result<Option<u64>, DriverError> {
+        self.settle().await?;
+        let sql = sql.to_owned();
+        self.call(|reply| ConnCmd::Explain { sql, reply }).await
     }
-    async fn use_database(&mut self, _: &str) -> Result<(), DriverError> {
-        Err(unsupported())
+    async fn use_database(&mut self, name: &str) -> Result<(), DriverError> {
+        self.settle().await?;
+        let name = name.to_owned();
+        self.call(|reply| ConnCmd::UseDb { name, reply }).await
     }
     async fn close(self: Box<Self>) {
-        let _ = self.conn.disconnect().await;
+        let _ = self.tx.send(ConnCmd::Close).await;
+        let _ = self.task.await;
     }
-}
-
-fn unsupported() -> DriverError {
-    err(ErrorKind::Unsupported, "not implemented yet")
 }

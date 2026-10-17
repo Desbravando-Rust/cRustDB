@@ -1,7 +1,9 @@
+mod conn_task;
 mod connect;
 mod dialect;
 mod introspect;
 mod session;
+mod types;
 
 use async_trait::async_trait;
 use crustdb_core::dialect::Dialect;

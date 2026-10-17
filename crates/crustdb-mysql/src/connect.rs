@@ -60,6 +60,8 @@ pub(crate) fn map_err(e: mysql_async::Error) -> DriverError {
             let kind = match s.code {
                 1044 | 1045 | 1698 => ErrorKind::Auth,
                 1317 => ErrorKind::Cancelled,
+                // Server shutdown in progress / connection killed: the session is gone.
+                1053 | 1927 => ErrorKind::Connect,
                 c => ErrorKind::Query {
                     code: Some(c.to_string()),
                     position: None,

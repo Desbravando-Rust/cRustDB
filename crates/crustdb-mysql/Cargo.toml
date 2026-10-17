@@ -14,7 +14,7 @@ crustdb-core = { version = "0.1.0", path = "../crustdb-core" }
 mysql_async = { version = "0.37.1", default-features = false, features = ["aws-lc-rs", "minimal-rust", "rustls-tls", "tls12"] }
 rustls = "0.23.46"
 secrecy = "0.10.3"
-tokio = { version = "1.53.3", features = ["rt", "time"] }
+tokio = { version = "1.53.3", features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
 crustdb-testkit = { path = "../crustdb-testkit" }

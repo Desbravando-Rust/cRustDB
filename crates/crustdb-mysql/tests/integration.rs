@@ -244,12 +244,15 @@ async fn cancel_handle_cancels_running_query() {
     let h = s.cancel_handle();
     let q = tokio::spawn(async move {
         // Long cross join: a killed SLEEP() returns normally, a killed scan errors.
-        let r = s
-            .start(
+        let r = async {
+            s.start(
                 "SELECT COUNT(*) FROM information_schema.columns a, information_schema.columns b, information_schema.columns c",
                 ExecMode::Other,
             )
-            .await;
+            .await?;
+            s.fetch(10).await
+        }
+        .await;
         (s, r)
     });
     tokio::time::sleep(Duration::from_millis(500)).await;
