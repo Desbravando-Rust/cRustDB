@@ -12,10 +12,6 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 use crate::connect::{err, map_err};
 use crate::exec::Active;
 
-pub(crate) fn unsupported() -> DriverError {
-    err(ErrorKind::Unsupported, "not implemented yet")
-}
-
 pub struct PgSession {
     pub(crate) client: Client,
     version: ServerVersion,

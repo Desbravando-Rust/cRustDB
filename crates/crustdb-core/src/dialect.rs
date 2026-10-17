@@ -136,11 +136,23 @@ pub fn build_table_query(d: &dyn Dialect, q: &TableQuery) -> Result<BuiltQuery, 
         sql.push_str(&format!(" WHERE {}", conds.join(" AND ")));
     }
 
+    // Qualified so ORDER BY hits the base column, not the `::text` output alias of the same name.
+    // Json: base `json` has no ordering operator, so order by its text (an expression, which
+    // also resolves to the input column).
+    // ponytail: xml/geometric types (category Other) remain unsortable.
+    let base = d.qualified_name(&q.object);
+    let key = |c: &ColumnMeta| {
+        if c.category == TypeCategory::Json {
+            d.as_text(c)
+        } else {
+            format!("{base}.{}", d.quote_ident(&c.name))
+        }
+    };
     let order: Vec<String> = if q.sorts.is_empty() {
         q.columns
             .iter()
             .filter(|c| c.is_primary_key)
-            .map(|c| format!("{} ASC", d.quote_ident(&c.name)))
+            .map(|c| format!("{} ASC", key(c)))
             .collect()
     } else {
         q.sorts
@@ -148,7 +160,7 @@ pub fn build_table_query(d: &dyn Dialect, q: &TableQuery) -> Result<BuiltQuery, 
             .map(|s| {
                 let c = find(&s.column)?;
                 let dir = if s.descending { "DESC" } else { "ASC" };
-                Ok(format!("{} {dir}", d.quote_ident(&c.name)))
+                Ok(format!("{} {dir}", key(c)))
             })
             .collect::<Result<_, QueryError>>()?
     };
@@ -252,18 +264,16 @@ mod tests {
     #[test]
     fn multi_sort_order_preserved() {
         let q = tq(vec![], vec![sort("b", true), sort("a", false)]);
-        assert!(
-            build(&q)
-                .sql
-                .ends_with(r#"ORDER BY "b" DESC, "a" ASC LIMIT 301 OFFSET 0"#)
-        );
+        assert!(build(&q).sql.ends_with(
+            r#"ORDER BY "public"."t"."b" DESC, "public"."t"."a" ASC LIMIT 301 OFFSET 0"#
+        ));
     }
 
     #[test]
     fn default_sort_uses_pk() {
         let mut q = tq(vec![], vec![]);
         q.columns[0].is_primary_key = true;
-        assert!(build(&q).sql.contains(r#"ORDER BY "id" ASC"#));
+        assert!(build(&q).sql.contains(r#"ORDER BY "public"."t"."id" ASC"#));
         assert!(!build(&tq(vec![], vec![])).sql.contains("ORDER BY"));
     }
 
