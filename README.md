@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="imgs/logo.png" alt="CrustDB" width="240">
+  <img src="imgs/logo-transparent.png" alt="CrustDB" width="240">
 </p>
 
 <p align="center">
@@ -48,9 +48,11 @@ CrustDB browses data in a **read-only grid** and runs **raw SQL** with guards ag
 | MySQL | 5.6.5 |
 | MariaDB | 10.0.5 |
 
-The floors may move up if the driver fails integration tests on them; any change will be recorded here.
+The floors may move up if the driver fails integration tests on them; any change will be recorded here. SQLite is planned for v2 ([#26](https://github.com/Desbravando-Rust/crustdb/issues/26)).
 
 ## Building
+
+> **On Windows?** [Read this first](docs/windows.md). We prepared you a soft landing.
 
 Requirements: Linux x86_64, the Rust toolchain pinned in `rust-toolchain.toml` (installed automatically by `rustup`), and the GUI system libraries:
 

@@ -372,7 +372,7 @@ Teto conhecido: o grid não virtualiza colunas; tabelas com mais de 200 colunas 
 `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` · `cargo test --workspace` · integração com Docker (matriz completa no CI) · `cargo llvm-cov` com piso de linhas: core ≥ 90%, drivers ≥ 70%, `crustdb-app/src/state` ≥ 70% (`ui/` excluído) · `cargo deny check` · `cargo build --release`.
 
 ## 10. Out of scope v1 (backlog v2)
-Edição de dados · cópia para clipboard · atalhos customizáveis · tema claro · outros bancos · import · backup/restore · gestão de usuários · process list · diagrama ER · IA · beautify · find/replace no editor · paginação keyset · export além de CSV · grupos/cores/tags de conexão · certificado de cliente TLS (mTLS) · várias abas de resultado · sort/filtro no resultado do editor · export de URL · Windows/macOS.
+Edição de dados · cópia para clipboard · atalhos customizáveis · tema claro · outros bancos · SQLite · import · backup/restore · gestão de usuários · process list · diagrama ER · IA · beautify · find/replace no editor · paginação keyset · export além de CSV · grupos/cores/tags de conexão · certificado de cliente TLS (mTLS) · várias abas de resultado · sort/filtro no resultado do editor · export de URL · Windows/macOS.
 
 ## 11. Left to the builder
 Nomes internos de tipos e módulos privados; layout fino e espaçamentos; cores exatas do tema escuro; lista de keywords por dialeto; algoritmo de backoff além do especificado; formato do log; script de AppImage (`linuxdeploy` ou equivalente) e dependências de runtime declaradas.
