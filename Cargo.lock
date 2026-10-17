@@ -883,10 +883,16 @@ dependencies = [
 [[package]]
 name = "crustdb-mysql"
 version = "0.1.0"
+dependencies = [
+ "crustdb-core",
+]
 
 [[package]]
 name = "crustdb-postgres"
 version = "0.1.0"
+dependencies = [
+ "crustdb-core",
+]
 
 [[package]]
 name = "crustdb-testkit"
