@@ -3,5 +3,6 @@ mod certs;
 mod containers;
 pub use certs::{TestCerts, certs_for};
 pub use containers::{
-    MysqlContainer, PgContainer, SshContainer, start_mysql, start_postgres, start_sshd,
+    MysqlContainer, PgContainer, SshContainer, start_mysql, start_postgres,
+    start_postgres_tls_only, start_sshd,
 };

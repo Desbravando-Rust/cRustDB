@@ -112,6 +112,15 @@ async fn endpoint(c: &ContainerAsync<GenericImage>, internal: u16) -> (String, u
 /// Image from `CRUSTDB_PG_IMAGE` (default `postgres:latest`). With `tls`, SSL is on
 /// and the cert is valid for the hostnames given to `certs_for`.
 pub async fn start_postgres(tls: Option<&TestCerts>, network: Option<&str>) -> PgContainer {
+    start_pg(tls, network, false).await
+}
+
+/// Like `start_postgres` with TLS, but a `pg_hba.conf` that rejects non-TLS TCP connections.
+pub async fn start_postgres_tls_only(tls: &TestCerts) -> PgContainer {
+    start_pg(Some(tls), None, true).await
+}
+
+async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, tls_only: bool) -> PgContainer {
     let alias = unique("crustdb-pg");
     let mut img = image("CRUSTDB_PG_IMAGE", "postgres:latest");
     if tls.is_some() {
@@ -126,11 +135,22 @@ pub async fn start_postgres(tls: Option<&TestCerts>, network: Option<&str>) -> P
         for (target, src) in copy_tls(t, "/tmp/tls") {
             req = req.with_copy_to(target, src);
         }
+        let hba = if tls_only {
+            "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256\\n' > /tmp/tls/hba.conf \
+             && "
+        } else {
+            ""
+        };
+        let hba_opt = if tls_only {
+            "-c hba_file=/tmp/tls/hba.conf"
+        } else {
+            ""
+        };
         req = req.with_cmd([
-            "-c",
-            "chown postgres /tmp/tls/* && chmod 600 /tmp/tls/server.key && exec docker-entrypoint.sh postgres \
+            "-c".to_string(),
+            format!("{hba}chown postgres /tmp/tls/* && chmod 600 /tmp/tls/server.key && exec docker-entrypoint.sh postgres {hba_opt} \
              -c ssl=on -c ssl_cert_file=/tmp/tls/server.crt -c ssl_key_file=/tmp/tls/server.key \
-             -c ssl_ca_file=/tmp/tls/ca.pem",
+             -c ssl_ca_file=/tmp/tls/ca.pem"),
         ]);
     }
     if let Some(n) = network {
