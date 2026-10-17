@@ -6,3 +6,4 @@ pub mod model;
 pub mod query;
 pub mod safety;
 pub mod sql;
+pub mod url;
