@@ -68,11 +68,16 @@ struct PgCancel {
 #[async_trait]
 impl CancelHandle for PgCancel {
     async fn cancel(&self) -> Result<(), DriverError> {
-        match &self.tls {
-            Some(t) => self.token.cancel_query(t.clone()).await,
-            None => self.token.cancel_query(NoTls).await,
-        }
-        .map_err(map_err)
+        let cancel = async {
+            match &self.tls {
+                Some(t) => self.token.cancel_query(t.clone()).await,
+                None => self.token.cancel_query(NoTls).await,
+            }
+            .map_err(map_err)
+        };
+        tokio::time::timeout(Duration::from_secs(10), cancel)
+            .await
+            .map_err(|_| err(ErrorKind::Timeout, "cancel timed out"))?
     }
 }
 

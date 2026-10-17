@@ -30,3 +30,8 @@ allow = ["OFL-1.1", "Ubuntu-font-1.0"]
 [[licenses.exceptions]]
 crate = "ar_archive_writer"
 allow = ["Apache-2.0 WITH LLVM-exception"]
+
+# Root store data pulled by mysql_async rustls backend.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
