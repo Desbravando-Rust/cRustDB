@@ -65,8 +65,6 @@ cargo build --release
 cargo run -p crustdb-app
 ```
 
-Set `CRUSTDB_LOG` to control the log level. Logs go to `$XDG_STATE_HOME/crustdb/crustdb.log`.
-
 ## Workspace layout
 
 ```
