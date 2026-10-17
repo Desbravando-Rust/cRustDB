@@ -351,6 +351,12 @@ fn base_class(stmt: &Statement) -> Classified {
         | Statement::ShowCollation { .. } => Classified::new(C::Read),
         Statement::Set(_) | Statement::Use(_) => Classified::new(C::Session),
         Statement::StartTransaction { .. } => Classified::new(C::Tx(TxOp::Begin)),
+        // The transaction stays open: ROLLBACK TO SAVEPOINT, AND CHAIN.
+        Statement::Rollback {
+            savepoint: Some(_), ..
+        }
+        | Statement::Commit { chain: true, .. }
+        | Statement::Rollback { chain: true, .. } => Classified::new(C::Tx(TxOp::Savepoint)),
         Statement::Commit { .. } => Classified::new(C::Tx(TxOp::Commit)),
         Statement::Rollback { .. } => Classified::new(C::Tx(TxOp::Rollback)),
         Statement::Savepoint { .. } | Statement::ReleaseSavepoint { .. } => {

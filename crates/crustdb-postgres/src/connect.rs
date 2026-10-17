@@ -143,7 +143,9 @@ pub(crate) fn map_err(e: tokio_postgres::Error) -> DriverError {
         .as_db_error()
         .map_or_else(|| e.to_string(), |d| d.message().to_string());
     if let Some(db) = e.as_db_error() {
-        let kind = if matches!(
+        let kind = if *db.code() == SqlState::QUERY_CANCELED {
+            ErrorKind::Cancelled
+        } else if matches!(
             *db.code(),
             SqlState::INVALID_PASSWORD | SqlState::INVALID_AUTHORIZATION_SPECIFICATION
         ) {

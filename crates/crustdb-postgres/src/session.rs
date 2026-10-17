@@ -3,21 +3,27 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use crustdb_core::driver::{CancelHandle, ExecMode, Fetched, Param, ResultHeader, Session};
 use crustdb_core::error::{DriverError, ErrorKind};
-use crustdb_core::model::{ColumnMeta, Completion, Product, ServerVersion, TypeCategory};
-use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
+use crustdb_core::model::DriverKind;
+use crustdb_core::model::{Completion, Product, ServerVersion, TypeCategory};
+use crustdb_core::sql::{StatementClass, TxOp, classify};
+use tokio_postgres::{Client, NoTls};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::connect::{err, map_err};
+use crate::exec::Active;
 
 pub(crate) fn unsupported() -> DriverError {
     err(ErrorKind::Unsupported, "not implemented yet")
 }
 
 pub struct PgSession {
-    client: Client,
+    pub(crate) client: Client,
     version: ServerVersion,
     tls: Option<MakeRustlsConnect>,
-    affected: Option<u64>,
+    pub(crate) active: Option<Active>,
+    pub(crate) cats: Vec<TypeCategory>,
+    pub(crate) affected: Option<u64>,
+    pub(crate) in_user_tx: bool,
 }
 
 fn parse_version(raw: String) -> ServerVersion {
@@ -50,7 +56,10 @@ impl PgSession {
             client,
             version: parse_version(raw_version),
             tls,
+            active: None,
+            cats: Vec::new(),
             affected: None,
+            in_user_tx: false,
         }
     }
 }
@@ -83,7 +92,7 @@ impl Session for PgSession {
         })
     }
     fn has_active_result(&self) -> bool {
-        false
+        self.active.is_some()
     }
     async fn ping(&mut self) -> Result<Duration, DriverError> {
         let t = Instant::now();
@@ -93,46 +102,54 @@ impl Session for PgSession {
             .map_err(map_err)?;
         Ok(t.elapsed())
     }
-    // ponytail: minimal placeholder, the execution task replaces it with real streaming.
-    async fn start(&mut self, sql: &str, _mode: ExecMode) -> Result<ResultHeader, DriverError> {
-        let mut columns = Vec::new();
-        self.affected = None;
-        for m in self.client.simple_query(sql).await.map_err(map_err)? {
-            match m {
-                SimpleQueryMessage::RowDescription(cols) if columns.is_empty() => {
-                    columns = cols
-                        .iter()
-                        .map(|c| ColumnMeta {
-                            name: c.name().to_string(),
-                            type_name: String::new(),
-                            category: TypeCategory::Other,
-                            nullable: None,
-                            is_primary_key: false,
-                        })
-                        .collect();
-                }
-                SimpleQueryMessage::CommandComplete(n) => self.affected = Some(n),
-                _ => {}
-            }
+    async fn start(&mut self, sql: &str, mode: ExecMode) -> Result<ResultHeader, DriverError> {
+        self.finish_active().await?;
+        // D38: Describe for the column types; failure just means unknown types.
+        // Inside a user tx a failed Describe aborts it, so report the real error now.
+        let stmt = match self.client.prepare(sql).await {
+            Ok(s) => Some(s),
+            Err(e) if self.in_user_tx && e.as_db_error().is_some() => return Err(map_err(e)),
+            Err(_) => None,
+        };
+        // Commit/Rollback end the transaction even when they fail.
+        let tx = classify(sql, DriverKind::Postgres).class;
+        if matches!(tx, StatementClass::Tx(TxOp::Commit | TxOp::Rollback)) {
+            self.in_user_tx = false;
+        }
+        let columns = match mode {
+            ExecMode::Read => self.start_cursor(sql, stmt.as_ref()).await?,
+            ExecMode::Other => self.start_simple(sql, stmt.as_ref()).await?,
+        };
+        if tx == StatementClass::Tx(TxOp::Begin) {
+            self.in_user_tx = true;
         }
         Ok(ResultHeader { columns })
     }
-    async fn start_params(&mut self, _: &str, _: &[Param]) -> Result<ResultHeader, DriverError> {
-        Err(unsupported())
+    async fn start_params(
+        &mut self,
+        sql: &str,
+        params: &[Param],
+    ) -> Result<ResultHeader, DriverError> {
+        self.finish_active().await?;
+        let columns = self.start_typed(sql, params).await?;
+        Ok(ResultHeader { columns })
     }
-    async fn fetch(&mut self, _: usize) -> Result<Fetched, DriverError> {
-        Err(unsupported())
+    async fn fetch(&mut self, max_rows: usize) -> Result<Fetched, DriverError> {
+        self.fetch_rows(max_rows.max(1)).await
     }
     async fn finish(&mut self) -> Result<Completion, DriverError> {
-        Ok(Completion {
-            affected_rows: self.affected.take(),
-        })
+        self.finish_active().await
     }
-    async fn explain_rows(&mut self, _: &str) -> Result<Option<u64>, DriverError> {
-        Err(unsupported())
+    async fn explain_rows(&mut self, sql: &str) -> Result<Option<u64>, DriverError> {
+        self.finish_active().await?;
+        self.explain(sql).await
     }
     async fn use_database(&mut self, _: &str) -> Result<(), DriverError> {
-        Err(unsupported())
+        self.finish_active().await?;
+        Err(err(
+            ErrorKind::Unsupported,
+            "PostgreSQL needs a new connection to switch database",
+        ))
     }
     async fn close(self: Box<Self>) {}
 }

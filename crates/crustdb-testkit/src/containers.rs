@@ -21,7 +21,15 @@ pub struct PgContainer {
     pub user: String,
     pub password: String,
     pub alias: String,
-    _guard: ContainerAsync<GenericImage>,
+    guard: ContainerAsync<GenericImage>,
+}
+
+impl PgContainer {
+    /// Stops and starts the container (connections drop; the host port may change).
+    pub async fn restart(&self) {
+        self.guard.stop_with_timeout(Some(1)).await.unwrap();
+        self.guard.start().await.unwrap();
+    }
 }
 
 pub struct MysqlContainer {
@@ -166,7 +174,7 @@ async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, tls_only: bool
         user: "postgres".into(),
         password: PASSWORD.into(),
         alias,
-        _guard: c,
+        guard: c,
     }
 }
 

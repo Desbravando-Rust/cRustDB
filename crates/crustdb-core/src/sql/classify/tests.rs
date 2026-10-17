@@ -152,6 +152,22 @@ fn call_and_unparseable_are_unknown() {
     );
 }
 #[test]
+fn tx_that_stays_open_is_savepoint_class() {
+    for sql in [
+        "ROLLBACK TO SAVEPOINT x",
+        "ROLLBACK TO x",
+        "COMMIT AND CHAIN",
+        "ROLLBACK AND CHAIN",
+    ] {
+        assert_eq!(
+            classify(sql, DriverKind::Postgres).class,
+            StatementClass::Tx(TxOp::Savepoint),
+            "{sql}"
+        );
+    }
+}
+
+#[test]
 fn tx_and_session() {
     assert_eq!(
         classify("START TRANSACTION", DriverKind::Mysql).class,
