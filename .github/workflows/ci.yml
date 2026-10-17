@@ -35,5 +35,20 @@ jobs:
       - run: echo "enabled in Task 35"
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pg: "postgres:12", mysql: "mysql:8.4" }
+          - { pg: "postgres:latest", mysql: "mysql:8.4" }
+          - { pg: "postgres:latest", mysql: "mysql:5.6" }
+          - { pg: "postgres:latest", mysql: "mysql:5.7" }
+          - { pg: "postgres:latest", mysql: "mariadb:10.0" }
+          - { pg: "postgres:latest", mysql: "mariadb:latest" }
+    env:
+      CRUSTDB_PG_IMAGE: ${{ matrix.pg }}
+      CRUSTDB_MYSQL_IMAGE: ${{ matrix.mysql }}
     steps:
-      - run: echo "enabled in Task 10"
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgtk-3-dev
+      - run: cargo test --workspace -- --include-ignored
