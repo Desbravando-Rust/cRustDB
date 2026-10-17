@@ -4,7 +4,6 @@ use sqlparser::ast::{
     CopyTarget, FromTable, ObjectName, ObjectType, SetExpr, Statement, TableFactor, TableObject,
     TableWithJoins, visit_statements,
 };
-use sqlparser::dialect::{Dialect, MySqlDialect, PostgreSqlDialect};
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::{Token, Tokenizer};
 
@@ -189,10 +188,7 @@ fn first_table(t: &[TableWithJoins]) -> Option<&ObjectName> {
 }
 
 pub fn classify(sql: &str, kind: DriverKind) -> Classified {
-    let dialect: &dyn Dialect = match kind {
-        DriverKind::Postgres => &PostgreSqlDialect {},
-        DriverKind::Mysql => &MySqlDialect {},
-    };
+    let dialect = super::dialect(kind);
     let unknown = Classified::new(StatementClass::Unknown);
     let toks = Tokenizer::new(dialect, sql).tokenize().unwrap_or_default();
     let Ok(mut stmts) = Parser::parse_sql(dialect, sql) else {

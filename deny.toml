@@ -25,3 +25,8 @@ allow = ["BSL-1.0"]
 [[licenses.exceptions]]
 crate = "epaint_default_fonts"
 allow = ["OFL-1.1", "Ubuntu-font-1.0"]
+
+# Build dep via sqlparser -> recursive -> stacker -> psm.
+[[licenses.exceptions]]
+crate = "ar_archive_writer"
+allow = ["Apache-2.0 WITH LLVM-exception"]

@@ -1,10 +1,16 @@
 mod classify;
+mod complete;
+mod highlight;
+mod keywords;
 mod split;
 
 pub use classify::{
     Classified, DestructiveKind, DmlKind, StatementClass, TargetName, TxOp, classify,
 };
 
+pub use complete::{CompletionContext, Expect, TableAlias, completion_context, rank};
+pub use highlight::{TokenKind, highlight};
+pub use keywords::keywords;
 pub use split::{StatementSpan, split, statement_at, statements_in};
 
 use std::cell::Cell;
@@ -54,5 +60,12 @@ impl<'a> LineIndex<'a> {
         }
         self.last.set((line, c, b));
         b
+    }
+}
+
+pub(crate) fn dialect(kind: crate::model::DriverKind) -> &'static dyn sqlparser::dialect::Dialect {
+    match kind {
+        crate::model::DriverKind::Postgres => &sqlparser::dialect::PostgreSqlDialect {},
+        crate::model::DriverKind::Mysql => &sqlparser::dialect::MySqlDialect {},
     }
 }

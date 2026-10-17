@@ -1,9 +1,8 @@
 use std::ops::Range;
 
-use sqlparser::dialect::{Dialect, MySqlDialect, PostgreSqlDialect};
 use sqlparser::tokenizer::{Token, Tokenizer};
 
-use super::LineIndex;
+use super::{LineIndex, dialect};
 use crate::model::DriverKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,11 +65,9 @@ fn split_region(
 ) -> Option<Vec<StatementSpan>> {
     let base = region.start;
     let src = &text[region];
-    let dialect: &dyn Dialect = match kind {
-        DriverKind::Postgres => &PostgreSqlDialect {},
-        DriverKind::Mysql => &MySqlDialect {},
-    };
-    let tokens = Tokenizer::new(dialect, src).tokenize_with_location().ok()?;
+    let tokens = Tokenizer::new(dialect(kind), src)
+        .tokenize_with_location()
+        .ok()?;
     let idx = LineIndex::new(src);
 
     let mut out = Vec::new();
