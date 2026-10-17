@@ -1,4 +1,9 @@
+mod classify;
 mod split;
+
+pub use classify::{
+    Classified, DestructiveKind, DmlKind, StatementClass, TargetName, TxOp, classify,
+};
 
 pub use split::{StatementSpan, split, statement_at, statements_in};
 
