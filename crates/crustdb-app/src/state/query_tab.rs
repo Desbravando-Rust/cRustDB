@@ -1,11 +1,15 @@
 //! Query editor tab: text, run targets and error position mapping (no GUI).
 use std::ops::Range;
 use std::path::PathBuf;
+use std::time::Duration;
 
+use crustdb_core::error::ErrorKind;
 use crustdb_core::model::DriverKind;
 use crustdb_core::sql::{split, statement_at};
 
-use crate::runtime::{RequestId, TabId, TxState};
+pub use super::result_pane::{MessageLine, ResultPane, ResultTab};
+use crate::actors::{LOST, STALE_EVALUATION};
+use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
 
 /// Above this the editor skips highlighting (D40).
 pub const HIGHLIGHT_MAX_BYTES: usize = 1 << 20;
@@ -22,6 +26,13 @@ pub struct QueryTab {
     pub running: Option<RequestId>,
     /// (line index, byte range of the offending character).
     pub error_marker: Option<(usize, Range<usize>)>,
+    pub pane: ResultPane,
+    /// Char offset in `text` of each statement of the batch being run; the last `StatementDone` ends it.
+    pub starts: Vec<usize>,
+    /// `running` is a Load more or an export, not a statement batch.
+    pub bg: bool,
+    pub export_path: String,
+    pub db_draft: String,
 }
 
 impl QueryTab {
@@ -36,6 +47,148 @@ impl QueryTab {
             tx: TxState::Idle,
             running: None,
             error_marker: None,
+            pane: ResultPane::default(),
+            starts: vec![],
+            bg: false,
+            export_path: String::new(),
+            db_draft: String::new(),
+        }
+    }
+
+    /// The Execute for this tab left: a fresh run replaces the previous result.
+    pub fn begin_run(&mut self, req: RequestId) {
+        self.running = Some(req);
+        self.bg = false;
+        self.error_marker = None;
+        self.pane = ResultPane {
+            req: Some(req),
+            ..Default::default()
+        };
+    }
+
+    pub fn can_run(&self) -> bool {
+        self.running.is_none()
+    }
+
+    pub fn can_stop(&self) -> bool {
+        self.running.is_some()
+    }
+
+    /// PG switches database by reconnecting, which an open transaction forbids.
+    pub fn can_switch_db(&self) -> bool {
+        self.running.is_none() && (self.driver == DriverKind::Mysql || self.tx == TxState::Idle)
+    }
+
+    fn idle(&mut self) {
+        self.running = None;
+        self.bg = false;
+    }
+
+    /// Clears `running` right away; late events still reach the pane through `pane.req`.
+    pub fn stop(&mut self) -> Option<Command> {
+        self.running?;
+        self.idle();
+        Some(Command::CancelTab { tab: self.id })
+    }
+
+    pub fn tx(&self, op: TxOp) -> Command {
+        Command::Tx { tab: self.id, op }
+    }
+
+    pub fn use_database(&mut self, database: String) -> Option<Command> {
+        if !self.can_switch_db() || database.is_empty() {
+            return None;
+        }
+        self.database = Some(database.clone());
+        Some(Command::UseDatabase {
+            tab: self.id,
+            database,
+        })
+    }
+
+    /// Load more and export keep the tab busy (so Stop cancels them) until their result event.
+    fn busy(&mut self, req: RequestId) {
+        self.running = Some(req);
+        self.bg = true;
+    }
+
+    pub fn load_more(&mut self) -> Option<Command> {
+        let req = self.pane.req.filter(|_| self.can_run())?;
+        if !self.pane.load_more_visible() {
+            return None;
+        }
+        self.busy(req);
+        Some(Command::LoadMore { tab: self.id, req })
+    }
+
+    pub fn export(&mut self) -> Option<Command> {
+        let path = self.export_path.trim();
+        let req = self.pane.req.filter(|_| self.can_run())?;
+        if self.pane.header.is_none() || path.is_empty() {
+            return None;
+        }
+        let path = PathBuf::from(path);
+        self.busy(req);
+        Some(Command::ExportResult {
+            tab: self.id,
+            req,
+            path,
+        })
+    }
+
+    /// Execution-side events for this tab (routing by request/tab is the caller's).
+    pub fn apply(&mut self, e: &Event) {
+        match e {
+            Event::TxChanged { state, .. } => self.tx = *state,
+            Event::Notice { text, .. } => {
+                let n = self.pane.messages.len();
+                self.pane.push(n, true, text.clone(), Duration::ZERO);
+                // The actor refused an Execute (stale evaluation) or lost the session.
+                if text.starts_with(LOST) || text == STALE_EVALUATION || self.bg {
+                    self.idle();
+                }
+            }
+            Event::ActorCrashed { .. } => {
+                let n = self.pane.messages.len();
+                self.pane
+                    .push(n, false, "connection actor crashed".into(), Duration::ZERO);
+                self.idle();
+            }
+            Event::StatementDone { index, .. } => {
+                self.pane.apply(e);
+                if index + 1 >= self.starts.len() {
+                    self.idle();
+                }
+            }
+            Event::Rows { .. } => {
+                self.pane.apply(e);
+                // ponytail: ends Load more at its first batch; later batches still reach the pane.
+                if self.bg {
+                    self.idle();
+                }
+            }
+            Event::ExportDone { result, .. } => {
+                let (ok, text) = match result {
+                    Ok(n) => (true, format!("exported {n} rows")),
+                    Err(e) => (false, format!("export failed: {e}")),
+                };
+                let n = self.pane.messages.len();
+                self.pane.push(n, ok, text, Duration::ZERO);
+                self.idle();
+            }
+            Event::ExecError { index, error, .. } => {
+                self.pane.apply(e);
+                self.idle();
+                if let ErrorKind::Query {
+                    position: Some(p), ..
+                } = &error.kind
+                {
+                    // `position` counts from the start of the statement that was sent.
+                    let start = self.starts.get(*index).copied().unwrap_or(0);
+                    self.set_error(start + p);
+                }
+            }
+            _ => self.pane.apply(e),
         }
     }
 
@@ -46,18 +199,44 @@ impl QueryTab {
         selection: Option<Range<usize>>,
         all: bool,
     ) -> Vec<String> {
+        self.target_spans(cursor_byte, selection, all)
+            .into_iter()
+            .map(|(_, t)| t)
+            .collect()
+    }
+
+    /// Like `targets`, with each statement's start as a char offset in `text`.
+    pub fn target_spans(
+        &self,
+        cursor_byte: usize,
+        selection: Option<Range<usize>>,
+        all: bool,
+    ) -> Vec<(usize, String)> {
         // A selection runs exactly the selected text, never statements that merely touch it.
         let selection = selection.filter(|r| !r.is_empty());
+        let base = selection.as_ref().map_or(0, |r| r.start);
         let spans = match (&selection, all) {
             (Some(r), false) => split(&self.text[r.clone()], self.driver),
             _ => split(&self.text, self.driver),
         };
+        let base = if matches!((&selection, all), (Some(_), false)) {
+            base
+        } else {
+            0
+        };
+        let at = |s: &crustdb_core::sql::StatementSpan| {
+            (
+                self.text[..base + s.range.start].chars().count(),
+                s.text.clone(),
+            )
+        };
         if all || selection.is_some() {
-            return spans.into_iter().map(|s| s.text).collect();
+            return spans.iter().map(at).collect();
         }
         statement_at(&spans, cursor_byte)
-            .map(|s| vec![s.text.clone()])
-            .unwrap_or_default()
+            .map(at)
+            .into_iter()
+            .collect()
     }
 
     /// Byte range of the statement under the cursor, for the background tint.
@@ -122,84 +301,5 @@ pub fn error_line(text: &str, position: usize) -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-mod tests {
-    use super::*;
-
-    fn tab(text: &str) -> QueryTab {
-        let mut t = QueryTab::new(TabId(1), DriverKind::Postgres, None);
-        t.text = text.into();
-        t
-    }
-
-    #[test]
-    fn run_current_uses_statement_under_cursor() {
-        let t = tab("select 1; select 2;");
-        assert_eq!(t.targets(12, None, false), vec!["select 2"]);
-        assert_eq!(t.targets(3, Some(3..3), false), vec!["select 1"]);
-    }
-
-    #[test]
-    fn run_with_selection_runs_statements_inside_selection() {
-        let t = tab("select 1; select 2; select 3;");
-        assert_eq!(
-            t.targets(0, Some(10..29), false),
-            vec!["select 2", "select 3"]
-        );
-    }
-
-    #[test]
-    fn partial_selection_runs_only_selected_text() {
-        let t = tab("delete from a;\nselect 2");
-        // Selection starts at `a` and crosses the `;`.
-        assert_eq!(t.targets(0, Some(12..23), false), vec!["a", "select 2"]);
-    }
-
-    #[test]
-    fn run_all_returns_every_statement() {
-        let t = tab("select 1; select 2; select 3");
-        assert_eq!(t.targets(0, None, true).len(), 3);
-    }
-
-    #[test]
-    fn char_to_byte_offset_roundtrip() {
-        let s = "ação🦀x";
-        assert_eq!(char_to_byte(s, 0), 0);
-        assert_eq!(char_to_byte(s, 2), 3);
-        assert_eq!(char_to_byte(s, 4), 6);
-        assert_eq!(char_to_byte(s, 5), 10);
-        assert_eq!(&s[char_to_byte(s, 4)..], "🦀x");
-        assert_eq!(char_to_byte(s, 99), s.len());
-    }
-
-    #[test]
-    fn toggle_comment_adds_and_removes_dash_dash() {
-        let t = "select 1\n  select 2\nselect 3";
-        let on = toggle_comment(t, 0..2);
-        assert_eq!(on, "-- select 1\n--   select 2\nselect 3");
-        assert_eq!(toggle_comment(&on, 0..2), t);
-    }
-
-    #[test]
-    fn error_position_maps_to_line() {
-        let s = "ação;\nselect x";
-        // 'x' is the 14th char (1-based) on line 1.
-        assert_eq!(error_line(s, 14), 1);
-        assert_eq!(error_line(s, 1), 0);
-        let mut t = tab(s);
-        t.set_error(14);
-        assert_eq!(t.error_marker, Some((1, 15..16)));
-    }
-
-    #[test]
-    fn highlight_disabled_above_1mib() {
-        assert!(highlight_enabled("select 1"));
-        assert!(!highlight_enabled(&"a".repeat(HIGHLIGHT_MAX_BYTES + 1)));
-    }
-
-    #[test]
-    fn current_statement_range_for_background() {
-        let t = tab("select 1;\n  select 2;");
-        assert_eq!(t.current_range(15), Some(12..20));
-    }
-}
+#[path = "query_tab_tests.rs"]
+mod tests;

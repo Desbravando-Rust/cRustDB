@@ -178,16 +178,36 @@ impl AppState {
         })?;
         let bytes = char_to_byte(&q.text, run.start)..char_to_byte(&q.text, run.end);
         let selection = (!bytes.is_empty()).then(|| bytes.clone());
-        let statements = q.targets(bytes.end, selection, all);
-        if statements.is_empty() {
+        let (starts, statements): (Vec<_>, Vec<_>) = q
+            .target_spans(bytes.end, selection, all)
+            .into_iter()
+            .unzip();
+        if statements.is_empty() || !q.can_run() {
             return None;
         }
+        q.starts = starts;
         self.register_evaluate(req, ws, tab);
         Some(Command::Evaluate {
             tab,
             req,
             statements,
         })
+    }
+
+    pub fn query_mut(&mut self, id: TabId) -> Option<&mut QueryTab> {
+        self.workspaces
+            .iter_mut()
+            .flat_map(|w| w.queries.iter_mut())
+            .find(|q| q.id == id)
+    }
+
+    /// Called for every command that is actually sent: an `Execute` starts the tab's run.
+    pub fn note_sent(&mut self, cmd: &Command) {
+        if let Command::Execute { tab, req, .. } = cmd
+            && let Some(q) = self.query_mut(*tab)
+        {
+            q.begin_run(*req);
+        }
     }
 
     pub fn table_mut(&mut self, id: TabId) -> Option<&mut TableTab> {
@@ -310,6 +330,27 @@ impl AppState {
             Event::Notice { tab, text } => {
                 if let Some(t) = self.table_mut(tab) {
                     t.fail(text);
+                } else if let Some(q) = self.query_mut(tab) {
+                    q.apply(&Event::Notice { tab, text });
+                }
+            }
+            Event::ResultStarted { req, .. }
+            | Event::Rows { req, .. }
+            | Event::StatementDone { req, .. }
+            | Event::ExportDone { req, .. }
+            | Event::ExecError { req, .. } => {
+                if let Some(q) = self
+                    .workspaces
+                    .iter_mut()
+                    .flat_map(|w| w.queries.iter_mut())
+                    .find(|q| q.pane.req == Some(req))
+                {
+                    q.apply(&e);
+                }
+            }
+            Event::TxChanged { tab, .. } => {
+                if let Some(q) = self.query_mut(tab) {
+                    q.apply(&e);
                 }
             }
             Event::Ddl { req, text } => {
@@ -328,6 +369,8 @@ impl AppState {
             Event::ActorCrashed { tab } => {
                 if let Some(t) = self.table_mut(tab) {
                     t.fail("connection actor crashed".into());
+                } else if let Some(q) = self.query_mut(tab) {
+                    q.apply(&e);
                 }
             }
             Event::Evaluated { req, evaluation } => {
@@ -679,6 +722,49 @@ pub(crate) mod tests {
             },
         });
         assert!(s.run_query(tab, 0..0, true, RequestId(7)).is_some());
+    }
+
+    #[test]
+    fn execute_marks_tab_running_and_routes_events_by_req() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
+            panic!("no OpenEditor");
+        };
+        s.query_mut(tab).unwrap().text = "select 1".into();
+        s.run_query(tab, 0..0, true, RequestId(5)).unwrap();
+        s.apply(Event::Evaluated {
+            req: RequestId(5),
+            evaluation: crustdb_core::safety::Evaluation {
+                verdict: crustdb_core::safety::Verdict::Run,
+                flags: vec![],
+            },
+        });
+        let cmd = s.take_commands().pop().unwrap();
+        s.note_sent(&cmd);
+        let Command::Execute { req, .. } = cmd else {
+            panic!("no Execute");
+        };
+        assert_eq!(s.query_mut(tab).unwrap().running, Some(req));
+        // A busy tab refuses a second run.
+        assert!(s.run_query(tab, 0..0, true, RequestId(6)).is_none());
+        s.apply(Event::Rows {
+            req,
+            rows: vec![],
+            exhausted: true,
+        });
+        s.apply(Event::TxChanged {
+            tab,
+            state: crate::runtime::TxState::Open,
+        });
+        s.apply(Event::Notice {
+            tab,
+            text: "Connection lost — open transaction was rolled back by the server".into(),
+        });
+        let q = s.query_mut(tab).unwrap();
+        assert_eq!(q.running, None);
+        assert_eq!(q.tx, crate::runtime::TxState::Open);
+        assert_eq!(q.pane.messages.len(), 1);
     }
 
     #[test]

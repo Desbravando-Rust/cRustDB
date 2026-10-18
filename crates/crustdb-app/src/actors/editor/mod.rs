@@ -30,7 +30,10 @@ use crate::storage::history::{HistoryEntry, now_iso8601};
 
 /// D37: a paused cursor idle for this long is finished.
 const PAUSE_TIMEOUT: Duration = Duration::from_secs(300);
-const LOST: &str = "Connection lost — open transaction was rolled back by the server";
+/// Answer to an `Execute` whose evaluation is unknown or already used.
+pub(crate) const STALE_EVALUATION: &str =
+    "unknown or already used evaluation; nothing was executed";
+pub(crate) const LOST: &str = "Connection lost — open transaction was rolled back by the server";
 
 /// The last statement's cursor, left open for `LoadMore`.
 struct Paused {
@@ -133,9 +136,7 @@ impl EditorActor {
                 req, evaluation, ..
             } => match self.pending.take_if(|(id, _)| *id == evaluation) {
                 Some((_, stmts)) => self.execute(inbox, req, stmts).await,
-                None => {
-                    self.notice("unknown or already used evaluation; nothing was executed".into())
-                }
+                None => self.notice(STALE_EVALUATION.into()),
             },
             Command::LoadMore { .. } => self.load_more(inbox).await,
             Command::Tx { op, .. } => {

@@ -228,9 +228,30 @@ impl CrustApp {
                 }
             }
             Intent::StopTab(tab) => {
-                if let Some(rt) = &self.runtime {
-                    rt.send(Command::CancelTab { tab });
-                }
+                let cmd = match self.state.query_mut(tab) {
+                    Some(q) => q.stop(),
+                    None => Some(Command::CancelTab { tab }),
+                };
+                self.send(cmd);
+            }
+            Intent::Tx { tab, op } => {
+                let cmd = self.state.query_mut(tab).map(|q| q.tx(op));
+                self.send(cmd);
+            }
+            Intent::UseDatabase { tab, database } => {
+                let cmd = self
+                    .state
+                    .query_mut(tab)
+                    .and_then(|q| q.use_database(database));
+                self.send(cmd);
+            }
+            Intent::LoadMore(tab) => {
+                let cmd = self.state.query_mut(tab).and_then(|q| q.load_more());
+                self.send(cmd);
+            }
+            Intent::ExportResult(tab) => {
+                let cmd = self.state.query_mut(tab).and_then(|q| q.export());
+                self.send(cmd);
             }
         }
     }
@@ -370,8 +391,9 @@ impl CrustApp {
         }
     }
 
-    fn send(&self, cmd: impl Into<Option<Command>>) {
+    fn send(&mut self, cmd: impl Into<Option<Command>>) {
         if let (Some(rt), Some(cmd)) = (&self.runtime, cmd.into()) {
+            self.state.note_sent(&cmd);
             rt.send(cmd);
         }
     }
@@ -444,6 +466,12 @@ impl eframe::App for CrustApp {
                 .active
                 .and_then(|ws| self.state.workspace_mut(ws));
             if let Some(q) = ws.and_then(|w| w.active_query_mut()) {
+                egui::Panel::bottom(("results", q.id.0))
+                    .resizable(true)
+                    .default_size(240.0)
+                    .show(ui, |ui| {
+                        intents.extend(ui::results::show(ui, q));
+                    });
                 intents.extend(ui::editor::show(ui, q));
                 return;
             }

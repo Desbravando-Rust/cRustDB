@@ -109,20 +109,30 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
         ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter));
     let run = !run_all && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
     ui.horizontal(|ui| {
-        if ui.button("Run (Ctrl+Enter)").clicked() {
+        if ui
+            .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
+            .clicked()
+        {
             out.push(Intent::RunQuery {
                 tab: tab.id,
                 run: sel.clone(),
                 all: false,
             });
         }
-        if ui.button("Run all (Ctrl+Shift+Enter)").clicked() {
+        if ui
+            .add_enabled(
+                tab.can_run(),
+                egui::Button::new("Run all (Ctrl+Shift+Enter)"),
+            )
+            .clicked()
+        {
             out.push(Intent::RunQuery {
                 tab: tab.id,
                 run: sel.clone(),
                 all: true,
             });
         }
+        out.extend(super::results::toolbar(ui, tab));
     });
     if run || run_all {
         out.push(Intent::RunQuery {

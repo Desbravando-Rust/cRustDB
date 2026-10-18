@@ -5,6 +5,7 @@ pub mod editor;
 pub mod filter_bar;
 pub mod grid;
 pub mod home;
+pub mod results;
 pub mod row_detail;
 pub mod sidebar;
 pub mod structure;
@@ -62,4 +63,14 @@ pub enum Intent {
         run: std::ops::Range<usize>,
         all: bool,
     },
+    Tx {
+        tab: TabId,
+        op: crate::runtime::TxOp,
+    },
+    UseDatabase {
+        tab: TabId,
+        database: String,
+    },
+    LoadMore(TabId),
+    ExportResult(TabId),
 }
