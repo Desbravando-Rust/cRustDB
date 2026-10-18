@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="imgs/logo-transparent.png" alt="CrustDB" width="240">
+  <img src="imgs/logo-transparent.png" alt="CrustDB" width="512">
 </p>
 
 <p align="center">
