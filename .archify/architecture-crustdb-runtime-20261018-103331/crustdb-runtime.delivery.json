@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "73511431-9713-4dc8-bf68-cb6bebf7d23c",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/candidate.json",
+  "output": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/crustdb-runtime.html",
+  "specification": {
+    "sha256": "ef94175e0242a97a777ba7b4000477c2a19a403e332e48ca2c8f223019128124",
+    "bytes": 6831
+  },
+  "artifact": {
+    "sha256": "316f865fdc7c97f3a924e0e77baf2dd894dab853eead0d47f4c24d8f40a872ee",
+    "bytes": 832349
+  }
+}
