@@ -33,8 +33,8 @@ impl DriverRegistry {
 /// Sends events to the UI and wakes it up.
 #[derive(Clone)]
 pub(crate) struct Emitter {
-    tx: mpsc::Sender<Event>,
-    repaint: Arc<dyn Fn() + Send + Sync>,
+    pub(crate) tx: mpsc::Sender<Event>,
+    pub(crate) repaint: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl Emitter {
@@ -117,11 +117,14 @@ impl Runtime {
     }
 }
 
-/// Dispatches commands to actors by `ws`/`tab`. The actors arrive in later tasks;
-/// until then every command is answered with a notice.
-async fn route(mut rx: UnboundedReceiver<Command>, out: Emitter, _drivers: DriverRegistry) {
+/// Dispatches commands to actors by `ws`/`tab`. Commands without an actor
+/// (editor/export, until tasks 23-24) are answered with a notice.
+async fn route(mut rx: UnboundedReceiver<Command>, out: Emitter, drivers: DriverRegistry) {
+    let mut actors = crate::actors::Actors::new(drivers, out.clone());
     while let Some(cmd) = rx.recv().await {
-        out.emit(no_actor(&cmd));
+        if let Some(cmd) = actors.dispatch(cmd) {
+            out.emit(no_actor(&cmd));
+        }
     }
 }
 

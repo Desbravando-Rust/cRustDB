@@ -200,6 +200,10 @@ pub enum Event {
         tab: TabId,
         state: TxState,
     },
+    /// The Metadata session dropped; reconnecting with backoff. `Connected` follows on success.
+    Reconnecting {
+        ws: WorkspaceId,
+    },
     Ping {
         ws: WorkspaceId,
         latency: Duration,

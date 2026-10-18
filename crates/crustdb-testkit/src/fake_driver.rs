@@ -1,5 +1,6 @@
 //! In-memory `Driver` with programmable responses, for runtime and actor tests.
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -13,6 +14,8 @@ use crustdb_core::model::{
     ColumnDetail, ColumnMeta, Completion, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind,
     ObjectRef, Product, Row, ServerVersion,
 };
+use tokio::sync::Notify;
+use tokio::time::Instant;
 
 #[derive(Clone)]
 pub struct FakeScript {
@@ -35,13 +38,33 @@ impl Default for FakeScript {
     }
 }
 
+/// What the fake observed and failure knobs; shared with every session it opens.
+#[derive(Default)]
+pub struct FakeLog {
+    /// One entry per connect attempt (also failed ones): purpose, database, time.
+    pub connects: Mutex<Vec<(SessionPurpose, Option<String>, Instant)>>,
+    pub pings: AtomicUsize,
+    pub cancels: AtomicUsize,
+    /// The next N connect attempts fail.
+    pub fail_connects: AtomicUsize,
+    pub fail_pings: AtomicBool,
+    /// The next query start panics (once).
+    pub panic_next: AtomicBool,
+    /// The next ping panics (once).
+    pub panic_ping: AtomicBool,
+}
+
 pub struct FakeDriver {
     pub script: FakeScript,
+    pub log: Arc<FakeLog>,
 }
 
 impl FakeDriver {
     pub fn new(script: FakeScript) -> Arc<Self> {
-        Arc::new(Self { script })
+        Arc::new(Self {
+            script,
+            log: Arc::default(),
+        })
     }
 }
 
@@ -86,11 +109,27 @@ impl Driver for FakeDriver {
     }
     async fn connect(
         &self,
-        _: &ConnectTarget,
-        _: SessionPurpose,
+        t: &ConnectTarget,
+        p: SessionPurpose,
     ) -> Result<Box<dyn Session>, DriverError> {
+        if let Ok(mut c) = self.log.connects.lock() {
+            c.push((p, t.database.clone(), Instant::now()));
+        }
+        let failing = self
+            .log
+            .fail_connects
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok();
+        if failing {
+            return Err(DriverError {
+                kind: ErrorKind::Connect,
+                message: "fake connect failure".into(),
+            });
+        }
         Ok(Box::new(FakeSession {
             script: self.script.clone(),
+            log: self.log.clone(),
+            cancel: Arc::default(),
             version: ServerVersion {
                 product: Product::Postgres,
                 major: 16,
@@ -105,23 +144,40 @@ impl Driver for FakeDriver {
 
 struct FakeSession {
     script: FakeScript,
+    log: Arc<FakeLog>,
+    cancel: Arc<Notify>,
     version: ServerVersion,
     /// `Some(next row index)` while a result is active.
     pos: Option<usize>,
 }
 
-struct FakeCancel;
+struct FakeCancel {
+    log: Arc<FakeLog>,
+    notify: Arc<Notify>,
+}
 
 #[async_trait]
 impl CancelHandle for FakeCancel {
     async fn cancel(&self) -> Result<(), DriverError> {
+        self.log.cancels.fetch_add(1, Ordering::SeqCst);
+        self.notify.notify_one();
         Ok(())
     }
 }
 
 impl FakeSession {
     async fn begin(&mut self) -> Result<ResultHeader, DriverError> {
-        tokio::time::sleep(self.script.delay).await;
+        if self.log.panic_next.swap(false, Ordering::SeqCst) {
+            panic!("fake driver panic");
+        }
+        // Drop a cancel permit left over from an earlier query.
+        tokio::select! { biased; () = self.cancel.notified() => {}, () = std::future::ready(()) => {} }
+        tokio::select! {
+            () = tokio::time::sleep(self.script.delay) => {}
+            () = self.cancel.notified() => {
+                return Err(DriverError { kind: ErrorKind::Cancelled, message: "cancelled".into() });
+            }
+        }
         if let Some(e) = &self.script.error {
             return Err(e.clone());
         }
@@ -138,12 +194,25 @@ impl Session for FakeSession {
         &self.version
     }
     fn cancel_handle(&self) -> Box<dyn CancelHandle> {
-        Box::new(FakeCancel)
+        Box::new(FakeCancel {
+            log: self.log.clone(),
+            notify: self.cancel.clone(),
+        })
     }
     fn has_active_result(&self) -> bool {
         self.pos.is_some()
     }
     async fn ping(&mut self) -> Result<Duration, DriverError> {
+        if self.log.panic_ping.swap(false, Ordering::SeqCst) {
+            panic!("fake ping panic");
+        }
+        self.log.pings.fetch_add(1, Ordering::SeqCst);
+        if self.log.fail_pings.load(Ordering::SeqCst) {
+            return Err(DriverError {
+                kind: ErrorKind::Connect,
+                message: "fake ping failure".into(),
+            });
+        }
         Ok(self.script.delay)
     }
     async fn start(&mut self, _: &str, _: ExecMode) -> Result<ResultHeader, DriverError> {

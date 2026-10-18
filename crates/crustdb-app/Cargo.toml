@@ -29,5 +29,5 @@ path = "src/main.rs"
 crustdb-postgres = { path = "../crustdb-postgres" }
 crustdb-testkit = { path = "../crustdb-testkit" }
 tempfile = "3.27.0"
-tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-util"] }
 uuid = "1.28.0"
