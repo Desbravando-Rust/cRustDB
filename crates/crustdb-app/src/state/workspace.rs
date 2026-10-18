@@ -45,6 +45,13 @@ impl AppState {
         }
     }
 
+    /// Id for a workspace that never appears in the UI (connection test).
+    pub fn reserve_ws(&mut self) -> WorkspaceId {
+        let id = WorkspaceId(self.next_ws);
+        self.next_ws += 1;
+        id
+    }
+
     pub fn open_workspace(&mut self, config: ConnectionConfig) -> WorkspaceId {
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;

@@ -1,4 +1,5 @@
 //! UI-independent application state; everything here is testable without a GUI.
+pub mod connection_form;
 pub mod dialogs;
 pub mod workspace;
 

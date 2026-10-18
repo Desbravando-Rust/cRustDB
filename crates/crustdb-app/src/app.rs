@@ -1,14 +1,16 @@
 use eframe::egui;
 use std::sync::mpsc::Receiver;
 
-use crustdb_core::model::ConnectionId;
+use crustdb_core::model::{ConnectionId, DriverKind};
 
 use crate::net::ssh::SshSecrets;
 use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
 use crate::state::AppState;
-use crate::storage::config::{ConfigStore, LoadedConfig};
+use crate::state::connection_form::ConnectionForm;
+use crate::storage::config::{ConfigStore, ConnectionConfig, FieldError, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
 use crate::ui::{self, Intent};
+use secrecy::zeroize::Zeroizing;
 
 pub struct CrustApp {
     state: AppState,
@@ -16,6 +18,7 @@ pub struct CrustApp {
     events: Receiver<Event>,
     store: ConfigStore,
     secrets: Box<dyn SecretStore>,
+    form: Option<ConnectionForm>,
 }
 
 impl CrustApp {
@@ -41,6 +44,7 @@ impl CrustApp {
             events,
             store,
             secrets,
+            form: None,
         }
     }
 
@@ -66,30 +70,168 @@ impl CrustApp {
                 else {
                     return;
                 };
-                let secrets = ResolvedSecrets {
-                    db: self.secret(id, SecretKind::Db),
-                    ssh: SshSecrets {
-                        password: self.secret(id, SecretKind::SshPassword),
-                        passphrase: self.secret(id, SecretKind::SshPassphrase),
-                    },
-                };
-                let ws = self.state.open_workspace(config.clone());
-                if let Some(rt) = &self.runtime {
-                    rt.send(Command::Connect {
-                        ws,
-                        config,
-                        secrets,
-                    });
-                }
+                let secrets = self.stored_secrets(id);
+                self.connect(config, secrets);
             }
             Intent::DeleteConnection(id) => self.state.request_delete(id),
             Intent::CancelDialog => {
                 self.state.dialogs.pop();
             }
             Intent::ConfirmDelete => self.confirm_delete(),
-            // Handled by the connection form (next task).
-            Intent::NewConnection | Intent::EditConnection(_) | Intent::ImportUrl => {}
+            Intent::NewConnection => self.open_form(None, false),
+            Intent::ImportUrl => self.open_form(None, true),
+            Intent::EditConnection(id) => {
+                let c = self.state.config.connections.iter().find(|c| c.id == id);
+                self.open_form(c.cloned(), false);
+            }
+            Intent::FormCancel => self.close_form(),
+            Intent::FormImportUrl => {
+                if let Some(f) = &mut self.form {
+                    let url = Zeroizing::new(std::mem::take(&mut *f.url_input));
+                    f.url_error = f.import_url(&url).err().map(|e| e.to_string());
+                }
+            }
+            Intent::FormTest => {
+                let ws = self.state.reserve_ws();
+                let others = &self.state.config.connections;
+                let cmd = self
+                    .form
+                    .as_mut()
+                    .and_then(|f| f.start_test(ws, others).ok());
+                if let Some(Command::Connect {
+                    ws,
+                    config,
+                    mut secrets,
+                }) = cmd
+                {
+                    self.fill_missing(config.id, &mut secrets);
+                    if let Some(rt) = &self.runtime {
+                        rt.send(Command::Connect {
+                            ws,
+                            config,
+                            secrets,
+                        });
+                    }
+                }
+            }
+            Intent::FormSave => {
+                self.save_form();
+            }
+            Intent::FormConnect => {
+                if let Some((config, mut secrets)) = self.save_form() {
+                    self.fill_missing(config.id, &mut secrets);
+                    self.connect(config, secrets);
+                }
+            }
         }
+    }
+
+    fn open_form(&mut self, config: Option<ConnectionConfig>, url: bool) {
+        // One keyring probe per open, never per frame.
+        let available = self.secrets.available();
+        let mut f = match config {
+            Some(c) => ConnectionForm::from_config(&c, available),
+            None => ConnectionForm::new(DriverKind::Postgres, available),
+        };
+        f.show_url = url;
+        self.close_form();
+        self.form = Some(f);
+    }
+
+    /// Drops the form, closing a still-pending test session so it does not leak.
+    fn close_form(&mut self) {
+        let ws = self.form.take().and_then(|mut f| f.take_pending_test());
+        if let (Some(ws), Some(rt)) = (ws, &self.runtime) {
+            rt.send(Command::Disconnect { ws });
+        }
+    }
+
+    fn stored_secrets(&self, id: ConnectionId) -> ResolvedSecrets {
+        ResolvedSecrets {
+            db: self.secret(id, SecretKind::Db),
+            ssh: SshSecrets {
+                password: self.secret(id, SecretKind::SshPassword),
+                passphrase: self.secret(id, SecretKind::SshPassphrase),
+            },
+        }
+    }
+
+    /// Fields left blank in the form fall back to the keyring (edit of a saved connection).
+    fn fill_missing(&self, id: ConnectionId, s: &mut ResolvedSecrets) {
+        if s.db.is_none() {
+            s.db = self.secret(id, SecretKind::Db);
+        }
+        if s.ssh.password.is_none() {
+            s.ssh.password = self.secret(id, SecretKind::SshPassword);
+        }
+        if s.ssh.passphrase.is_none() {
+            s.ssh.passphrase = self.secret(id, SecretKind::SshPassphrase);
+        }
+    }
+
+    fn connect(&mut self, config: ConnectionConfig, secrets: ResolvedSecrets) {
+        let ws = self.state.open_workspace(config.clone());
+        if let Some(rt) = &self.runtime {
+            rt.send(Command::Connect {
+                ws,
+                config,
+                secrets,
+            });
+        }
+    }
+
+    /// Validates, persists the config and keyring secrets; the form stays open on any failure.
+    fn save_form(&mut self) -> Option<(ConnectionConfig, ResolvedSecrets)> {
+        let form = self.form.as_mut()?;
+        let (config, secrets) = match form.to_save(&self.state.config.connections) {
+            Ok(r) => r,
+            Err(e) => {
+                form.errors = e;
+                return None;
+            }
+        };
+        form.errors.clear();
+        let typed = form.typed_secrets();
+        for (kind, v) in &secrets {
+            if let Err(e) = self.secrets.set(&account(config.id, *kind), v) {
+                tracing::warn!("keyring write failed: {e}");
+                if let Some(f) = &mut self.form {
+                    f.errors = vec![FieldError {
+                        field: "password",
+                        message: format!("could not save to keyring: {e}"),
+                    }];
+                }
+                return None;
+            }
+        }
+        let mut all = self.state.config.connections.clone();
+        match all.iter_mut().find(|c| c.id == config.id) {
+            Some(slot) => *slot = config.clone(),
+            None => all.push(config.clone()),
+        }
+        if let Err(e) = self.store.save(&all) {
+            if let Some(f) = &mut self.form {
+                f.errors = vec![FieldError {
+                    field: "name",
+                    message: format!("could not save connections: {e}"),
+                }];
+            }
+            return None;
+        }
+        self.state.config.connections = all;
+        if !config.save_password {
+            for kind in [
+                SecretKind::Db,
+                SecretKind::SshPassword,
+                SecretKind::SshPassphrase,
+            ] {
+                if let Err(e) = self.secrets.delete(&account(config.id, kind)) {
+                    tracing::warn!("keyring delete failed: {e}");
+                }
+            }
+        }
+        self.close_form();
+        Some((config, typed))
     }
 
     fn confirm_delete(&mut self) {
@@ -117,11 +259,19 @@ impl CrustApp {
 impl eframe::App for CrustApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         while let Ok(e) = self.events.try_recv() {
+            if let Some(f) = &mut self.form
+                && f.on_event(&e)
+                && let Event::Connected { ws, .. } | Event::ConnectFailed { ws, .. } = &e
+                && let Some(rt) = &self.runtime
+            {
+                rt.send(Command::Disconnect { ws: *ws });
+            }
             self.state.apply(e);
         }
         let mut intents = vec![];
-        egui::CentralPanel::default().show(ui, |ui| {
-            intents.extend(ui::home::show(ui, &self.state));
+        egui::CentralPanel::default().show(ui, |ui| match &mut self.form {
+            Some(f) => intents.extend(ui::connection_form::show(ui, f)),
+            None => intents.extend(ui::home::show(ui, &self.state)),
         });
         intents.extend(ui::home::dialogs(ui.ctx(), &self.state));
         for i in intents {

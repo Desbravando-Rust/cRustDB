@@ -25,6 +25,7 @@ thiserror = "2.0.21"
 tokio = { version = "1.53.3", features = ["rt", "net", "time", "io-util", "rt-multi-thread", "sync"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = { version = "1.28.0", features = ["v4"] }
 
 [[bin]]
 name = "crustdb"
@@ -35,4 +36,3 @@ crustdb-testkit = { path = "../crustdb-testkit" }
 egui_kittest = "0.37.0"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-util"] }
-uuid = "1.28.0"
