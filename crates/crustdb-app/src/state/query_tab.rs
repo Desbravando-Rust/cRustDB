@@ -1,12 +1,14 @@
 //! Query editor tab: text, run targets and error position mapping (no GUI).
+use std::io;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crustdb_core::error::ErrorKind;
 use crustdb_core::model::DriverKind;
 use crustdb_core::sql::{split, statement_at};
 
+use super::autocomplete::Autocomplete;
 pub use super::result_pane::{MessageLine, ResultPane, ResultTab};
 use crate::actors::{LOST, STALE_EVALUATION};
 use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
@@ -31,7 +33,9 @@ pub struct QueryTab {
     pub starts: Vec<usize>,
     /// `running` is a Load more or an export, not a statement batch.
     pub bg: bool,
-    pub export_path: String,
+    pub ac: Autocomplete,
+    /// SQL (from the history panel) the editor inserts at its cursor on the next frame.
+    pub insert: Option<String>,
     pub db_draft: String,
 }
 
@@ -50,7 +54,8 @@ impl QueryTab {
             pane: ResultPane::default(),
             starts: vec![],
             bg: false,
-            export_path: String::new(),
+            ac: Autocomplete::default(),
+            insert: None,
             db_draft: String::new(),
         }
     }
@@ -121,19 +126,51 @@ impl QueryTab {
         Some(Command::LoadMore { tab: self.id, req })
     }
 
-    pub fn export(&mut self) -> Option<Command> {
-        let path = self.export_path.trim();
+    pub fn export(&mut self, path: PathBuf) -> Option<Command> {
         let req = self.pane.req.filter(|_| self.can_run())?;
-        if self.pane.header.is_none() || path.is_empty() {
-            return None;
-        }
-        let path = PathBuf::from(path);
+        self.pane.header.as_ref()?;
         self.busy(req);
         Some(Command::ExportResult {
             tab: self.id,
             req,
             path,
         })
+    }
+
+    /// Tab label: the file name (`*` while dirty) or `Query`.
+    pub fn title(&self) -> String {
+        let name = self
+            .file
+            .as_deref()
+            .and_then(Path::file_name)
+            .map_or_else(|| "Query".to_owned(), |n| n.to_string_lossy().into_owned());
+        if self.dirty {
+            format!("{name}•")
+        } else {
+            name
+        }
+    }
+
+    pub fn save_to(&mut self, path: PathBuf) -> io::Result<()> {
+        std::fs::write(&path, &self.text)?;
+        self.file = Some(path);
+        self.dirty = false;
+        Ok(())
+    }
+
+    pub fn load_from(&mut self, path: PathBuf) -> io::Result<()> {
+        self.text = std::fs::read_to_string(&path)?;
+        self.file = Some(path);
+        self.dirty = false;
+        Ok(())
+    }
+
+    /// Inserts `sql` at the char offset `cursor`; returns the cursor after it.
+    pub fn insert_at(&mut self, cursor: usize, sql: &str) -> usize {
+        let at = char_to_byte(&self.text, cursor);
+        self.text.insert_str(at, sql);
+        self.dirty = true;
+        cursor + sql.chars().count()
     }
 
     /// Execution-side events for this tab (routing by request/tab is the caller's).

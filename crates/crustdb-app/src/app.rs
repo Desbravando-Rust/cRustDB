@@ -3,7 +3,6 @@ use std::sync::mpsc::Receiver;
 
 use crustdb_core::model::{ConnectionId, DriverKind};
 
-use crate::keymap::{Action, keymap};
 use crate::metrics::ProcSampler;
 use crate::net::ssh::SshSecrets;
 use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
@@ -17,7 +16,9 @@ use crate::ui::{self, Intent};
 use secrecy::zeroize::Zeroizing;
 
 mod actions;
+mod files;
 mod form;
+mod frame;
 
 pub struct CrustApp {
     state: AppState,
@@ -31,6 +32,10 @@ pub struct CrustApp {
     /// Last press landed in the sidebar: F5 and Space then belong to it, not to the grid.
     sidebar_rect: Option<egui::Rect>,
     sidebar_focus: bool,
+    ctx: egui::Context,
+    picker: ui::picker::Picker,
+    history: Option<ui::history_panel::HistoryPanel>,
+    history_store: crate::storage::history::HistoryStore,
 }
 
 impl CrustApp {
@@ -41,7 +46,14 @@ impl CrustApp {
         secrets: Box<dyn SecretStore>,
         drivers: crate::runtime::DriverRegistry,
     ) -> Self {
-        Self::with_ctx(&cc.egui_ctx, config, store, secrets, drivers)
+        Self::with_ctx(
+            &cc.egui_ctx,
+            config,
+            store,
+            secrets,
+            drivers,
+            crate::storage::paths::data_dir().join("history"),
+        )
     }
 
     /// Construction without a window, so UI tests can drive the app.
@@ -51,6 +63,7 @@ impl CrustApp {
         store: ConfigStore,
         secrets: Box<dyn SecretStore>,
         drivers: crate::runtime::DriverRegistry,
+        history_dir: std::path::PathBuf,
     ) -> Self {
         ui::theme::install_theme(egui_ctx);
         if !secrets.available() {
@@ -72,6 +85,10 @@ impl CrustApp {
             sampler: ProcSampler::default(),
             sidebar_rect: None,
             sidebar_focus: false,
+            ctx: egui_ctx.clone(),
+            picker: ui::picker::Picker::default(),
+            history: None,
+            history_store: crate::storage::history::HistoryStore { dir: history_dir },
         }
     }
 
@@ -124,7 +141,8 @@ impl CrustApp {
                 self.send_close(cmd);
             }
             Intent::DiscardFile => {
-                let cmd = self.state.dialogs.discard_dirty();
+                // Discarding the file still goes through the transaction guard.
+                let cmd = self.state.discard_dirty_and_close();
                 self.send_close(cmd);
             }
             Intent::ActivateTab(tab) => {
@@ -137,10 +155,6 @@ impl CrustApp {
                     let cmd = self.state.close_tab(ws, tab);
                     self.send_close(cmd);
                 }
-            }
-            // Saving belongs to the editor; the tab stays open, so nothing is lost.
-            Intent::SaveFile => {
-                self.state.dialogs.pop();
             }
             Intent::AcceptHostKey => {
                 let cmd = self.state.dialogs.accept_host_key();
@@ -285,10 +299,7 @@ impl CrustApp {
                 let cmd = self.state.query_mut(tab).and_then(|q| q.load_more());
                 self.send(cmd);
             }
-            Intent::ExportResult(tab) => {
-                let cmd = self.state.query_mut(tab).and_then(|q| q.export());
-                self.send(cmd);
-            }
+            other => self.handle_files(other),
         }
     }
 
@@ -371,27 +382,6 @@ impl CrustApp {
             rt.send(cmd);
         }
     }
-
-    fn confirm_delete(&mut self) {
-        let store = &self.store;
-        match self.state.confirm_delete(|rest| store.save(rest)) {
-            Ok(Some(id)) => {
-                for kind in [
-                    SecretKind::Db,
-                    SecretKind::SshPassword,
-                    SecretKind::SshPassphrase,
-                ] {
-                    if let Err(e) = self.secrets.delete(&account(id, kind)) {
-                        tracing::warn!("keyring delete failed: {e}");
-                    }
-                }
-            }
-            Ok(None) => {}
-            Err(e) => {
-                self.state.config.warning = Some(format!("could not save connections: {e}"));
-            }
-        }
-    }
 }
 
 impl eframe::App for CrustApp {
@@ -403,98 +393,5 @@ impl eframe::App for CrustApp {
         if let Some(rt) = self.runtime.take() {
             rt.shutdown();
         }
-    }
-}
-
-impl CrustApp {
-    pub fn show(&mut self, ui: &mut egui::Ui) {
-        let now = std::time::Instant::now();
-        while let Ok(e) = self.events.try_recv() {
-            self.status.on_event(&e, &self.state, now);
-            if let Some(f) = &mut self.form
-                && f.on_event(&e)
-                && let Event::Connected { ws, .. } | Event::ConnectFailed { ws, .. } = &e
-                && let Some(rt) = &self.runtime
-            {
-                rt.send(Command::Disconnect { ws: *ws });
-            }
-            self.state.apply(e);
-        }
-        let cmds: Vec<_> = self
-            .state
-            .workspaces
-            .iter_mut()
-            .filter(|w| matches!(w.status, crate::state::Status::Online(_)))
-            .filter_map(|w| w.tree.load_roots())
-            .collect();
-        for c in cmds {
-            self.send(c);
-        }
-        if let Some(rt) = &self.runtime {
-            for c in self.state.take_fetches(|| rt.next_request_id()) {
-                rt.send(c);
-            }
-        }
-        for cmd in self.state.take_commands() {
-            self.send(cmd);
-        }
-        self.status.tick(now, || self.sampler.sample());
-        ui.ctx()
-            .request_repaint_after(crate::state::status::SAMPLE_EVERY);
-        let mut intents = vec![];
-        let focus = self.focus(ui.ctx());
-        if let Some(a) = ui.input(|i| keymap(i, focus)) {
-            if a == Action::RowDetail {
-                ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Space));
-            }
-            intents.extend(self.on_action(a, focus));
-        }
-        if let Some(m) = self.status.current(&self.state) {
-            egui::Panel::bottom("status_bar").show(ui, |ui| ui::status_bar::show(ui, m));
-        }
-        self.sidebar_rect = None;
-        if self.state.active_online().is_some() {
-            let r = egui::Panel::left("sidebar").show(ui, |ui| {
-                intents.extend(ui::sidebar::show(ui, &self.state));
-            });
-            self.sidebar_rect = Some(r.response.rect);
-        }
-        egui::CentralPanel::default().show(ui, |ui| {
-            if let Some(f) = &mut self.form {
-                intents.extend(ui::connection_form::show(ui, f));
-                return;
-            }
-            if let Some(w) = self.state.active_online() {
-                intents.extend(ui::tab_bar::show(ui, w));
-            }
-            let ws = self
-                .state
-                .active
-                .and_then(|ws| self.state.workspace_mut(ws));
-            if let Some(q) = ws.and_then(|w| w.active_query_mut()) {
-                egui::Panel::bottom(("results", q.id.0))
-                    .resizable(true)
-                    .default_size(240.0)
-                    .show(ui, |ui| {
-                        intents.extend(ui::results::show(ui, q));
-                    });
-                intents.extend(ui::editor::show(ui, q));
-                return;
-            }
-            let tab = self
-                .state
-                .active
-                .and_then(|ws| self.state.workspace_mut(ws))
-                .and_then(|w| w.active_table_mut());
-            match tab {
-                Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
-                None => intents.extend(ui::home::show(ui, &self.state)),
-            }
-        });
-        intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));
-        for i in intents {
-            self.handle(i);
-        }
-        self.status.frame_done(std::time::Instant::now());
     }
 }

@@ -67,22 +67,12 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
         {
             out.push(Intent::LoadMore(id));
         }
-        if tab.pane.header.is_some() {
-            // ponytail: plain path field; native file dialog (rfd) is not in the dependency tree.
-            ui.add(
-                egui::TextEdit::singleline(&mut tab.export_path)
-                    .hint_text("Export CSV to path")
-                    .desired_width(200.0),
-            );
-            if ui
-                .add_enabled(
-                    tab.can_run() && !tab.export_path.trim().is_empty(),
-                    egui::Button::new("Export"),
-                )
+        if tab.pane.header.is_some()
+            && ui
+                .add_enabled(tab.can_run(), egui::Button::new("Export CSV..."))
                 .clicked()
-            {
-                out.push(Intent::ExportResult(id));
-            }
+        {
+            out.push(Intent::ExportResult(id));
         }
     });
     ui.separator();

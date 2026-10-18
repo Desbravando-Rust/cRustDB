@@ -70,7 +70,7 @@ impl ResultPane {
         }
     }
 
-    pub(super) fn push(&mut self, index: usize, ok: bool, text: String, duration: Duration) {
+    pub(crate) fn push(&mut self, index: usize, ok: bool, text: String, duration: Duration) {
         self.messages.push(MessageLine {
             index,
             ok,

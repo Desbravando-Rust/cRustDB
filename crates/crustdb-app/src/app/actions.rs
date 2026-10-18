@@ -60,7 +60,7 @@ impl CrustApp {
     }
 
     /// Actions with state-side logic run here; Run/RunAll and Ctrl+/ belong to the editor,
-    /// the rest of §4.9 has no feature behind it yet.
+    /// file/history/export shortcuts map to their intents.
     pub(super) fn on_action(&mut self, a: Action, focus: Focus) -> Vec<Intent> {
         if a == Action::NewConnection {
             return vec![Intent::NewConnection];
@@ -102,6 +102,11 @@ impl CrustApp {
             }
             (Action::NextPage, Some(t)) => vec![Intent::NextPage(t)],
             (Action::PrevPage, Some(t)) => vec![Intent::PrevPage(t)],
+            (Action::Open, _) => vec![Intent::OpenFile],
+            (Action::Save, Some(t)) => vec![Intent::Save(t)],
+            (Action::SaveAs, Some(t)) => vec![Intent::SaveAs(t)],
+            (Action::History, _) => vec![Intent::ToggleHistory],
+            (Action::ExportCsv, Some(t)) => vec![Intent::ExportResult(t)],
             _ => vec![],
         }
     }

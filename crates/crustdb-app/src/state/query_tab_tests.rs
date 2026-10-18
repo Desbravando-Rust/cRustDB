@@ -200,9 +200,11 @@ fn load_more_and_export_are_busy_stoppable_and_report() {
     t.apply(&done(7, 1, None, Some(1)));
     assert!(t.load_more().is_some() && t.running.is_some() && !t.can_run());
     assert!(matches!(t.stop(), Some(Command::CancelTab { .. })));
-    t.export_path = "/tmp/x.csv".into();
-    assert!(matches!(t.export(), Some(Command::ExportResult { .. })));
-    assert!(t.running.is_some() && t.export().is_none());
+    assert!(matches!(
+        t.export(PathBuf::from("/tmp/x.csv")),
+        Some(Command::ExportResult { .. })
+    ));
+    assert!(t.running.is_some() && t.export(PathBuf::from("/tmp/x.csv")).is_none());
     t.apply(&Event::ExportDone {
         req: r,
         result: Err("disk full".into()),
@@ -210,7 +212,7 @@ fn load_more_and_export_are_busy_stoppable_and_report() {
     assert_eq!(t.running, None);
     let m = t.pane.messages.last().unwrap();
     assert!(!m.ok && m.text.contains("disk full"));
-    assert!(t.export().is_some());
+    assert!(t.export(PathBuf::from("/tmp/x.csv")).is_some());
     t.apply(&Event::ExportDone {
         req: r,
         result: Ok(3),
@@ -267,4 +269,33 @@ fn highlight_disabled_above_1mib() {
 fn current_statement_range_for_background() {
     let t = tab("select 1;\n  select 2;");
     assert_eq!(t.current_range(15), Some(12..20));
+}
+
+#[test]
+fn save_clears_dirty_and_sets_title() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("q.sql");
+    let mut t = tab("select 1");
+    assert_eq!(t.title(), "Query");
+    t.dirty = true;
+    assert_eq!(t.title(), "Query•");
+    t.save_to(path.clone()).unwrap();
+    assert!(!t.dirty);
+    assert_eq!(t.title(), "q.sql");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "select 1");
+    let mut other = tab("");
+    other.load_from(path.clone()).unwrap();
+    assert_eq!(
+        (other.text.as_str(), other.file.clone(), other.dirty),
+        ("select 1", Some(path), false)
+    );
+    assert!(other.load_from(dir.path().join("missing.sql")).is_err());
+}
+
+#[test]
+fn history_double_click_inserts_at_cursor() {
+    let mut t = tab("aé b");
+    assert_eq!(t.insert_at(2, "SELECT 1"), 10);
+    assert_eq!(t.text, "aéSELECT 1 b");
+    assert!(t.dirty);
 }

@@ -52,18 +52,38 @@ impl QueryTab {
 }
 
 impl AppState {
-    /// A query tab with an open transaction asks first (`Dialog::CloseWithTx`); otherwise the
-    /// returned command closes it. The caller removes the tab when sending `CloseTab`.
+    /// The one close path: a dirty query tab asks first (`Dialog::DirtyFile`), then an open
+    /// transaction asks (`Dialog::CloseWithTx`); otherwise the returned command closes it.
+    /// The caller removes the tab when sending `CloseTab`.
     pub fn close_tab(&mut self, ws: WorkspaceId, tab: TabId) -> Option<Command> {
         let w = self.workspace_mut(ws)?;
-        if w.queries
+        if w.queries.iter().any(|q| q.id == tab && q.dirty) {
+            self.dialogs.push(Dialog::DirtyFile { tab });
+            return None;
+        }
+        self.close_tab_tx(tab)
+    }
+
+    /// Second step of closing: the transaction guard (also after Save or Discard).
+    pub fn close_tab_tx(&mut self, tab: TabId) -> Option<Command> {
+        let open = self
+            .workspaces
             .iter()
-            .any(|q| q.id == tab && q.tx != TxState::Idle)
-        {
+            .flat_map(|w| &w.queries)
+            .any(|q| q.id == tab && q.tx != TxState::Idle);
+        if open {
             self.dialogs.push(Dialog::CloseWithTx { tab });
             return None;
         }
         Some(Command::CloseTab { tab, resolve: None })
+    }
+
+    /// Discard in the unsaved-changes dialog, then the transaction guard.
+    pub fn discard_dirty_and_close(&mut self) -> Option<Command> {
+        match self.dialogs.discard_dirty()? {
+            Command::CloseTab { tab, .. } => self.close_tab_tx(tab),
+            other => Some(other),
+        }
     }
 }
 
@@ -100,6 +120,35 @@ mod tests {
         assert_eq!(w.active_tab, Some(TabId(1)));
         w.cycle_tab(-1);
         assert_eq!(w.active_tab, Some(TabId(2)));
+    }
+
+    #[test]
+    fn dirty_tab_asks_save_discard_cancel_before_closing() {
+        let (mut s, ws) = setup();
+        assert!(matches!(
+            s.close_tab(ws, TabId(2)),
+            Some(Command::CloseTab { resolve: None, .. })
+        ));
+        s.query_mut(TabId(2)).unwrap().dirty = true;
+        assert!(s.close_tab(ws, TabId(2)).is_none());
+        assert_eq!(s.dialogs.top(), Some(&Dialog::DirtyFile { tab: TabId(2) }));
+        assert!(s.dialogs.cancel().is_none(), "cancel keeps the tab");
+        assert!(s.dialogs.top().is_none());
+    }
+
+    #[test]
+    fn dirty_dialog_comes_before_the_tx_guard() {
+        let (mut s, ws) = setup();
+        let q = s.query_mut(TabId(2)).unwrap();
+        q.dirty = true;
+        q.tx = TxState::Open;
+        assert!(s.close_tab(ws, TabId(2)).is_none());
+        assert_eq!(s.dialogs.top(), Some(&Dialog::DirtyFile { tab: TabId(2) }));
+        assert!(s.discard_dirty_and_close().is_none());
+        assert_eq!(
+            s.dialogs.top(),
+            Some(&Dialog::CloseWithTx { tab: TabId(2) })
+        );
     }
 
     #[test]

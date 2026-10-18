@@ -2,14 +2,19 @@
 use std::ops::Range;
 
 use crustdb_core::model::DriverKind;
-use crustdb_core::sql::{StatementSpan, TokenKind, highlight, split, statement_at};
+use crustdb_core::sql::{
+    Expect, StatementSpan, TokenKind, completion_context, highlight, split, statement_at,
+};
 use eframe::egui::{
     self, Color32, FontId, Key, Modifiers, TextFormat, cache::ComputerMut, text::LayoutJob,
 };
 
 use super::Intent;
+use super::autocomplete as popup;
 use crate::state::QueryTab;
+use crate::state::autocomplete::{AutocompleteAction, ColumnCache, in_literal_or_comment};
 use crate::state::query_tab::{char_to_byte, highlight_enabled};
+use crate::state::tree::ObjectTree;
 
 type Spans = Vec<(Range<usize>, TokenKind)>;
 
@@ -95,7 +100,12 @@ fn job(
     job
 }
 
-pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
+pub fn show(
+    ui: &mut egui::Ui,
+    tab: &mut QueryTab,
+    tree: &ObjectTree,
+    cols: &ColumnCache,
+) -> Vec<Intent> {
     let mut out = vec![];
     let id = ui.make_persistent_id(("query-editor", tab.id.0));
     let sel = egui::TextEdit::load_state(ui.ctx(), id)
@@ -135,14 +145,28 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
                 all: true,
             });
         }
+        out.extend(files_bar(ui, tab));
         out.extend(super::results::toolbar(ui, tab));
     });
     if run || run_all {
+        tab.ac.close();
         out.push(Intent::RunQuery {
             tab: tab.id,
             run: sel.clone(),
             all: run_all,
         });
+    }
+    let ctx = ui.ctx().clone();
+    let mut moved = None;
+    if let AutocompleteAction::Accept(item, range) = popup::take_key(&ctx, id, &mut tab.ac) {
+        moved = Some(popup::accept(&mut tab.text, &item, range));
+        tab.dirty = true;
+    }
+    if let Some(sql) = tab.insert.take() {
+        moved = Some(tab.insert_at(sel.end, &sql));
+    }
+    if let Some(c) = moved {
+        popup::set_cursor(&ctx, id, c);
     }
     let font = FontId::monospace(14.0);
     let driver = tab.driver;
@@ -189,21 +213,67 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
                 };
                 ui.fonts_mut(|f| f.layout_job(j))
             };
-            let r = ui.add(
-                egui::TextEdit::multiline(&mut tab.text)
-                    .id(id)
-                    .code_editor()
-                    .hint_text("SQL")
-                    .desired_width(f32::INFINITY)
-                    .desired_rows(24)
-                    .layouter(&mut layouter),
-            );
+            let edit = egui::TextEdit::multiline(&mut tab.text)
+                .id(id)
+                .code_editor()
+                .hint_text("SQL")
+                .desired_width(f32::INFINITY)
+                .desired_rows(24)
+                .layouter(&mut layouter)
+                .show(ui);
+            let r = &edit.response;
             if r.changed() {
                 tab.dirty = true;
                 tab.error_marker = None;
             }
+            let Some(cur) = edit.cursor_range.map(|c| c.primary) else {
+                return;
+            };
+            let byte = char_to_byte(&tab.text, usize::from(cur.index));
+            if r.changed() {
+                if in_literal_or_comment(&tab.text, byte, driver) {
+                    tab.ac.close();
+                } else {
+                    let cx = completion_context(&tab.text, byte, driver);
+                    tab.ac.refresh(&cx, tree, cols);
+                    if matches!(cx.expect, Expect::Column { .. }) {
+                        out.extend(cols.wanted(&cx, tree).into_iter().map(Intent::LoadColumns));
+                    }
+                }
+            } else if r.clicked() || !(tab.ac.replace.start..=tab.ac.replace.end).contains(&byte) {
+                tab.ac.close();
+            }
+            if tab.ac.open {
+                let pos =
+                    edit.galley_pos + edit.galley.pos_from_cursor(cur).left_bottom().to_vec2();
+                if let Some(i) = popup::popup(&ctx, pos, &tab.ac) {
+                    let range = tab.ac.replace.clone();
+                    let c = popup::accept(&mut tab.text, &tab.ac.items[i].clone(), range);
+                    tab.ac.close();
+                    tab.dirty = true;
+                    popup::set_cursor(&ctx, id, c);
+                }
+            }
         });
     });
+    out
+}
+
+/// Open / Save / Save as / History.
+fn files_bar(ui: &mut egui::Ui, tab: &QueryTab) -> Vec<Intent> {
+    let mut out = vec![];
+    ui.separator();
+    ui.label(tab.title());
+    for (label, intent) in [
+        ("Open", Intent::OpenFile),
+        ("Save", Intent::Save(tab.id)),
+        ("Save as", Intent::SaveAs(tab.id)),
+        ("History", Intent::ToggleHistory),
+    ] {
+        if ui.button(label).clicked() {
+            out.push(intent);
+        }
+    }
     out
 }
 
@@ -211,6 +281,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
 
     use super::*;
     use crate::runtime::TabId;
@@ -220,13 +291,17 @@ mod tests {
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 'a', 1; -- c\nselect 2".into();
         tab.error_marker = Some((1, 20..21));
+        let (tree, cols) = (
+            ObjectTree::new(crate::runtime::WorkspaceId(1), DriverKind::Postgres),
+            ColumnCache::default(),
+        );
         let mut ready = false;
         let mut h = Harness::new_ui(|ui| {
             if !std::mem::replace(&mut ready, true) {
                 crate::ui::theme::install_theme(ui.ctx());
                 return;
             }
-            show(ui, &mut tab);
+            show(ui, &mut tab, &tree, &cols);
         });
         h.run();
         h.run();
@@ -237,13 +312,17 @@ mod tests {
         use egui_kittest::kittest::Queryable;
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 'x'".into();
+        let (tree, cols) = (
+            ObjectTree::new(crate::runtime::WorkspaceId(1), DriverKind::Postgres),
+            ColumnCache::default(),
+        );
         let mut ready = false;
         let mut h = Harness::new_ui(|ui| {
             if !std::mem::replace(&mut ready, true) {
                 crate::ui::theme::install_theme(ui.ctx());
                 return;
             }
-            show(ui, &mut tab);
+            show(ui, &mut tab, &tree, &cols);
         });
         h.run();
         h.get_by_role(egui::accesskit::Role::MultilineTextInput)
@@ -258,5 +337,101 @@ mod tests {
         h.run();
         drop(h);
         assert_eq!(tab.text, "select 'xé'");
+    }
+
+    #[test]
+    fn enter_accepts_the_suggestion_instead_of_a_newline() {
+        use egui_kittest::kittest::Queryable;
+        let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+        let (tree, cols) = (
+            ObjectTree::new(crate::runtime::WorkspaceId(1), DriverKind::Postgres),
+            ColumnCache::default(),
+        );
+        let mut ready = false;
+        let mut h = Harness::new_ui(|ui| {
+            if !std::mem::replace(&mut ready, true) {
+                crate::ui::theme::install_theme(ui.ctx());
+                return;
+            }
+            show(ui, &mut tab, &tree, &cols);
+        });
+        h.run();
+        let role = egui::accesskit::Role::MultilineTextInput;
+        h.get_by_role(role).focus();
+        h.run();
+        h.get_by_role(role).type_text("sele");
+        h.run();
+        h.key_press(egui::Key::Enter);
+        h.run();
+        drop(h);
+        assert!(!tab.text.contains('\n'), "{:?}", tab.text);
+        assert!(tab.text.to_lowercase().starts_with("sele"));
+        assert!(tab.text.len() > 4, "{:?}", tab.text);
+        assert!(!tab.ac.open);
+    }
+
+    /// Types `typed` into a fresh editor holding `text`, popup open afterwards.
+    fn typed(
+        text: &str,
+        typed: &str,
+    ) -> (Harness<'static>, std::rc::Rc<std::cell::RefCell<QueryTab>>) {
+        let tab = std::rc::Rc::new(std::cell::RefCell::new(QueryTab::new(
+            TabId(1),
+            DriverKind::Postgres,
+            None,
+        )));
+        tab.borrow_mut().text = text.into();
+        let t = tab.clone();
+        let (tree, cols) = (
+            ObjectTree::new(crate::runtime::WorkspaceId(1), DriverKind::Postgres),
+            ColumnCache::default(),
+        );
+        let mut ready = false;
+        let mut h = Harness::new_ui(move |ui| {
+            if !std::mem::replace(&mut ready, true) {
+                crate::ui::theme::install_theme(ui.ctx());
+                return;
+            }
+            show(ui, &mut t.borrow_mut(), &tree, &cols);
+        });
+        h.run();
+        let role = egui::accesskit::Role::MultilineTextInput;
+        h.get_by_role(role).focus();
+        h.run();
+        h.key_press(egui::Key::End);
+        h.run();
+        h.get_by_role(role).type_text(typed);
+        h.run();
+        (h, tab)
+    }
+
+    #[test]
+    fn popup_closes_when_cursor_leaves_the_prefix() {
+        let (mut h, tab) = typed("x ", "s");
+        assert!(tab.borrow().ac.open);
+        h.key_press(egui::Key::Home);
+        h.run();
+        assert!(!tab.borrow().ac.open);
+    }
+
+    #[test]
+    fn popup_closes_and_keeps_its_keys_when_editor_loses_focus() {
+        let (mut h, tab) = typed("x ", "s");
+        assert!(tab.borrow().ac.open);
+        h.ctx.memory_mut(|m| {
+            if let Some(f) = m.focused() {
+                m.surrender_focus(f);
+            }
+        });
+        h.run();
+        let before = tab.borrow().text.clone();
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert!(!tab.borrow().ac.open);
+        assert_eq!(
+            tab.borrow().text,
+            before,
+            "Enter was not taken by the popup"
+        );
     }
 }

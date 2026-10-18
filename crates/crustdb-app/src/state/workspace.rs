@@ -5,6 +5,7 @@ use std::time::Instant;
 use crustdb_core::model::{ConnectionId, ObjectRef, ServerVersion};
 use secrecy::SecretString;
 
+use super::autocomplete::ColumnCache;
 use super::dialogs::{Dialog, DialogStack};
 use super::query_tab::{QueryTab, char_to_byte};
 use super::table_tab::{Structure, TableTab, TableView};
@@ -25,6 +26,7 @@ pub struct WorkspaceState {
     pub config: ConnectionConfig,
     pub status: Status,
     pub tree: ObjectTree,
+    pub columns: ColumnCache,
     pub tabs: Vec<Tab>,
     /// Query editor tabs; ids come from the same counter as `tabs`.
     pub queries: Vec<QueryTab>,
@@ -221,6 +223,12 @@ impl AppState {
         {
             q.begin_run(*req);
         }
+        if let Command::CloseTab { tab, .. } = cmd {
+            for w in &mut self.workspaces {
+                w.queries.retain(|q| q.id != *tab);
+                w.active_tab = w.active_tab.filter(|t| t != tab);
+            }
+        }
     }
 
     pub fn table_mut(&mut self, id: TabId) -> Option<&mut TableTab> {
@@ -248,6 +256,7 @@ impl AppState {
         self.workspaces.push(WorkspaceState {
             id,
             tree: ObjectTree::new(id, config.driver),
+            columns: ColumnCache::default(),
             config,
             status: Status::Connecting,
             tabs: vec![],
@@ -291,6 +300,11 @@ impl AppState {
             Event::ConnectFailed { ws, error } => {
                 if let Some(w) = self.workspace_mut(ws) {
                     w.status = Status::Failed(error);
+                }
+            }
+            Event::Columns { req, columns } => {
+                for w in &mut self.workspaces {
+                    w.columns.apply(req, columns.clone());
                 }
             }
             Event::Children { req, items } => {

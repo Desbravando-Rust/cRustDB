@@ -72,6 +72,7 @@ fn start() -> Started {
     };
     let mut config = Some(config);
     let path = dir.path().join("config.json");
+    let hist = dir.path().join("history");
 
     let app: Rc<RefCell<Option<CrustApp>>> = Rc::default();
     let slot = app.clone();
@@ -89,6 +90,7 @@ fn start() -> Started {
                     ConfigStore { path: path.clone() },
                     Box::<MemoryStore>::default(),
                     DriverRegistry::default().with(driver.clone()),
+                    hist.clone(),
                 ));
                 return;
             }

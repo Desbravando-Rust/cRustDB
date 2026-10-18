@@ -80,7 +80,7 @@ fn folder_label(kind: ObjectKind) -> &'static str {
 }
 
 #[derive(Debug, Default, Clone)]
-enum Load {
+pub(super) enum Load {
     #[default]
     Idle,
     Pending(RequestId),
@@ -88,17 +88,17 @@ enum Load {
 }
 
 #[derive(Debug, Default)]
-struct Entry {
+pub(super) struct Entry {
     expanded: bool,
-    load: Load,
+    pub(super) load: Load,
 }
 
 #[derive(Debug)]
 pub struct ObjectTree {
     ws: WorkspaceId,
-    driver: DriverKind,
+    pub(super) driver: DriverKind,
     root: Load,
-    entries: HashMap<NodePath, Entry>,
+    pub(super) entries: HashMap<NodePath, Entry>,
     filter: String,
     pub selected: Option<NodePath>,
     next_req: u64,
