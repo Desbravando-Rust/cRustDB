@@ -1,8 +1,9 @@
-use crustdb_core::model::{ConnectionId, ServerVersion};
+use crustdb_core::model::{ConnectionId, ObjectRef, ServerVersion};
 
 use super::dialogs::{Dialog, DialogStack};
-use super::tree::ObjectTree;
-use crate::runtime::{Event, TabId, WorkspaceId};
+use super::table_tab::{Structure, TableTab, TableView};
+use super::tree::{ObjectTree, OpenAction, open_action};
+use crate::runtime::{Command, Event, RequestId, TabId, WorkspaceId};
 use crate::storage::config::{ConnectionConfig, LoadedConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,9 +19,54 @@ pub struct WorkspaceState {
     pub config: ConnectionConfig,
     pub status: Status,
     pub tree: ObjectTree,
+    pub tabs: Vec<Tab>,
+    pub active_tab: Option<TabId>,
+}
+
+#[derive(Debug)]
+pub enum Tab {
+    Table(TableTab),
+}
+
+impl Tab {
+    pub fn id(&self) -> TabId {
+        match self {
+            Tab::Table(t) => t.id,
+        }
+    }
 }
 
 impl WorkspaceState {
+    /// Opens a table tab; the first page is fetched after the catalog structure arrives.
+    pub fn open_table(&mut self, id: TabId, object: ObjectRef, req: RequestId) -> [Command; 2] {
+        let mut tab = TableTab::new(id, object.clone(), self.config.page_size);
+        // ponytail: DDL objects reuse TableTab with view Ddl until a dedicated tab type exists.
+        let load = if open_action(object.kind) == OpenAction::Ddl {
+            tab.view = TableView::Ddl;
+            tab.load_ddl(req)
+        } else {
+            tab.load_structure(req)
+        };
+        self.tabs.push(Tab::Table(tab));
+        self.active_tab = Some(id);
+        [
+            Command::OpenTable {
+                ws: self.id,
+                tab: id,
+                object,
+            },
+            load,
+        ]
+    }
+
+    pub fn active_table_mut(&mut self) -> Option<&mut TableTab> {
+        let id = self.active_tab?;
+        self.tabs
+            .iter_mut()
+            .map(|Tab::Table(t)| t)
+            .find(|t| t.id == id)
+    }
+
     /// The connection form stays up until the workspace is online.
     pub fn form_open(&self) -> bool {
         !matches!(self.status, Status::Online(_))
@@ -56,6 +102,45 @@ impl AppState {
         id
     }
 
+    /// One counter for every workspace: the runtime routes by `TabId` alone.
+    pub fn next_tab_id(&mut self) -> TabId {
+        let id = TabId(self.next_tab);
+        self.next_tab += 1;
+        id
+    }
+
+    /// Entry point for `Intent::OpenObject`: `OpenTable` + `LoadStructure`.
+    pub fn open_table(
+        &mut self,
+        ws: WorkspaceId,
+        object: ObjectRef,
+        req: RequestId,
+    ) -> Vec<Command> {
+        let id = self.next_tab_id();
+        self.workspace_mut(ws)
+            .map(|w| w.open_table(id, object, req).into())
+            .unwrap_or_default()
+    }
+
+    pub fn table_mut(&mut self, id: TabId) -> Option<&mut TableTab> {
+        self.workspaces
+            .iter_mut()
+            .flat_map(|w| w.tabs.iter_mut())
+            .map(|Tab::Table(t)| t)
+            .find(|t| t.id == id)
+    }
+
+    /// Commands for tabs whose catalog structure just arrived: their first page.
+    pub fn take_fetches(&mut self, mut next_req: impl FnMut() -> RequestId) -> Vec<Command> {
+        self.workspaces
+            .iter_mut()
+            .flat_map(|w| w.tabs.iter_mut())
+            .map(|Tab::Table(t)| t)
+            .filter_map(|t| std::mem::take(&mut t.needs_fetch).then_some(t))
+            .map(|t| t.fetch(next_req()))
+            .collect()
+    }
+
     pub fn open_workspace(&mut self, config: ConnectionConfig) -> WorkspaceId {
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
@@ -64,6 +149,8 @@ impl AppState {
             tree: ObjectTree::new(id, config.driver),
             config,
             status: Status::Connecting,
+            tabs: vec![],
+            active_tab: None,
         });
         self.active = Some(id);
         id
@@ -74,12 +161,6 @@ impl AppState {
         self.workspaces
             .iter()
             .find(|w| w.id == id && matches!(w.status, Status::Online(_)))
-    }
-
-    pub fn next_tab(&mut self) -> TabId {
-        let id = TabId(self.next_tab);
-        self.next_tab += 1;
-        id
     }
 
     pub fn workspace_mut(&mut self, id: WorkspaceId) -> Option<&mut WorkspaceState> {
@@ -102,6 +183,70 @@ impl AppState {
             Event::Children { req, items } => {
                 for w in &mut self.workspaces {
                     w.tree.apply_children(req, items.clone());
+                }
+            }
+            Event::Page {
+                req,
+                header,
+                rows,
+                has_more,
+                estimate,
+            } => {
+                // A response whose request is no longer `loading` is stale.
+                let tab = self
+                    .workspaces
+                    .iter_mut()
+                    .flat_map(|w| w.tabs.iter_mut())
+                    .map(|Tab::Table(t)| t)
+                    .find(|t| t.loading == Some(req));
+                if let Some(t) = tab {
+                    // Header columns are display-only; the query schema is the catalog's.
+                    let _ = header;
+                    t.apply_page(rows);
+                    t.has_more |= has_more;
+                    t.estimate = estimate;
+                }
+            }
+            Event::Structure {
+                req,
+                columns,
+                indexes,
+                fks,
+            } => {
+                let tab = self
+                    .workspaces
+                    .iter_mut()
+                    .flat_map(|w| w.tabs.iter_mut())
+                    .map(|Tab::Table(t)| t)
+                    .find(|t| t.structure_req == Some(req));
+                if let Some(t) = tab {
+                    t.apply_structure(Structure {
+                        columns,
+                        indexes,
+                        fks,
+                    });
+                }
+            }
+            Event::Notice { tab, text } => {
+                if let Some(t) = self.table_mut(tab) {
+                    t.fail(text);
+                }
+            }
+            Event::Ddl { req, text } => {
+                let tab = self
+                    .workspaces
+                    .iter_mut()
+                    .flat_map(|w| w.tabs.iter_mut())
+                    .map(|Tab::Table(t)| t)
+                    .find(|t| t.ddl_req == Some(req));
+                if let Some(t) = tab {
+                    t.ddl = Some(text);
+                    t.ddl_req = None;
+                }
+            }
+            Event::ActorCrashed { tab } => {
+                if let Some(t) = self.table_mut(tab) {
+                    t.fail("connection actor crashed".into());
                 }
             }
             _ => {}
@@ -145,8 +290,11 @@ impl AppState {
 #[cfg(test)]
 pub(crate) mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crustdb_core::driver::ResultHeader;
     use crustdb_core::driver::{TlsConfig, TlsMode};
-    use crustdb_core::model::{DriverKind, Product};
+    use crustdb_core::model::{
+        ColumnDetail, ColumnMeta, DriverKind, ObjectKind, ObjectRef, Product, TypeCategory,
+    };
 
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -203,6 +351,182 @@ pub(crate) mod tests {
         });
         assert_eq!(s.workspaces[0].status, Status::Online(server));
         assert!(!s.workspaces[0].form_open());
+    }
+
+    fn obj() -> ObjectRef {
+        ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    fn detail(name: &str, pk: bool) -> ColumnDetail {
+        ColumnDetail {
+            meta: ColumnMeta {
+                name: name.into(),
+                type_name: "int4".into(),
+                category: TypeCategory::Integer,
+                nullable: Some(false),
+                is_primary_key: pk,
+            },
+            default: None,
+            comment: None,
+        }
+    }
+
+    fn page(req: u64) -> Event {
+        Event::Page {
+            req: RequestId(req),
+            header: ResultHeader {
+                columns: vec![detail("x", false).meta],
+            },
+            rows: vec![],
+            has_more: true,
+            estimate: Some(5),
+        }
+    }
+
+    #[test]
+    fn open_table_loads_structure_then_fetches_with_catalog_columns() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let cmds = s.open_table(ws, obj(), RequestId(7));
+        assert!(matches!(cmds[0], Command::OpenTable { tab: TabId(1), .. }));
+        assert!(matches!(
+            cmds[1],
+            Command::LoadStructure {
+                req: RequestId(7),
+                ..
+            }
+        ));
+        assert!(s.take_fetches(|| RequestId(8)).is_empty());
+        s.apply(Event::Structure {
+            req: RequestId(7),
+            columns: vec![detail("id", true)],
+            indexes: vec![],
+            fks: vec![],
+        });
+        let f = s.take_fetches(|| RequestId(8));
+        let [Command::FetchPage { req, query, .. }] = &f[..] else {
+            panic!("expected one FetchPage");
+        };
+        assert_eq!(*req, RequestId(8));
+        assert!(query.columns[0].is_primary_key);
+        assert!(s.take_fetches(|| RequestId(9)).is_empty());
+    }
+
+    fn func() -> ObjectRef {
+        ObjectRef {
+            kind: ObjectKind::Function,
+            ..obj()
+        }
+    }
+
+    #[test]
+    fn open_object_function_emits_open_and_ddl() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let cmds = s.open_table(ws, func(), RequestId(1));
+        assert!(matches!(
+            cmds[..],
+            [
+                Command::OpenTable { tab: TabId(1), .. },
+                Command::LoadDdl {
+                    tab: TabId(1),
+                    req: RequestId(1)
+                }
+            ]
+        ));
+        let Some(Tab::Table(t)) = s.workspaces[0].tabs.first() else {
+            panic!("tab");
+        };
+        assert_eq!(t.view, TableView::Ddl);
+        assert!(s.take_fetches(|| RequestId(2)).is_empty());
+    }
+
+    #[test]
+    fn tab_ids_are_unique_across_workspaces_and_kinds() {
+        let mut s = state(&["a", "b"]);
+        let a = s.open_workspace(s.config.connections[0].clone());
+        let b = s.open_workspace(s.config.connections[1].clone());
+        let mut ids = vec![];
+        for (ws, o) in [(a, obj()), (b, func()), (a, func()), (b, obj())] {
+            for c in s.open_table(ws, o, RequestId(1)) {
+                if let Command::OpenTable { tab, .. } = c {
+                    ids.push(tab.0);
+                }
+            }
+        }
+        assert_eq!(ids, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn page_ignores_stale_req_and_keeps_catalog_columns() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.open_table(ws, obj(), RequestId(7));
+        s.apply(Event::Structure {
+            req: RequestId(7),
+            columns: vec![detail("id", true)],
+            indexes: vec![],
+            fks: vec![],
+        });
+        s.take_fetches(|| RequestId(8));
+        s.apply(page(6));
+        let t = s.table_mut(TabId(1)).unwrap();
+        assert!(t.loading.is_some() && t.estimate.is_none());
+        s.apply(page(8));
+        let t = s.table_mut(TabId(1)).unwrap();
+        assert!(t.loading.is_none() && t.has_more && t.estimate == Some(5));
+        assert_eq!(t.columns[0].name, "id");
+        assert!(t.columns[0].is_primary_key);
+    }
+
+    #[test]
+    fn ddl_retry_reemits_load_ddl_and_event_fills_text() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.open_table(ws, func(), RequestId(1));
+        s.apply(Event::Notice {
+            tab: TabId(1),
+            text: "boom".into(),
+        });
+        let t = s.table_mut(TabId(1)).unwrap();
+        assert!(!t.is_loading());
+        assert!(matches!(
+            t.retry(RequestId(2)),
+            Command::LoadDdl {
+                req: RequestId(2),
+                ..
+            }
+        ));
+        assert!(t.is_loading());
+        s.apply(Event::Ddl {
+            req: RequestId(2),
+            text: "create".into(),
+        });
+        let t = s.table_mut(TabId(1)).unwrap();
+        assert_eq!(t.ddl.as_deref(), Some("create"));
+        assert!(!t.is_loading());
+    }
+
+    #[test]
+    fn notice_and_crash_release_loading() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.open_table(ws, obj(), RequestId(1));
+        s.apply(Event::Notice {
+            tab: TabId(1),
+            text: "boom".into(),
+        });
+        let t = s.table_mut(TabId(1)).unwrap();
+        assert!(t.structure_req.is_none());
+        assert_eq!(t.notice.as_deref(), Some("boom"));
+        t.fetch(RequestId(2));
+        s.apply(Event::ActorCrashed { tab: TabId(1) });
+        assert!(s.table_mut(TabId(1)).unwrap().loading.is_none());
     }
 
     #[test]

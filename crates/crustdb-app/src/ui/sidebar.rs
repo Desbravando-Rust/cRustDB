@@ -28,6 +28,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     {
         out.push(Intent::Filter(q));
     }
+    // ponytail: unconditional until Task 34 maps shortcuts by focus.
     if ui.input(|i| i.key_pressed(egui::Key::F5)) {
         out.push(match active.tree.selected.clone() {
             Some(sel) => Intent::RefreshNode(sel),

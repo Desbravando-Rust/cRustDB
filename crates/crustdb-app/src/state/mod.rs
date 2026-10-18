@@ -5,4 +5,6 @@ pub mod tree;
 pub mod workspace;
 
 pub use dialogs::{Dialog, DialogStack};
-pub use workspace::{AppState, Status, WorkspaceState};
+pub use workspace::{AppState, Status, Tab, WorkspaceState};
+pub mod table_tab;
+pub use table_tab::{Structure, TableTab, TableView};

@@ -1,0 +1,154 @@
+use crustdb_core::format::display_cell;
+use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, Row};
+use crustdb_core::query::Sort;
+use eframe::egui::{self, Color32, RichText};
+use egui_extras::{Column, TableBuilder};
+
+use super::Intent;
+use crate::state::TableTab;
+
+const ROW_H: f32 = 20.0;
+
+/// Virtualized grid; returns the clicked header as `(column, shift)`.
+pub fn grid(
+    ui: &mut egui::Ui,
+    columns: &[ColumnMeta],
+    rows: &[Row],
+    selected: &mut Option<usize>,
+) -> Option<(String, bool)> {
+    grid_sorted(ui, columns, rows, selected, &[])
+}
+
+fn sort_mark(sorts: &[Sort], column: &str) -> String {
+    match sorts.iter().position(|s| s.column == column) {
+        Some(i) => {
+            let arrow = if sorts[i].descending { "▼" } else { "▲" };
+            if sorts.len() > 1 {
+                format!(" {arrow}{}", i + 1)
+            } else {
+                format!(" {arrow}")
+            }
+        }
+        None => String::new(),
+    }
+}
+
+fn grid_sorted(
+    ui: &mut egui::Ui,
+    columns: &[ColumnMeta],
+    rows: &[Row],
+    selected: &mut Option<usize>,
+    sorts: &[Sort],
+) -> Option<(String, bool)> {
+    let mut clicked = None;
+    let mut table = TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .sense(egui::Sense::click());
+    for _ in columns {
+        table = table.column(Column::auto().at_least(60.0).clip(true));
+    }
+    table
+        .header(ROW_H, |mut h| {
+            for c in columns {
+                h.col(|ui| {
+                    let text = format!("{}{}", c.name, sort_mark(sorts, &c.name));
+                    let r = ui.add(
+                        egui::Label::new(RichText::new(text).strong())
+                            .selectable(false)
+                            .sense(egui::Sense::click()),
+                    );
+                    if r.clicked() {
+                        clicked = Some((c.name.clone(), ui.input(|i| i.modifiers.shift)));
+                    }
+                });
+            }
+        })
+        .body(|body| {
+            body.rows(ROW_H, rows.len(), |mut row| {
+                let i = row.index();
+                row.set_selected(*selected == Some(i));
+                for (cell, meta) in rows[i].iter().zip(columns) {
+                    row.col(|ui| {
+                        let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
+                        if matches!(cell, Cell::Null) {
+                            ui.label(RichText::new(text).italics().color(Color32::GRAY));
+                        } else {
+                            ui.add(egui::Label::new(text).truncate());
+                        }
+                    });
+                }
+                if row.response().clicked() {
+                    *selected = Some(i);
+                }
+            });
+        });
+    clicked
+}
+
+pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
+    let mut out = vec![];
+    let id = tab.id;
+    egui::Panel::bottom(("table_footer", id.0)).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(tab.page > 0, egui::Button::new("<"))
+                .clicked()
+            {
+                out.push(Intent::PrevPage(id));
+            }
+            if ui
+                .add_enabled(tab.has_more, egui::Button::new(">"))
+                .clicked()
+            {
+                out.push(Intent::NextPage(id));
+            }
+            ui.label(tab.footer_label());
+            if tab.is_loading() && ui.button("Stop").clicked() {
+                out.push(Intent::StopTab(id));
+            }
+            if let Some(n) = tab.notice.clone() {
+                ui.colored_label(ui.visuals().error_fg_color, n);
+                if ui.button("Retry").clicked() {
+                    out.push(Intent::Retry(id));
+                }
+            }
+            if tab.unordered() {
+                ui.colored_label(Color32::YELLOW, "unordered");
+            }
+        });
+    });
+    egui::CentralPanel::default().show(ui, |ui| {
+        let clicked = grid_sorted(
+            ui,
+            &tab.columns,
+            &tab.rows,
+            &mut tab.selected_row,
+            &tab.sorts,
+        );
+        if let Some((column, shift)) = clicked {
+            out.push(Intent::SortHeader {
+                tab: id,
+                column,
+                shift,
+            });
+        }
+    });
+    out
+}
+
+/// Placeholder until the DDL view task: loading, error + Retry, or read-only text.
+pub fn show_ddl(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
+    let mut out = vec![];
+    if let Some(n) = &tab.notice {
+        ui.colored_label(Color32::LIGHT_RED, n);
+        if ui.button("Retry").clicked() {
+            out.push(Intent::Retry(tab.id));
+        }
+    } else if let Some(t) = &tab.ddl {
+        egui::ScrollArea::both().show(ui, |ui| ui.monospace(t));
+    } else {
+        ui.label("Loading DDL…");
+    }
+    out
+}

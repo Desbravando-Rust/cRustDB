@@ -4,10 +4,9 @@ use std::sync::mpsc::Receiver;
 use crustdb_core::model::{ConnectionId, DriverKind};
 
 use crate::net::ssh::SshSecrets;
-use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
+use crate::runtime::{Command, Event, ResolvedSecrets, Runtime, TabId};
 use crate::state::AppState;
 use crate::state::connection_form::ConnectionForm;
-use crate::state::tree::{OpenAction, open_action};
 use crate::storage::config::{ConfigStore, ConnectionConfig, FieldError, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
 use crate::ui::{self, Intent};
@@ -151,6 +150,24 @@ impl CrustApp {
                 }
             }
             Intent::OpenObject { object } => self.open_object(object),
+            Intent::SortHeader { tab, column, shift } => {
+                self.table_op(tab, |t| {
+                    t.click_header(&column, shift);
+                    true
+                });
+            }
+            Intent::NextPage(tab) => self.table_op(tab, |t| t.next_page()),
+            Intent::PrevPage(tab) => self.table_op(tab, |t| t.prev_page()),
+            Intent::Retry(tab) => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) {
+                    rt.send(t.retry(rt.next_request_id()));
+                }
+            }
+            Intent::StopTab(tab) => {
+                if let Some(rt) = &self.runtime {
+                    rt.send(Command::CancelTab { tab });
+                }
+            }
         }
     }
 
@@ -223,17 +240,10 @@ impl CrustApp {
         let (Some(ws), Some(rt)) = (self.state.active, &self.runtime) else {
             return;
         };
-        let tab = self.state.next_tab();
-        let action = open_action(object.kind);
-        rt.send(Command::OpenTable { ws, tab, object });
-        if action == OpenAction::Ddl {
-            rt.send(Command::LoadDdl {
-                tab,
-                req: rt.next_request_id(),
-            });
+        for c in self.state.open_table(ws, object, rt.next_request_id()) {
+            rt.send(c);
         }
     }
-
 
     /// Validates, persists the config and keyring secrets; the form stays open on any failure.
     fn save_form(&mut self) -> Option<(ConnectionConfig, ResolvedSecrets)> {
@@ -289,6 +299,16 @@ impl CrustApp {
         Some((config, typed))
     }
 
+    /// Applies `f` to the table tab and refetches its page if `f` reports a change.
+    fn table_op(&mut self, tab: TabId, f: impl FnOnce(&mut crate::state::TableTab) -> bool) {
+        let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) else {
+            return;
+        };
+        if f(t) {
+            rt.send(t.fetch(rt.next_request_id()));
+        }
+    }
+
     fn confirm_delete(&mut self) {
         let store = &self.store;
         match self.state.confirm_delete(|rest| store.save(rest)) {
@@ -333,15 +353,34 @@ impl eframe::App for CrustApp {
         for c in cmds {
             self.send(c);
         }
+        if let Some(rt) = &self.runtime {
+            for c in self.state.take_fetches(|| rt.next_request_id()) {
+                rt.send(c);
+            }
+        }
         let mut intents = vec![];
         if self.state.active_online().is_some() {
             egui::Panel::left("sidebar").show(ui, |ui| {
                 intents.extend(ui::sidebar::show(ui, &self.state));
             });
         }
-        egui::CentralPanel::default().show(ui, |ui| match &mut self.form {
-            Some(f) => intents.extend(ui::connection_form::show(ui, f)),
-            None => intents.extend(ui::home::show(ui, &self.state)),
+        egui::CentralPanel::default().show(ui, |ui| {
+            if let Some(f) = &mut self.form {
+                intents.extend(ui::connection_form::show(ui, f));
+                return;
+            }
+            let tab = self
+                .state
+                .active
+                .and_then(|ws| self.state.workspace_mut(ws))
+                .and_then(|w| w.active_table_mut());
+            match tab {
+                Some(t) if t.view == crate::state::TableView::Ddl => {
+                    intents.extend(ui::grid::show_ddl(ui, t))
+                }
+                Some(t) => intents.extend(ui::grid::show(ui, t)),
+                None => intents.extend(ui::home::show(ui, &self.state)),
+            }
         });
         intents.extend(ui::home::dialogs(ui.ctx(), &self.state));
         for i in intents {
