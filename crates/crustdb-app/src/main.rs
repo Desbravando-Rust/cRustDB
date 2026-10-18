@@ -2,11 +2,11 @@ use eframe::egui;
 
 fn main() -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("CrustDB"),
+        viewport: egui::ViewportBuilder::default().with_title("cRustDB"),
         ..Default::default()
     };
     eframe::run_native(
-        "CrustDB",
+        "cRustDB",
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_theme(egui::Theme::Dark);
