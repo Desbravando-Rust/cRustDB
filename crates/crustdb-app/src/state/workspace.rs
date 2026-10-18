@@ -46,6 +46,7 @@ impl WorkspaceState {
     /// Opens a table tab; the first page is fetched after the catalog structure arrives.
     pub fn open_table(&mut self, id: TabId, object: ObjectRef, req: RequestId) -> [Command; 2] {
         let mut tab = TableTab::new(id, object.clone(), self.config.page_size);
+        tab.driver = self.config.driver;
         // ponytail: DDL objects reuse TableTab with view Ddl until a dedicated tab type exists.
         let load = if open_action(object.kind) == OpenAction::Ddl {
             tab.view = TableView::Ddl;
@@ -266,6 +267,7 @@ impl AppState {
                 if let Some(t) = tab {
                     t.ddl = Some(text);
                     t.ddl_req = None;
+                    t.notice = None;
                 }
             }
             Event::ActorCrashed { tab } => {
@@ -554,6 +556,13 @@ pub(crate) mod tests {
         let t = s.table_mut(TabId(1)).unwrap();
         assert_eq!(t.ddl.as_deref(), Some("create"));
         assert!(!t.is_loading());
+        t.notice = Some("stale".into());
+        t.ddl_req = Some(RequestId(3));
+        s.apply(Event::Ddl {
+            req: RequestId(3),
+            text: "create".into(),
+        });
+        assert!(s.table_mut(TabId(1)).unwrap().notice.is_none());
     }
 
     #[test]

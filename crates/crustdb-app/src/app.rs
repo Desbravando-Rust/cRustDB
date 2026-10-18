@@ -195,6 +195,25 @@ impl CrustApp {
                     rt.send(t.retry(rt.next_request_id()));
                 }
             }
+            Intent::ApplyFilters(tab) => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.apply_filters(rt.next_request_id())
+                {
+                    rt.send(c);
+                }
+            }
+            Intent::ClearFilters(tab) => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) {
+                    rt.send(t.clear_filters(rt.next_request_id()));
+                }
+            }
+            Intent::SetView(tab, view) => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.set_view(view, rt.next_request_id())
+                {
+                    rt.send(c);
+                }
+            }
             Intent::StopTab(tab) => {
                 if let Some(rt) = &self.runtime {
                     rt.send(Command::CancelTab { tab });
@@ -413,10 +432,7 @@ impl eframe::App for CrustApp {
                 .and_then(|ws| self.state.workspace_mut(ws))
                 .and_then(|w| w.active_table_mut());
             match tab {
-                Some(t) if t.view == crate::state::TableView::Ddl => {
-                    intents.extend(ui::grid::show_ddl(ui, t))
-                }
-                Some(t) => intents.extend(ui::grid::show(ui, t)),
+                Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
                 None => intents.extend(ui::home::show(ui, &self.state)),
             }
         });

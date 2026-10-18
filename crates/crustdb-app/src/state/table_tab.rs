@@ -1,6 +1,9 @@
-use crustdb_core::model::{ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectRef, Row};
+use crustdb_core::model::{
+    ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectRef, Row,
+};
 use crustdb_core::query::{Filter, Sort, TableQuery};
 
+use super::filter_draft::FilterDraft;
 use crate::runtime::{Command, RequestId, TabId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +44,11 @@ pub struct TableTab {
     /// Pending `LoadDdl` and its result (`view == Ddl`).
     pub ddl_req: Option<RequestId>,
     pub ddl: Option<String>,
+    pub driver: DriverKind,
+    pub filter_open: bool,
+    pub drafts: Vec<FilterDraft>,
+    pub filter_error: Option<String>,
+    pub detail_open: bool,
 }
 
 impl TableTab {
@@ -65,6 +73,11 @@ impl TableTab {
             notice: None,
             ddl_req: None,
             ddl: None,
+            driver: DriverKind::Postgres,
+            filter_open: false,
+            drafts: vec![],
+            filter_error: None,
+            detail_open: false,
         }
     }
 
@@ -132,6 +145,75 @@ impl TableTab {
             limit: Some(u64::from(self.page_size) + 1),
             offset: self.page * u64::from(self.page_size),
         }
+    }
+
+    pub fn apply_filters(&mut self, req: RequestId) -> Option<Command> {
+        let filters: Result<Vec<_>, _> = self
+            .drafts
+            .iter()
+            .map(|d| d.to_filter(&self.columns, self.driver))
+            .collect();
+        match filters {
+            Ok(f) => {
+                self.filters = f;
+                self.filter_error = None;
+                self.page = 0;
+                Some(self.fetch(req))
+            }
+            Err(e) => {
+                self.filter_error = Some(e);
+                None
+            }
+        }
+    }
+
+    /// What the filter bar shows: a draft error, or the server's rejection of the applied filters.
+    pub fn bar_error(&self) -> Option<&str> {
+        self.filter_error.as_deref().or(self
+            .notice
+            .as_deref()
+            .filter(|_| self.view == TableView::Data && !self.filters.is_empty()))
+    }
+
+    /// Switching views drops the other view's error; DDL is loaded only the first time.
+    pub fn set_view(&mut self, view: TableView, req: RequestId) -> Option<Command> {
+        if self.view == view {
+            return None;
+        }
+        self.view = view;
+        self.notice = None;
+        (view == TableView::Ddl && self.ddl.is_none() && self.ddl_req.is_none())
+            .then(|| self.load_ddl(req))
+    }
+
+    pub fn toggle_filter_bar(&mut self) {
+        self.filter_open = !self.filter_open;
+        if self.filter_open && self.drafts.is_empty() {
+            self.add_draft();
+        }
+    }
+
+    pub fn toggle_detail(&mut self) {
+        self.detail_open = !self.detail_open;
+    }
+
+    pub fn add_draft(&mut self) {
+        self.drafts.push(FilterDraft::new(&self.columns));
+    }
+
+    pub fn remove_draft(&mut self, i: usize) {
+        if i < self.drafts.len() {
+            self.drafts.remove(i);
+        }
+    }
+
+    /// Empties the drafts and reapplies, back to page 0.
+    pub fn clear_filters(&mut self, req: RequestId) -> Command {
+        self.drafts.clear();
+        self.filters.clear();
+        self.filter_error = None;
+        self.page = 0;
+        self.fetch(req)
     }
 
     /// Marks the tab as loading and builds the command for the current page.
@@ -225,190 +307,5 @@ fn short(n: u64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crustdb_core::model::{Cell, ObjectKind, TypeCategory};
-    use crustdb_core::query::Operator;
-
-    use super::*;
-
-    fn tab(page_size: u32) -> TableTab {
-        let object = ObjectRef {
-            database: "d".into(),
-            schema: Some("public".into()),
-            name: "t".into(),
-            kind: ObjectKind::Table,
-        };
-        TableTab::new(TabId(1), object, page_size)
-    }
-
-    fn tab_with(
-        page_size: u32,
-        page: u64,
-        estimate: Option<u64>,
-        filters: Vec<Filter>,
-    ) -> TableTab {
-        let mut t = tab(page_size);
-        t.page = page;
-        t.estimate = estimate;
-        t.filters = filters;
-        t.rows = rows(page_size as usize);
-        t
-    }
-
-    fn rows(n: usize) -> Vec<Row> {
-        (0..n).map(|_| vec![Cell::Null].into()).collect()
-    }
-
-    fn asc(c: &str) -> Sort {
-        Sort {
-            column: c.into(),
-            descending: false,
-        }
-    }
-
-    fn desc(c: &str) -> Sort {
-        Sort {
-            column: c.into(),
-            descending: true,
-        }
-    }
-
-    fn filter_eq(c: &str, v: &str) -> Filter {
-        Filter {
-            column: c.into(),
-            op: Operator::Eq,
-            values: vec![v.into()],
-        }
-    }
-
-    #[test]
-    fn pagination_next_enabled_only_when_limit_plus_one() {
-        let mut t = tab(300);
-        t.apply_page(rows(301));
-        assert!(t.has_more);
-        assert_eq!(t.rows.len(), 300);
-        t.apply_page(rows(120));
-        assert!(!t.has_more);
-    }
-
-    #[test]
-    fn sort_header_cycle_and_shift_multi() {
-        let mut t = tab(300);
-        t.click_header("a", false);
-        assert_eq!(t.sorts, [asc("a")]);
-        t.click_header("a", false);
-        assert_eq!(t.sorts, [desc("a")]);
-        t.click_header("b", true);
-        assert_eq!(t.sorts, [desc("a"), asc("b")]);
-        t.click_header("a", false);
-        assert!(t.sorts.is_empty());
-    }
-
-    #[test]
-    fn footer_shows_estimate_without_filters() {
-        let t = tab_with(300, 1, Some(1_200_000), vec![]);
-        assert_eq!(t.footer_label(), "Rows 301–600 of ~1.2M");
-    }
-
-    #[test]
-    fn footer_hides_total_with_filters() {
-        let t = tab_with(300, 0, Some(1_200_000), vec![filter_eq("a", "1")]);
-        assert_eq!(t.footer_label(), "Rows 1–300");
-    }
-
-    #[test]
-    fn sort_or_filter_change_resets_to_first_page() {
-        let mut t = tab(300);
-        t.page = 3;
-        t.click_header("a", false);
-        assert_eq!(t.page, 0);
-    }
-
-    #[test]
-    fn query_uses_limit_plus_one_and_page_offset() {
-        let mut t = tab(300);
-        t.page = 2;
-        let q = t.query();
-        assert_eq!((q.limit, q.offset), (Some(301), 600));
-    }
-
-    fn pk(name: &str) -> ColumnMeta {
-        ColumnMeta {
-            name: name.into(),
-            type_name: "int4".into(),
-            category: TypeCategory::Integer,
-            nullable: Some(false),
-            is_primary_key: true,
-        }
-    }
-
-    #[test]
-    fn structure_sets_catalog_columns_and_query_orders_by_pk() {
-        let mut t = tab(300);
-        t.apply_structure(Structure {
-            columns: vec![ColumnDetail {
-                meta: pk("id"),
-                default: None,
-                comment: None,
-            }],
-            ..Default::default()
-        });
-        assert!(t.needs_fetch && t.structure_req.is_none());
-        let q = t.query();
-        assert_eq!(q.sorts, [asc("id")]);
-        assert!(q.columns[0].is_primary_key);
-        assert!(t.sorts.is_empty());
-    }
-
-    #[test]
-    fn fail_clears_loading_and_keeps_message() {
-        let mut t = tab(300);
-        t.fetch(RequestId(1));
-        t.fail("cancelled".into());
-        assert!(t.loading.is_none());
-        assert_eq!(t.notice.as_deref(), Some("cancelled"));
-    }
-
-    #[test]
-    fn retry_reloads_structure_then_page_and_loading_covers_structure() {
-        let mut t = tab(300);
-        t.load_structure(RequestId(1));
-        assert!(t.is_loading());
-        assert_eq!(t.footer_label(), "Loading…");
-        t.fail("boom".into());
-        assert_eq!(t.footer_label(), "No rows");
-        assert!(matches!(
-            t.retry(RequestId(2)),
-            Command::LoadStructure { .. }
-        ));
-        assert!(t.notice.is_none());
-        t.columns.push(pk("id"));
-        assert!(matches!(t.retry(RequestId(3)), Command::FetchPage { .. }));
-    }
-
-    #[test]
-    fn page_moves_report_change() {
-        let mut t = tab(300);
-        assert!(!t.next_page() && !t.prev_page());
-        t.has_more = true;
-        assert!(t.next_page() && t.prev_page());
-    }
-
-    #[test]
-    fn unordered_only_without_pk_and_sort() {
-        let mut t = tab(300);
-        assert!(t.unordered());
-        t.click_header("a", false);
-        assert!(!t.unordered());
-        t.sorts.clear();
-        t.columns.push(ColumnMeta {
-            name: "id".into(),
-            type_name: "int".into(),
-            category: TypeCategory::Integer,
-            nullable: Some(false),
-            is_primary_key: true,
-        });
-        assert!(!t.unordered());
-    }
-}
+#[path = "table_tab_tests.rs"]
+mod tests;

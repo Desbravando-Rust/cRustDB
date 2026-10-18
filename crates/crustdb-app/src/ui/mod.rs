@@ -1,9 +1,12 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
 pub mod confirm_dialog;
 pub mod connection_form;
+pub mod filter_bar;
 pub mod grid;
 pub mod home;
+pub mod row_detail;
 pub mod sidebar;
+pub mod structure;
 pub mod theme;
 
 use crustdb_core::model::{ConnectionId, ObjectRef};
@@ -48,4 +51,7 @@ pub enum Intent {
     SaveFile,
     DiscardFile,
     AcceptHostKey,
+    ApplyFilters(TabId),
+    ClearFilters(TabId),
+    SetView(TabId, crate::state::TableView),
 }

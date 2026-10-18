@@ -1,11 +1,12 @@
 use crustdb_core::format::display_cell;
 use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, Row};
 use crustdb_core::query::Sort;
+use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
 use super::Intent;
-use crate::state::TableTab;
+use crate::state::{TableTab, TableView};
 
 const ROW_H: f32 = 20.0;
 
@@ -118,6 +119,26 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             }
         });
     });
+    let typing = ui.memory(|m| m.focused().is_some());
+    if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::F)) {
+        tab.toggle_filter_bar();
+    }
+    if !typing && ui.input(|i| i.key_pressed(egui::Key::Space)) {
+        tab.toggle_detail();
+    }
+    if tab.filter_open {
+        egui::Panel::top(("filter_bar", id.0)).show(ui, |ui| {
+            out.extend(super::filter_bar::show(ui, tab));
+        });
+    }
+    if tab.detail_open
+        && let Some(i) = tab.selected_row
+        && let Some(row) = tab.rows.get(i)
+    {
+        egui::Panel::right(("row_detail", id.0)).show(ui, |ui| {
+            super::row_detail::show(ui, &tab.columns, row);
+        });
+    }
     egui::CentralPanel::default().show(ui, |ui| {
         let clicked = grid_sorted(
             ui,
@@ -137,8 +158,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     out
 }
 
-/// Placeholder until the DDL view task: loading, error + Retry, or read-only text.
-pub fn show_ddl(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
+/// DDL view: loading, error + Retry, or read-only highlighted text.
+fn show_ddl(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
     let mut out = vec![];
     if let Some(n) = &tab.notice {
         ui.colored_label(Color32::LIGHT_RED, n);
@@ -146,9 +167,54 @@ pub fn show_ddl(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
             out.push(Intent::Retry(tab.id));
         }
     } else if let Some(t) = &tab.ddl {
-        egui::ScrollArea::both().show(ui, |ui| ui.monospace(t));
+        let mut job = egui::text::LayoutJob::default();
+        for (r, k) in highlight(t, tab.driver) {
+            let color = match k {
+                TokenKind::Keyword => Color32::from_rgb(200, 120, 220),
+                TokenKind::String => Color32::from_rgb(150, 200, 120),
+                TokenKind::Number => Color32::from_rgb(230, 170, 90),
+                TokenKind::Comment => Color32::GRAY,
+                TokenKind::QuotedIdent => Color32::from_rgb(120, 190, 230),
+                _ => Color32::LIGHT_GRAY,
+            };
+            job.append(
+                &t[r],
+                0.0,
+                egui::TextFormat {
+                    font_id: egui::FontId::monospace(13.0),
+                    color,
+                    ..Default::default()
+                },
+            );
+        }
+        egui::ScrollArea::both().show(ui, |ui| ui.add(egui::Label::new(job).selectable(true)));
     } else {
         ui.label("Loading DDL…");
+    }
+    out
+}
+
+/// Tab body: view switcher, then the Data / Structure / DDL view.
+pub fn show_tab(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
+    let mut out = vec![];
+    let is_table = tab.view != TableView::Ddl || tab.structure.is_some();
+    if is_table {
+        ui.horizontal(|ui| {
+            for (v, label) in [
+                (TableView::Data, "Data"),
+                (TableView::Structure, "Structure"),
+                (TableView::Ddl, "DDL"),
+            ] {
+                if ui.selectable_label(tab.view == v, label).clicked() && tab.view != v {
+                    out.push(Intent::SetView(tab.id, v));
+                }
+            }
+        });
+    }
+    match tab.view {
+        TableView::Data => out.extend(show(ui, tab)),
+        TableView::Structure => out.extend(super::structure::show(ui, tab)),
+        TableView::Ddl => out.extend(show_ddl(ui, tab)),
     }
     out
 }
