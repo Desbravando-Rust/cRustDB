@@ -10,6 +10,8 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+async-trait = "0.1.92"
+crustdb-core = { version = "0.1.0", path = "../crustdb-core" }
 rcgen = "0.14.10"
 tempfile = "3.27.0"
 testcontainers = "0.28.0"

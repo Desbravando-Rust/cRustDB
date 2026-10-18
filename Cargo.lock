@@ -1442,6 +1442,8 @@ dependencies = [
 name = "crustdb-testkit"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "crustdb-core",
  "rcgen",
  "tempfile",
  "testcontainers",
