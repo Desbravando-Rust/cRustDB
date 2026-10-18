@@ -28,3 +28,7 @@ rustc-ice-*.txt
 .claude-flow/
 .swarm/
 ruvector.db
+
+# AgendDB
+agentdb.rvf
+agentdb.rvf.lock

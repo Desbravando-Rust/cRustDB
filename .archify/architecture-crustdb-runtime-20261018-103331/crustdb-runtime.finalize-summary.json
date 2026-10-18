@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/candidate.json",
+    "sha256": "ef94175e0242a97a777ba7b4000477c2a19a403e332e48ca2c8f223019128124",
+    "bytes": 6831
+  },
+  "artifact": {
+    "path": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/crustdb-runtime.html",
+    "sha256": "316f865fdc7c97f3a924e0e77baf2dd894dab853eead0d47f4c24d8f40a872ee",
+    "bytes": 832349
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/crustdb-runtime.finalize.json",
+    "summaryReceipt": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/crustdb-runtime.finalize-summary.json",
+    "browserCheckReceipt": "/home/sronly/projects/desbravando-rust/crustdb/.archify/architecture-crustdb-runtime-20261018-103331/crustdb-runtime.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.1.0",
+    "availableVersion": "3.1.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-18T13:34:29.608Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 5057
+}
