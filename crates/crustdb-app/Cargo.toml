@@ -12,16 +12,22 @@ workspace = true
 anyhow = "1.0.104"
 crustdb-core = { version = "0.1.0", path = "../crustdb-core" }
 eframe = "0.37.0"
+futures-util = "0.3.34"
 keyring = "4.2.0"
+russh = { version = "0.64.1", default-features = false, features = ["aws-lc-rs", "flate2"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
+tokio = { version = "1.53.3", features = ["rt", "net", "time", "io-util"] }
 
 [[bin]]
 name = "crustdb"
 path = "src/main.rs"
 
 [dev-dependencies]
+crustdb-postgres = { path = "../crustdb-postgres" }
+crustdb-testkit = { path = "../crustdb-testkit" }
 tempfile = "3.27.0"
+tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread"] }
 uuid = "1.28.0"
