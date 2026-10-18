@@ -276,6 +276,8 @@ impl WorkspaceActor {
                     tab: NO_TAB,
                     text: e.message,
                 });
+                // The sidebar leaves its pending state on any answer.
+                self.out.emit(Event::Children { req, items: vec![] });
             }
         }
     }

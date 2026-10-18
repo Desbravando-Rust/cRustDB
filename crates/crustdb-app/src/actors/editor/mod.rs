@@ -15,11 +15,13 @@ use tokio::sync::mpsc::UnboundedReceiver;
 #[cfg(test)]
 mod eval_tests;
 mod exec;
+mod export;
 #[cfg(test)]
 mod fix_tests;
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
+use self::export::Kept;
 use super::{Shared, SharedRx};
 use crate::runtime::{
     Command, Emitter, Event, ROWS_BATCH, RequestId, TabId, TxOp, TxState, rows_events,
@@ -43,11 +45,15 @@ struct Ran {
     /// `Some` once the result was finished; `None` while the cursor is left paused.
     completion: Option<Completion>,
     exhausted: bool,
+    /// Every row of the result is in `rows` (nothing cut by `limit`, cursor read to the end).
+    complete: bool,
 }
 
 struct Inbox<'a> {
     rx: &'a mut UnboundedReceiver<Command>,
     backlog: VecDeque<Command>,
+    /// The export that `CancelExport` may cancel; a stale cancel is ignored.
+    exporting: Option<RequestId>,
 }
 
 pub(crate) struct EditorActor {
@@ -60,6 +66,8 @@ pub(crate) struct EditorActor {
     paused: Option<Paused>,
     /// The only evaluation `Execute` may run: id and the exact statements evaluated.
     pending: Option<(RequestId, Vec<String>)>,
+    /// What the last statement returned, for `ExportResult`.
+    kept: Option<Kept>,
 }
 
 impl EditorActor {
@@ -78,6 +86,7 @@ impl EditorActor {
             tx: TxState::Idle,
             paused: None,
             pending: None,
+            kept: None,
         }
     }
 
@@ -86,6 +95,7 @@ impl EditorActor {
         let mut inbox = Inbox {
             rx: &mut rx,
             backlog: VecDeque::new(),
+            exporting: None,
         };
         loop {
             let cmd = if let Some(c) = inbox.backlog.pop_front() {
@@ -132,6 +142,7 @@ impl EditorActor {
                 self.tx_op(inbox, op).await;
             }
             Command::UseDatabase { database, .. } => self.use_database(database).await,
+            Command::ExportResult { req, path, .. } => self.export_result(inbox, req, path).await,
             Command::CloseTab { resolve, .. } => return !self.close(inbox, resolve).await,
             _ => {}
         }
@@ -167,6 +178,7 @@ impl EditorActor {
         self.session = None;
         self.pending = None;
         self.paused = None;
+        self.kept = None;
         self.tx = TxState::Idle;
         self.notice(LOST.into());
         self.out.emit(Event::TxChanged {
@@ -203,10 +215,13 @@ impl EditorActor {
 
     /// Finishes the paused cursor (PG: closes the implicit transaction; MySQL: drains).
     async fn finish_paused(&mut self) -> Result<(), DriverError> {
-        if self.paused.take().is_some()
-            && let Some(s) = self.session.as_mut()
-        {
-            s.finish().await?;
+        if self.paused.take().is_some() {
+            if let Some(k) = self.kept.as_mut() {
+                k.complete = false;
+            }
+            if let Some(s) = self.session.as_mut() {
+                s.finish().await?;
+            }
         }
         Ok(())
     }

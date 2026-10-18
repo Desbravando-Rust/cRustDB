@@ -1,5 +1,5 @@
 //! In-memory `Driver` with programmable responses, for runtime and actor tests.
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -63,6 +63,8 @@ pub struct FakeLog {
     pub fail_explain: AtomicBool,
     /// `fetch` fails with a query error.
     pub fail_fetch: AtomicBool,
+    /// Every `fetch` sleeps this many milliseconds (a cancel interrupts it).
+    pub fetch_delay_ms: AtomicU64,
 }
 
 impl FakeLog {
@@ -273,6 +275,15 @@ impl Session for FakeSession {
     }
     async fn fetch(&mut self, max_rows: usize) -> Result<Fetched, DriverError> {
         self.log.op("fetch".into());
+        let delay = Duration::from_millis(self.log.fetch_delay_ms.load(Ordering::SeqCst));
+        if !delay.is_zero() {
+            tokio::select! {
+                () = tokio::time::sleep(delay) => {}
+                () = self.cancel.notified() => {
+                    return Err(DriverError { kind: ErrorKind::Cancelled, message: "cancelled".into() });
+                }
+            }
+        }
         if self.log.fail_fetch.load(Ordering::SeqCst) {
             return Err(DriverError {
                 kind: ErrorKind::Query {

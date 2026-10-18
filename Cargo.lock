@@ -1377,6 +1377,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "crustdb-core",
+ "crustdb-mysql",
  "crustdb-postgres",
  "crustdb-testkit",
  "eframe",

@@ -11,7 +11,7 @@ use super::super::tests::{
 };
 use crate::runtime::{Command, Event, RequestId, ResolvedSecrets, TxOp, TxState};
 
-pub(super) fn script(n: usize) -> FakeScript {
+pub(in crate::actors) fn script(n: usize) -> FakeScript {
     FakeScript {
         columns: vec![col("id")],
         rows: rows(n),
@@ -19,12 +19,12 @@ pub(super) fn script(n: usize) -> FakeScript {
     }
 }
 
-pub(super) async fn open(h: &mut H) {
+pub(in crate::actors) async fn open(h: &mut H) {
     connect(h, Some("d")).await;
     open_editor(h);
 }
 
-pub(super) fn open_editor(h: &mut H) {
+pub(in crate::actors) fn open_editor(h: &mut H) {
     assert!(
         h.actors
             .dispatch(Command::OpenEditor {
@@ -36,12 +36,12 @@ pub(super) fn open_editor(h: &mut H) {
     );
 }
 
-pub(super) async fn settle(h: &H) -> Vec<Event> {
+pub(in crate::actors) async fn settle(h: &H) -> Vec<Event> {
     tokio::time::sleep(Duration::from_millis(50)).await;
     drain(&h.rx)
 }
 
-pub(super) fn evaluate(h: &mut H, req: u64, sql: &[&str]) {
+pub(in crate::actors) fn evaluate(h: &mut H, req: u64, sql: &[&str]) {
     assert!(
         h.actors
             .dispatch(Command::Evaluate {
@@ -53,7 +53,7 @@ pub(super) fn evaluate(h: &mut H, req: u64, sql: &[&str]) {
     );
 }
 
-pub(super) fn execute(h: &mut H, req: u64, evaluation: u64) {
+pub(in crate::actors) fn execute(h: &mut H, req: u64, evaluation: u64) {
     assert!(
         h.actors
             .dispatch(Command::Execute {
@@ -66,28 +66,28 @@ pub(super) fn execute(h: &mut H, req: u64, evaluation: u64) {
 }
 
 /// Evaluate + Execute with the same id.
-pub(super) async fn run(h: &mut H, req: u64, sql: &[&str]) -> Vec<Event> {
+pub(in crate::actors) async fn run(h: &mut H, req: u64, sql: &[&str]) -> Vec<Event> {
     evaluate(h, req, sql);
     execute(h, req + 1000, req);
     settle(h).await
 }
 
-pub(super) fn cmd(h: &mut H, c: Command) {
+pub(in crate::actors) fn cmd(h: &mut H, c: Command) {
     assert!(h.actors.dispatch(c).is_none());
 }
 
-pub(super) fn ops(h: &H) -> Vec<String> {
+pub(in crate::actors) fn ops(h: &H) -> Vec<String> {
     h.drv.log.ops()
 }
 
-pub(super) fn starts(h: &H) -> Vec<String> {
+pub(in crate::actors) fn starts(h: &H) -> Vec<String> {
     ops(h)
         .iter()
         .filter_map(|o| o.strip_prefix("start:").map(String::from))
         .collect()
 }
 
-pub(super) fn notices(ev: &[Event]) -> Vec<&str> {
+pub(in crate::actors) fn notices(ev: &[Event]) -> Vec<&str> {
     ev.iter()
         .filter_map(|e| match e {
             Event::Notice { text, .. } => Some(text.as_str()),
@@ -96,7 +96,7 @@ pub(super) fn notices(ev: &[Event]) -> Vec<&str> {
         .collect()
 }
 
-pub(super) fn tx_states(ev: &[Event]) -> Vec<TxState> {
+pub(in crate::actors) fn tx_states(ev: &[Event]) -> Vec<TxState> {
     ev.iter()
         .filter_map(|e| match e {
             Event::TxChanged { state, .. } => Some(*state),

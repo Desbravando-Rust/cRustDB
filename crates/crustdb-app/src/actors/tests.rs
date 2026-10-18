@@ -84,6 +84,10 @@ fn object() -> ObjectRef {
     }
 }
 
+pub(super) fn query_for_export() -> TableQuery {
+    query(300, vec![])
+}
+
 fn query(limit: u64, filters: Vec<Filter>) -> TableQuery {
     TableQuery {
         object: object(),
@@ -394,4 +398,25 @@ async fn workspace_actor_panic_resets_connection_state() {
     open_table(&mut h).await;
     fetch(&mut h, 1, query(10, vec![]));
     assert!(matches!(next(&h.rx).await, Event::Notice { .. }));
+}
+
+#[tokio::test]
+async fn load_children_failure_still_answers_with_empty_children() {
+    let mut h = harness(FakeScript::default());
+    connect(&mut h, Some("a")).await;
+    h.drv.log.fail_connects.store(1, Ordering::SeqCst);
+    h.actors.dispatch(Command::LoadChildren {
+        ws: WS,
+        req: RequestId(5),
+        database: "b".into(),
+        schema: Some("public".into()),
+        kind: Some(ObjectKind::Table),
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let ev = drain(&h.rx);
+    assert!(ev.iter().any(|e| matches!(e, Event::Notice { .. })));
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Children { req: RequestId(5), items } if items.is_empty()))
+    );
 }

@@ -3,7 +3,7 @@ use super::*;
 
 /// Drives `job` while still reading the mailbox: `CancelTab` cancels the running statement,
 /// anything else waits in the backlog.
-async fn cancellable<T>(
+pub(super) async fn cancellable<T>(
     inbox: &mut Inbox<'_>,
     cancel: Box<dyn CancelHandle>,
     job: impl Future<Output = T>,
@@ -19,6 +19,9 @@ async fn cancellable<T>(
                     let _ = cancel.cancel().await;
                 }
                 Some(Command::CancelTab { .. }) => {
+                    let _ = cancel.cancel().await;
+                }
+                Some(Command::CancelExport { req }) if inbox.exporting == Some(req) => {
                     let _ = cancel.cancel().await;
                 }
                 Some(other) => inbox.backlog.push_back(other),
@@ -39,6 +42,7 @@ async fn run_stmt(
     let header = s.start(sql, mode).await?;
     let mut rows: Vec<Row> = Vec::new();
     let mut exhausted = false;
+    let mut dropped = false;
     loop {
         let want = match mode {
             ExecMode::Read => limit - rows.len(),
@@ -49,18 +53,21 @@ async fn run_stmt(
         }
         let f = s.fetch(want).await?;
         let room = limit - rows.len();
+        dropped |= f.rows.len() > room;
         rows.extend(f.rows.into_iter().take(room));
         if f.exhausted {
             exhausted = true;
             break;
         }
     }
+    let whole = exhausted;
     if !exhausted && keep_open {
         return Ok(Ran {
             header,
             rows,
             completion: None,
             exhausted: false,
+            complete: false,
         });
     }
     // Always finished, even when exhausted: PG keeps an implicit transaction and MySQL reports
@@ -71,6 +78,8 @@ async fn run_stmt(
         rows,
         completion: Some(completion),
         exhausted: true,
+        // Finished is not the same as whole: `limit` may have cut the read short.
+        complete: whole && !dropped,
     })
 }
 
@@ -125,6 +134,7 @@ impl EditorActor {
         if stmts.is_empty() {
             return;
         }
+        self.kept = None;
         let prepared = match self.finish_paused().await {
             Ok(()) => self.ensure_session().await,
             Err(e) => Err(e),
@@ -196,7 +206,13 @@ impl EditorActor {
         };
         let loaded = r.rows.len() as u64;
         let affected = r.completion.as_ref().and_then(|c| c.affected_rows);
-        if !r.header.columns.is_empty() || !r.rows.is_empty() {
+        let has_result = !r.header.columns.is_empty() || !r.rows.is_empty();
+        self.kept = has_result.then(|| Kept {
+            header: r.header.clone(),
+            rows: r.rows.clone(),
+            complete: r.complete,
+        });
+        if has_result {
             self.out.emit(Event::ResultStarted {
                 req,
                 header: r.header,
@@ -305,6 +321,10 @@ impl EditorActor {
         .await;
         match res {
             Ok((rows, exhausted)) => {
+                if let Some(k) = self.kept.as_mut() {
+                    k.rows.extend(rows.iter().cloned());
+                    k.complete = exhausted;
+                }
                 for e in rows_events(req, rows, exhausted) {
                     self.out.emit(e);
                 }
@@ -316,18 +336,31 @@ impl EditorActor {
             }
             Err(e) => {
                 self.notice(e.message.clone());
-                if e.kind == ErrorKind::Connect {
-                    self.lost();
-                } else {
-                    self.paused = None;
-                    if let Some(s) = self.session.as_mut() {
-                        let _ = s.finish().await;
-                    }
-                    if self.kind() == DriverKind::Postgres && self.tx == TxState::Open {
-                        self.set_tx(TxState::Aborted);
-                    }
-                }
+                self.cursor_failed(&e).await;
             }
+        }
+    }
+
+    /// A fetch on the paused cursor failed (or was cancelled).
+    pub(super) async fn cursor_failed(&mut self, e: &DriverError) {
+        if e.kind == ErrorKind::Connect {
+            self.lost();
+        } else {
+            self.abandon_cursor().await;
+            if self.kind() == DriverKind::Postgres && self.tx == TxState::Open {
+                self.set_tx(TxState::Aborted);
+            }
+        }
+    }
+
+    /// Best effort: release the cursor and forget it.
+    pub(super) async fn abandon_cursor(&mut self) {
+        self.paused = None;
+        if let Some(k) = self.kept.as_mut() {
+            k.complete = false;
+        }
+        if let Some(s) = self.session.as_mut() {
+            let _ = s.finish().await;
         }
     }
 

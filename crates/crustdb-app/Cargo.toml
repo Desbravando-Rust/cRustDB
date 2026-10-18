@@ -27,6 +27,7 @@ path = "src/main.rs"
 
 [dev-dependencies]
 crustdb-postgres = { path = "../crustdb-postgres" }
+crustdb-mysql = { path = "../crustdb-mysql" }
 crustdb-testkit = { path = "../crustdb-testkit" }
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-util"] }

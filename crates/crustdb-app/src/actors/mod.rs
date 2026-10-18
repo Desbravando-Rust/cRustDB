@@ -9,11 +9,12 @@ use crustdb_core::model::ObjectRef;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
 
-use crate::runtime::{Command, DriverRegistry, Emitter, Event, TabId, WorkspaceId};
+use crate::runtime::{Command, DriverRegistry, Emitter, Event, RequestId, TabId, WorkspaceId};
 use crate::storage::config::ConnectionConfig;
 
 mod data;
 mod editor;
+mod export;
 mod workspace;
 
 #[cfg(test)]
@@ -69,6 +70,8 @@ pub(crate) struct Actors {
     out: Emitter,
     ws: HashMap<WorkspaceId, WsEntry>,
     tabs: HashMap<TabId, TabEntry>,
+    /// Mailbox of the task running each export, for `CancelExport`.
+    exports: HashMap<RequestId, UnboundedSender<Command>>,
 }
 
 impl Actors {
@@ -78,6 +81,7 @@ impl Actors {
             out,
             ws: HashMap::new(),
             tabs: HashMap::new(),
+            exports: HashMap::new(),
         }
     }
 
@@ -85,6 +89,7 @@ impl Actors {
     pub(crate) fn dispatch(&mut self, cmd: Command) -> Option<Command> {
         // Editor actors end themselves on a successful close; forget them.
         self.tabs.retain(|_, t| !t.tx.is_closed());
+        self.exports.retain(|_, tx| !tx.is_closed());
         match cmd {
             Command::Connect {
                 ws,
@@ -146,6 +151,47 @@ impl Actors {
                 self.tabs.remove(&tab);
                 None
             }
+            Command::ExportTable {
+                tab,
+                req,
+                query,
+                path,
+            } => {
+                let shared = self
+                    .tabs
+                    .get(&tab)
+                    .filter(|t| !t.editor)
+                    .and_then(|t| self.ws.get(&t.ws))
+                    .map(|e| e.shared.clone());
+                match shared {
+                    Some(shared) => self.export_table(export::TableJob {
+                        tab,
+                        req,
+                        query,
+                        path,
+                        shared,
+                        out: self.out.clone(),
+                    }),
+                    None => self.export_failed(req, "table tab is not open"),
+                }
+                None
+            }
+            Command::ExportResult { tab, req, path } => {
+                match self.tabs.get(&tab).filter(|t| t.editor) {
+                    Some(t) => {
+                        self.exports.insert(req, t.tx.clone());
+                        let _ = t.tx.send(Command::ExportResult { tab, req, path });
+                    }
+                    None => self.export_failed(req, "query tab is not open"),
+                }
+                None
+            }
+            Command::CancelExport { req } => {
+                if let Some(tx) = self.exports.get(&req) {
+                    let _ = tx.send(Command::CancelExport { req });
+                }
+                None
+            }
             Command::FetchPage { tab, .. }
             | Command::LoadStructure { tab, .. }
             | Command::LoadDdl { tab, .. }
@@ -162,7 +208,6 @@ impl Actors {
                 }
                 None => Some(cmd),
             },
-            other => Some(other),
         }
     }
 
@@ -207,6 +252,28 @@ impl Actors {
             .run(rx)
         });
         self.ws.insert(ws, WsEntry { tx, shared });
+    }
+
+    fn export_failed(&self, req: RequestId, why: &str) {
+        self.out.emit(Event::ExportDone {
+            req,
+            result: Err(why.into()),
+        });
+    }
+
+    fn export_table(&mut self, job: export::TableJob) {
+        let (req, out) = (job.req, self.out.clone());
+        let (tx, rx) = unbounded_channel();
+        self.exports.insert(req, tx);
+        let task = tokio::spawn(export::table(job, rx));
+        tokio::spawn(async move {
+            if task.await.is_err() {
+                out.emit(Event::ExportDone {
+                    req,
+                    result: Err("export task crashed".into()),
+                });
+            }
+        });
     }
 
     fn open_table(&mut self, ws: WorkspaceId, tab: TabId, object: ObjectRef, shared: SharedRx) {
