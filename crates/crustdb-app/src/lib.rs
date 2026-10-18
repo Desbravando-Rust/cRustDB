@@ -1,6 +1,7 @@
 pub mod actors;
 pub mod app;
 pub mod csv_out;
+pub mod keymap;
 pub mod metrics;
 pub mod net;
 pub mod runtime;

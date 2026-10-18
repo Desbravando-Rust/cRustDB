@@ -353,7 +353,12 @@ impl Introspector for FakeDriver {
         _: &mut dyn Session,
         _: &ObjectRef,
     ) -> Result<Vec<ColumnDetail>, DriverError> {
-        Ok(Vec::new())
+        let detail = |meta: &ColumnMeta| ColumnDetail {
+            meta: meta.clone(),
+            default: None,
+            comment: None,
+        };
+        Ok(self.script.columns.iter().map(detail).collect())
     }
     async fn indexes(
         &self,

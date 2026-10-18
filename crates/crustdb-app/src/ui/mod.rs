@@ -8,7 +8,9 @@ pub mod home;
 pub mod results;
 pub mod row_detail;
 pub mod sidebar;
+pub mod status_bar;
 pub mod structure;
+pub mod tab_bar;
 pub mod theme;
 
 use crustdb_core::model::{ConnectionId, ObjectRef};
@@ -57,6 +59,8 @@ pub enum Intent {
     ClearFilters(TabId),
     SetView(TabId, crate::state::TableView),
     NewQuery,
+    ActivateTab(TabId),
+    CloseTab(TabId),
     /// `run` is the selection (or an empty range at the cursor), in chars.
     RunQuery {
         tab: TabId,

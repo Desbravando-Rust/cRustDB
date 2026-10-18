@@ -3,15 +3,21 @@ use std::sync::mpsc::Receiver;
 
 use crustdb_core::model::{ConnectionId, DriverKind};
 
+use crate::keymap::{Action, keymap};
+use crate::metrics::ProcSampler;
 use crate::net::ssh::SshSecrets;
-use crate::runtime::{Command, Event, ResolvedSecrets, Runtime, TabId};
+use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
 use crate::state::AppState;
 use crate::state::connection_form::ConnectionForm;
 use crate::state::dialogs::SessionAuth;
-use crate::storage::config::{ConfigStore, ConnectionConfig, FieldError, LoadedConfig};
+use crate::state::status::StatusBoard;
+use crate::storage::config::{ConfigStore, ConnectionConfig, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
 use crate::ui::{self, Intent};
 use secrecy::zeroize::Zeroizing;
+
+mod actions;
+mod form;
 
 pub struct CrustApp {
     state: AppState,
@@ -20,23 +26,39 @@ pub struct CrustApp {
     store: ConfigStore,
     secrets: Box<dyn SecretStore>,
     form: Option<ConnectionForm>,
+    status: StatusBoard,
+    sampler: ProcSampler,
+    /// Last press landed in the sidebar: F5 and Space then belong to it, not to the grid.
+    sidebar_rect: Option<egui::Rect>,
+    sidebar_focus: bool,
 }
 
 impl CrustApp {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
+        config: LoadedConfig,
+        store: ConfigStore,
+        secrets: Box<dyn SecretStore>,
+        drivers: crate::runtime::DriverRegistry,
+    ) -> Self {
+        Self::with_ctx(&cc.egui_ctx, config, store, secrets, drivers)
+    }
+
+    /// Construction without a window, so UI tests can drive the app.
+    pub fn with_ctx(
+        egui_ctx: &egui::Context,
         mut config: LoadedConfig,
         store: ConfigStore,
         secrets: Box<dyn SecretStore>,
         drivers: crate::runtime::DriverRegistry,
     ) -> Self {
-        ui::theme::install_theme(&cc.egui_ctx);
+        ui::theme::install_theme(egui_ctx);
         if !secrets.available() {
             config.warning.get_or_insert_with(|| {
                 "OS keyring unavailable: passwords cannot be saved".to_owned()
             });
         }
-        let ctx = cc.egui_ctx.clone();
+        let ctx = egui_ctx.clone();
         let (runtime, events) =
             Runtime::start(std::sync::Arc::new(move || ctx.request_repaint()), drivers);
         Self {
@@ -46,6 +68,10 @@ impl CrustApp {
             store,
             secrets,
             form: None,
+            status: StatusBoard::default(),
+            sampler: ProcSampler::default(),
+            sidebar_rect: None,
+            sidebar_focus: false,
         }
     }
 
@@ -58,7 +84,7 @@ impl CrustApp {
             .flatten()
     }
 
-    fn handle(&mut self, intent: Intent) {
+    pub fn handle(&mut self, intent: Intent) {
         match intent {
             Intent::Connect(id) => {
                 let Some(config) = self
@@ -95,11 +121,22 @@ impl CrustApp {
             }
             Intent::CloseResolve(op) => {
                 let cmd = self.state.dialogs.close_with_tx(op);
-                self.send(cmd);
+                self.send_close(cmd);
             }
             Intent::DiscardFile => {
                 let cmd = self.state.dialogs.discard_dirty();
-                self.send(cmd);
+                self.send_close(cmd);
+            }
+            Intent::ActivateTab(tab) => {
+                if let Some(w) = self.active_ws() {
+                    w.active_tab = Some(tab);
+                }
+            }
+            Intent::CloseTab(tab) => {
+                if let Some(ws) = self.state.active {
+                    let cmd = self.state.close_tab(ws, tab);
+                    self.send_close(cmd);
+                }
             }
             // Saving belongs to the editor; the tab stays open, so nothing is lost.
             Intent::SaveFile => {
@@ -221,8 +258,7 @@ impl CrustApp {
                 }
             }
             Intent::RunQuery { tab, run, all } => {
-                let req = self.runtime.as_ref().map(|rt| rt.next_request_id());
-                if let Some(req) = req {
+                if let Some(req) = self.runtime.as_ref().map(|rt| rt.next_request_id()) {
                     let cmd = self.state.run_query(tab, run, all, req);
                     self.send(cmd);
                 }
@@ -327,72 +363,10 @@ impl CrustApp {
         }
     }
 
-    /// Validates, persists the config and keyring secrets; the form stays open on any failure.
-    fn save_form(&mut self) -> Option<(ConnectionConfig, ResolvedSecrets)> {
-        let form = self.form.as_mut()?;
-        let (config, secrets) = match form.to_save(&self.state.config.connections) {
-            Ok(r) => r,
-            Err(e) => {
-                form.errors = e;
-                return None;
-            }
-        };
-        form.errors.clear();
-        let typed = form.typed_secrets();
-        for (kind, v) in &secrets {
-            if let Err(e) = self.secrets.set(&account(config.id, *kind), v) {
-                tracing::warn!("keyring write failed: {e}");
-                if let Some(f) = &mut self.form {
-                    f.errors = vec![FieldError {
-                        field: "password",
-                        message: format!("could not save to keyring: {e}"),
-                    }];
-                }
-                return None;
-            }
-        }
-        let mut all = self.state.config.connections.clone();
-        match all.iter_mut().find(|c| c.id == config.id) {
-            Some(slot) => *slot = config.clone(),
-            None => all.push(config.clone()),
-        }
-        if let Err(e) = self.store.save(&all) {
-            if let Some(f) = &mut self.form {
-                f.errors = vec![FieldError {
-                    field: "name",
-                    message: format!("could not save connections: {e}"),
-                }];
-            }
-            return None;
-        }
-        self.state.config.connections = all;
-        if !config.save_password {
-            for kind in [
-                SecretKind::Db,
-                SecretKind::SshPassword,
-                SecretKind::SshPassphrase,
-            ] {
-                if let Err(e) = self.secrets.delete(&account(config.id, kind)) {
-                    tracing::warn!("keyring delete failed: {e}");
-                }
-            }
-        }
-        self.close_form();
-        Some((config, typed))
-    }
-
-    /// Applies `f` to the table tab and refetches its page if `f` reports a change.
-    fn table_op(&mut self, tab: TabId, f: impl FnOnce(&mut crate::state::TableTab) -> bool) {
-        let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) else {
-            return;
-        };
-        if f(t) {
-            rt.send(t.fetch(rt.next_request_id()));
-        }
-    }
-
     fn send(&mut self, cmd: impl Into<Option<Command>>) {
         if let (Some(rt), Some(cmd)) = (&self.runtime, cmd.into()) {
+            let now = std::time::Instant::now();
+            self.status.on_command(&cmd, &self.state, now);
             self.state.note_sent(&cmd);
             rt.send(cmd);
         }
@@ -422,7 +396,21 @@ impl CrustApp {
 
 impl eframe::App for CrustApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.show(ui);
+    }
+
+    fn on_exit(&mut self) {
+        if let Some(rt) = self.runtime.take() {
+            rt.shutdown();
+        }
+    }
+}
+
+impl CrustApp {
+    pub fn show(&mut self, ui: &mut egui::Ui) {
+        let now = std::time::Instant::now();
         while let Ok(e) = self.events.try_recv() {
+            self.status.on_event(&e, &self.state, now);
             if let Some(f) = &mut self.form
                 && f.on_event(&e)
                 && let Event::Connected { ws, .. } | Event::ConnectFailed { ws, .. } = &e
@@ -450,16 +438,34 @@ impl eframe::App for CrustApp {
         for cmd in self.state.take_commands() {
             self.send(cmd);
         }
+        self.status.tick(now, || self.sampler.sample());
+        ui.ctx()
+            .request_repaint_after(crate::state::status::SAMPLE_EVERY);
         let mut intents = vec![];
+        let focus = self.focus(ui.ctx());
+        if let Some(a) = ui.input(|i| keymap(i, focus)) {
+            if a == Action::RowDetail {
+                ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Space));
+            }
+            intents.extend(self.on_action(a, focus));
+        }
+        if let Some(m) = self.status.current(&self.state) {
+            egui::Panel::bottom("status_bar").show(ui, |ui| ui::status_bar::show(ui, m));
+        }
+        self.sidebar_rect = None;
         if self.state.active_online().is_some() {
-            egui::Panel::left("sidebar").show(ui, |ui| {
+            let r = egui::Panel::left("sidebar").show(ui, |ui| {
                 intents.extend(ui::sidebar::show(ui, &self.state));
             });
+            self.sidebar_rect = Some(r.response.rect);
         }
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
                 intents.extend(ui::connection_form::show(ui, f));
                 return;
+            }
+            if let Some(w) = self.state.active_online() {
+                intents.extend(ui::tab_bar::show(ui, w));
             }
             let ws = self
                 .state
@@ -489,11 +495,6 @@ impl eframe::App for CrustApp {
         for i in intents {
             self.handle(i);
         }
-    }
-
-    fn on_exit(&mut self) {
-        if let Some(rt) = self.runtime.take() {
-            rt.shutdown();
-        }
+        self.status.frame_done(std::time::Instant::now());
     }
 }

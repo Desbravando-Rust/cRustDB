@@ -4,6 +4,8 @@ pub mod dialogs;
 pub mod filter_draft;
 pub mod query_tab;
 pub mod result_pane;
+pub mod status;
+pub mod tabs;
 pub mod tree;
 pub mod workspace;
 

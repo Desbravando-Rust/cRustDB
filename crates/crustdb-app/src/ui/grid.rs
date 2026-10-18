@@ -119,13 +119,6 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             }
         });
     });
-    let typing = ui.memory(|m| m.focused().is_some());
-    if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::F)) {
-        tab.toggle_filter_bar();
-    }
-    if !typing && ui.input(|i| i.key_pressed(egui::Key::Space)) {
-        tab.toggle_detail();
-    }
     if tab.filter_open {
         egui::Panel::top(("filter_bar", id.0)).show(ui, |ui| {
             out.extend(super::filter_bar::show(ui, tab));

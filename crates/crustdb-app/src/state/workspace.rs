@@ -141,7 +141,20 @@ impl AppState {
     ) -> Vec<Command> {
         let id = self.next_tab_id();
         self.workspace_mut(ws)
-            .map(|w| w.open_table(id, object, req).into())
+            .map(|w| {
+                let open = w
+                    .tabs
+                    .iter()
+                    .map(|Tab::Table(t)| t)
+                    .find(|t| t.object == object);
+                match open {
+                    Some(t) => {
+                        w.active_tab = Some(t.id);
+                        vec![]
+                    }
+                    None => w.open_table(id, object, req).into(),
+                }
+            })
             .unwrap_or_default()
     }
 

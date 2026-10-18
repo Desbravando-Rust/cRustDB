@@ -108,6 +108,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
     let run_all =
         ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter));
     let run = !run_all && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Slash)) {
+        tab.toggle_comment_at(sel.clone());
+    }
     ui.horizontal(|ui| {
         if ui
             .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
