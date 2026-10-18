@@ -1,0 +1,37 @@
+[advisories]
+version = 2
+# Unmaintained notices for transitive eframe deps; revisit on eframe upgrades.
+ignore = [
+    "RUSTSEC-2026-0192", # ttf-parser
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0372", # zvariant_derive
+]
+
+[licenses]
+version = 2
+allow = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "MPL-2.0"]
+
+
+# Transitive eframe deps with licenses outside the global allow list.
+[[licenses.exceptions]]
+crate = "clipboard-win"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "error-code"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "epaint_default_fonts"
+allow = ["OFL-1.1", "Ubuntu-font-1.0"]
+
+# Build dep via sqlparser -> recursive -> stacker -> psm.
+[[licenses.exceptions]]
+crate = "ar_archive_writer"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+# Root store data pulled by mysql_async rustls backend.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]

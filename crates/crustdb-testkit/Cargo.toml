@@ -1,0 +1,16 @@
+[package]
+name = "crustdb-testkit"
+version = "0.1.0"
+publish = false
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rcgen = "0.14.10"
+tempfile = "3.27.0"
+testcontainers = "0.28.0"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "time"] }
