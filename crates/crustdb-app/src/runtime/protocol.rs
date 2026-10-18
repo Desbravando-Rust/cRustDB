@@ -195,6 +195,7 @@ pub enum Event {
         req: RequestId,
         index: usize,
         error: DriverError,
+        history: HistoryEntry,
     },
     TxChanged {
         tab: TabId,

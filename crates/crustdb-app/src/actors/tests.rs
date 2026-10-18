@@ -17,17 +17,20 @@ use crate::runtime::{
 };
 use crate::storage::config::ConnectionConfig;
 
-const WS: WorkspaceId = WorkspaceId(1);
-const TAB: TabId = TabId(1);
+pub(super) const WS: WorkspaceId = WorkspaceId(1);
+pub(super) const TAB: TabId = TabId(1);
 
-struct H {
-    actors: Actors,
-    rx: mpsc::Receiver<Event>,
-    drv: Arc<FakeDriver>,
+pub(super) struct H {
+    pub(super) actors: Actors,
+    pub(super) rx: mpsc::Receiver<Event>,
+    pub(super) drv: Arc<FakeDriver>,
 }
 
-fn harness(script: FakeScript) -> H {
-    let drv = FakeDriver::new(script);
+pub(super) fn harness(script: FakeScript) -> H {
+    harness_with(FakeDriver::new(script))
+}
+
+pub(super) fn harness_with(drv: Arc<FakeDriver>) -> H {
     let reg = DriverRegistry::default().with(drv.clone());
     let (tx, rx) = mpsc::channel();
     let out = Emitter {
@@ -41,7 +44,7 @@ fn harness(script: FakeScript) -> H {
     }
 }
 
-fn config(database: Option<&str>) -> ConnectionConfig {
+pub(super) fn config(database: Option<&str>) -> ConnectionConfig {
     ConnectionConfig {
         id: ConnectionId(uuid::Uuid::nil()),
         name: "t".into(),
@@ -62,7 +65,7 @@ fn config(database: Option<&str>) -> ConnectionConfig {
     }
 }
 
-fn col(name: &str) -> ColumnMeta {
+pub(super) fn col(name: &str) -> ColumnMeta {
     ColumnMeta {
         name: name.into(),
         type_name: "int4".into(),
@@ -92,7 +95,7 @@ fn query(limit: u64, filters: Vec<Filter>) -> TableQuery {
     }
 }
 
-fn rows(n: usize) -> Vec<crustdb_core::model::Row> {
+pub(super) fn rows(n: usize) -> Vec<crustdb_core::model::Row> {
     (0..n)
         .map(|i| {
             vec![Cell::Text {
@@ -104,7 +107,7 @@ fn rows(n: usize) -> Vec<crustdb_core::model::Row> {
         .collect()
 }
 
-async fn next(rx: &mpsc::Receiver<Event>) -> Event {
+pub(super) async fn next(rx: &mpsc::Receiver<Event>) -> Event {
     for _ in 0..10_000 {
         if let Ok(e) = rx.try_recv() {
             return e;
@@ -114,11 +117,11 @@ async fn next(rx: &mpsc::Receiver<Event>) -> Event {
     panic!("no event");
 }
 
-fn drain(rx: &mpsc::Receiver<Event>) -> Vec<Event> {
+pub(super) fn drain(rx: &mpsc::Receiver<Event>) -> Vec<Event> {
     rx.try_iter().collect()
 }
 
-async fn connect(h: &mut H, database: Option<&str>) {
+pub(super) async fn connect(h: &mut H, database: Option<&str>) {
     assert!(
         h.actors
             .dispatch(Command::Connect {

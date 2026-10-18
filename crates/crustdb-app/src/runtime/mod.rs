@@ -47,7 +47,6 @@ impl Emitter {
 }
 
 /// Splits rows into `Event::Rows` of at most `ROWS_BATCH`; `exhausted` marks only the last one.
-#[allow(dead_code)] // used by the data/editor actors (tasks 22-24)
 pub(crate) fn rows_events(req: RequestId, rows: Vec<Row>, exhausted: bool) -> Vec<Event> {
     if rows.is_empty() {
         return vec![Event::Rows {

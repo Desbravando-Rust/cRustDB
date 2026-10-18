@@ -52,27 +52,57 @@ pub struct FakeLog {
     pub panic_next: AtomicBool,
     /// The next ping panics (once).
     pub panic_ping: AtomicBool,
+    /// Every session call, in order: `start:<sql>`, `fetch`, `finish`, `explain:<sql>`,
+    /// `estimate:<table>`, `use:<db>`.
+    pub ops: Mutex<Vec<String>>,
+    /// Statements containing the text fail with the error.
+    pub fail_sql: Mutex<Vec<(String, DriverError)>>,
+    /// The next statement start fails with a `Connect` error (dropped session), once.
+    pub drop_next: AtomicBool,
+    /// `explain_rows` fails.
+    pub fail_explain: AtomicBool,
+    /// `fetch` fails with a query error.
+    pub fail_fetch: AtomicBool,
+}
+
+impl FakeLog {
+    fn op(&self, s: String) {
+        if let Ok(mut o) = self.ops.lock() {
+            o.push(s);
+        }
+    }
+
+    /// Snapshot of `ops`.
+    pub fn ops(&self) -> Vec<String> {
+        self.ops.lock().map(|o| o.clone()).unwrap_or_default()
+    }
 }
 
 pub struct FakeDriver {
+    pub kind: DriverKind,
     pub script: FakeScript,
     pub log: Arc<FakeLog>,
 }
 
 impl FakeDriver {
     pub fn new(script: FakeScript) -> Arc<Self> {
+        Self::with_kind(script, DriverKind::Postgres)
+    }
+
+    pub fn with_kind(script: FakeScript, kind: DriverKind) -> Arc<Self> {
         Arc::new(Self {
+            kind,
             script,
             log: Arc::default(),
         })
     }
 }
 
-struct FakeDialect;
+struct FakeDialect(DriverKind);
 
 impl Dialect for FakeDialect {
     fn kind(&self) -> DriverKind {
-        DriverKind::Postgres
+        self.0
     }
     fn quote_ident(&self, s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -94,15 +124,19 @@ impl Dialect for FakeDialect {
     }
 }
 
-static DIALECT: FakeDialect = FakeDialect;
+static PG: FakeDialect = FakeDialect(DriverKind::Postgres);
+static MYSQL: FakeDialect = FakeDialect(DriverKind::Mysql);
 
 #[async_trait]
 impl Driver for FakeDriver {
     fn kind(&self) -> DriverKind {
-        DriverKind::Postgres
+        self.kind
     }
     fn dialect(&self) -> &dyn Dialect {
-        &DIALECT
+        match self.kind {
+            DriverKind::Postgres => &PG,
+            DriverKind::Mysql => &MYSQL,
+        }
     }
     fn introspector(&self) -> &dyn Introspector {
         self
@@ -166,7 +200,23 @@ impl CancelHandle for FakeCancel {
 }
 
 impl FakeSession {
-    async fn begin(&mut self) -> Result<ResultHeader, DriverError> {
+    async fn begin(&mut self, sql: &str) -> Result<ResultHeader, DriverError> {
+        self.log.op(format!("start:{sql}"));
+        if self.log.drop_next.swap(false, Ordering::SeqCst) {
+            return Err(DriverError {
+                kind: ErrorKind::Connect,
+                message: "fake connection lost".into(),
+            });
+        }
+        let failing = self
+            .log
+            .fail_sql
+            .lock()
+            .ok()
+            .and_then(|f| f.iter().find(|(p, _)| sql.contains(p.as_str())).cloned());
+        if let Some((_, e)) = failing {
+            return Err(e);
+        }
         if self.log.panic_next.swap(false, Ordering::SeqCst) {
             panic!("fake driver panic");
         }
@@ -215,13 +265,23 @@ impl Session for FakeSession {
         }
         Ok(self.script.delay)
     }
-    async fn start(&mut self, _: &str, _: ExecMode) -> Result<ResultHeader, DriverError> {
-        self.begin().await
+    async fn start(&mut self, sql: &str, _: ExecMode) -> Result<ResultHeader, DriverError> {
+        self.begin(sql).await
     }
-    async fn start_params(&mut self, _: &str, _: &[Param]) -> Result<ResultHeader, DriverError> {
-        self.begin().await
+    async fn start_params(&mut self, sql: &str, _: &[Param]) -> Result<ResultHeader, DriverError> {
+        self.begin(sql).await
     }
     async fn fetch(&mut self, max_rows: usize) -> Result<Fetched, DriverError> {
+        self.log.op("fetch".into());
+        if self.log.fail_fetch.load(Ordering::SeqCst) {
+            return Err(DriverError {
+                kind: ErrorKind::Query {
+                    code: None,
+                    position: None,
+                },
+                message: "fake fetch failure".into(),
+            });
+        }
         let start = self.pos.ok_or_else(|| DriverError {
             kind: ErrorKind::Protocol,
             message: "no active result".into(),
@@ -234,15 +294,27 @@ impl Session for FakeSession {
         })
     }
     async fn finish(&mut self) -> Result<Completion, DriverError> {
+        self.log.op("finish".into());
         self.pos = None;
         Ok(Completion {
             affected_rows: None,
         })
     }
-    async fn explain_rows(&mut self, _: &str) -> Result<Option<u64>, DriverError> {
+    async fn explain_rows(&mut self, sql: &str) -> Result<Option<u64>, DriverError> {
+        self.log.op(format!("explain:{sql}"));
+        if self.log.fail_explain.load(Ordering::SeqCst) {
+            return Err(DriverError {
+                kind: ErrorKind::Query {
+                    code: None,
+                    position: None,
+                },
+                message: "fake explain failure".into(),
+            });
+        }
         Ok(self.script.estimate)
     }
-    async fn use_database(&mut self, _: &str) -> Result<(), DriverError> {
+    async fn use_database(&mut self, name: &str) -> Result<(), DriverError> {
+        self.log.op(format!("use:{name}"));
         Ok(())
     }
     async fn close(self: Box<Self>) {}
@@ -292,8 +364,9 @@ impl Introspector for FakeDriver {
     async fn row_estimate(
         &self,
         _: &mut dyn Session,
-        _: &ObjectRef,
+        o: &ObjectRef,
     ) -> Result<Option<u64>, DriverError> {
+        self.log.op(format!("estimate:{}", o.name));
         Ok(self.script.estimate)
     }
 }

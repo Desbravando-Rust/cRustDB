@@ -13,12 +13,14 @@ use crate::runtime::{Command, DriverRegistry, Emitter, Event, TabId, WorkspaceId
 use crate::storage::config::ConnectionConfig;
 
 mod data;
+mod editor;
 mod workspace;
 
 #[cfg(test)]
 mod tests;
 
 use data::DataActor;
+use editor::EditorActor;
 use workspace::{WorkspaceActor, WsMsg};
 
 /// What a connected workspace shares with its table tabs.
@@ -57,6 +59,7 @@ struct WsEntry {
 
 struct TabEntry {
     ws: WorkspaceId,
+    editor: bool,
     tx: UnboundedSender<Command>,
 }
 
@@ -80,6 +83,8 @@ impl Actors {
 
     /// Returns the command back when no actor handles it.
     pub(crate) fn dispatch(&mut self, cmd: Command) -> Option<Command> {
+        // Editor actors end themselves on a successful close; forget them.
+        self.tabs.retain(|_, t| !t.tx.is_closed());
         match cmd {
             Command::Connect {
                 ws,
@@ -125,10 +130,31 @@ impl Actors {
                 }
                 None
             }
-            Command::CloseTab { tab, resolve: None } if self.tabs.remove(&tab).is_some() => None,
+            Command::OpenEditor { ws, tab, database } => {
+                match self.ws.get(&ws).map(|e| e.shared.clone()) {
+                    Some(shared) => self.open_editor(ws, tab, database, shared),
+                    None => self.out.emit(Event::Notice {
+                        tab,
+                        text: "workspace is not connected".into(),
+                    }),
+                }
+                None
+            }
+            Command::CloseTab { tab, resolve: None }
+                if self.tabs.get(&tab).is_some_and(|t| !t.editor) =>
+            {
+                self.tabs.remove(&tab);
+                None
+            }
             Command::FetchPage { tab, .. }
             | Command::LoadStructure { tab, .. }
             | Command::LoadDdl { tab, .. }
+            | Command::Evaluate { tab, .. }
+            | Command::Execute { tab, .. }
+            | Command::LoadMore { tab, .. }
+            | Command::Tx { tab, .. }
+            | Command::UseDatabase { tab, .. }
+            | Command::CloseTab { tab, .. }
             | Command::CancelTab { tab } => match self.tabs.get(&tab) {
                 Some(t) => {
                     let _ = t.tx.send(cmd);
@@ -189,6 +215,35 @@ impl Actors {
         supervise(tab, self.out.clone(), rx, move |rx| {
             DataActor::new(tab, object.clone(), shared.clone(), out.clone()).run(rx)
         });
-        self.tabs.insert(tab, TabEntry { ws, tx });
+        self.tabs.insert(
+            tab,
+            TabEntry {
+                ws,
+                editor: false,
+                tx,
+            },
+        );
+    }
+
+    fn open_editor(
+        &mut self,
+        ws: WorkspaceId,
+        tab: TabId,
+        database: Option<String>,
+        shared: SharedRx,
+    ) {
+        let (tx, rx) = unbounded_channel();
+        let out = self.out.clone();
+        supervise(tab, self.out.clone(), rx, move |rx| {
+            EditorActor::new(tab, database.clone(), shared.clone(), out.clone()).run(rx)
+        });
+        self.tabs.insert(
+            tab,
+            TabEntry {
+                ws,
+                editor: true,
+                tx,
+            },
+        );
     }
 }
