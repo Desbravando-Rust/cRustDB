@@ -7,6 +7,7 @@ use crate::net::ssh::SshSecrets;
 use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
 use crate::state::AppState;
 use crate::state::connection_form::ConnectionForm;
+use crate::state::tree::{OpenAction, open_action};
 use crate::storage::config::{ConfigStore, ConnectionConfig, FieldError, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
 use crate::ui::{self, Intent};
@@ -123,6 +124,33 @@ impl CrustApp {
                     self.connect(config, secrets);
                 }
             }
+            Intent::SwitchWorkspace(id) => self.state.active = Some(id),
+            Intent::ToggleNode(n) => {
+                if let Some(cmd) = self.tree_mut().and_then(|t| t.toggle(n)) {
+                    self.send(cmd);
+                }
+            }
+            Intent::SelectNode(n) => {
+                if let Some(t) = self.tree_mut() {
+                    t.selected = Some(n);
+                }
+            }
+            Intent::RefreshNode(n) => {
+                if let Some(cmd) = self.tree_mut().and_then(|t| t.refresh(n)) {
+                    self.send(cmd);
+                }
+            }
+            Intent::RefreshRoot => {
+                if let Some(cmd) = self.tree_mut().and_then(|t| t.refresh_root()) {
+                    self.send(cmd);
+                }
+            }
+            Intent::Filter(q) => {
+                if let Some(t) = self.tree_mut() {
+                    t.filter(&q);
+                }
+            }
+            Intent::OpenObject { object } => self.open_object(object),
         }
     }
 
@@ -179,6 +207,33 @@ impl CrustApp {
             });
         }
     }
+
+    fn send(&self, cmd: Command) {
+        if let Some(rt) = &self.runtime {
+            rt.send(cmd);
+        }
+    }
+
+    fn tree_mut(&mut self) -> Option<&mut crate::state::tree::ObjectTree> {
+        let id = self.state.active?;
+        self.state.workspace_mut(id).map(|w| &mut w.tree)
+    }
+
+    fn open_object(&mut self, object: crustdb_core::model::ObjectRef) {
+        let (Some(ws), Some(rt)) = (self.state.active, &self.runtime) else {
+            return;
+        };
+        let tab = self.state.next_tab();
+        let action = open_action(object.kind);
+        rt.send(Command::OpenTable { ws, tab, object });
+        if action == OpenAction::Ddl {
+            rt.send(Command::LoadDdl {
+                tab,
+                req: rt.next_request_id(),
+            });
+        }
+    }
+
 
     /// Validates, persists the config and keyring secrets; the form stays open on any failure.
     fn save_form(&mut self) -> Option<(ConnectionConfig, ResolvedSecrets)> {
@@ -268,7 +323,22 @@ impl eframe::App for CrustApp {
             }
             self.state.apply(e);
         }
+        let cmds: Vec<_> = self
+            .state
+            .workspaces
+            .iter_mut()
+            .filter(|w| matches!(w.status, crate::state::Status::Online(_)))
+            .filter_map(|w| w.tree.load_roots())
+            .collect();
+        for c in cmds {
+            self.send(c);
+        }
         let mut intents = vec![];
+        if self.state.active_online().is_some() {
+            egui::Panel::left("sidebar").show(ui, |ui| {
+                intents.extend(ui::sidebar::show(ui, &self.state));
+            });
+        }
         egui::CentralPanel::default().show(ui, |ui| match &mut self.form {
             Some(f) => intents.extend(ui::connection_form::show(ui, f)),
             None => intents.extend(ui::home::show(ui, &self.state)),

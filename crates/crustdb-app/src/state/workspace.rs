@@ -1,7 +1,8 @@
 use crustdb_core::model::{ConnectionId, ServerVersion};
 
 use super::dialogs::{Dialog, DialogStack};
-use crate::runtime::{Event, WorkspaceId};
+use super::tree::ObjectTree;
+use crate::runtime::{Event, TabId, WorkspaceId};
 use crate::storage::config::{ConnectionConfig, LoadedConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +17,7 @@ pub struct WorkspaceState {
     pub id: WorkspaceId,
     pub config: ConnectionConfig,
     pub status: Status,
+    pub tree: ObjectTree,
 }
 
 impl WorkspaceState {
@@ -31,6 +33,7 @@ pub struct AppState {
     pub active: Option<WorkspaceId>,
     pub dialogs: DialogStack,
     next_ws: u64,
+    next_tab: u64,
 }
 
 impl AppState {
@@ -42,6 +45,7 @@ impl AppState {
             dialogs: DialogStack::default(),
             // 0 is the runtime's sentinel.
             next_ws: 1,
+            next_tab: 1,
         }
     }
 
@@ -57,10 +61,24 @@ impl AppState {
         self.next_ws += 1;
         self.workspaces.push(WorkspaceState {
             id,
+            tree: ObjectTree::new(id, config.driver),
             config,
             status: Status::Connecting,
         });
         self.active = Some(id);
+        id
+    }
+
+    pub fn active_online(&self) -> Option<&WorkspaceState> {
+        let id = self.active?;
+        self.workspaces
+            .iter()
+            .find(|w| w.id == id && matches!(w.status, Status::Online(_)))
+    }
+
+    pub fn next_tab(&mut self) -> TabId {
+        let id = TabId(self.next_tab);
+        self.next_tab += 1;
         id
     }
 
@@ -73,11 +91,17 @@ impl AppState {
             Event::Connected { ws, server } => {
                 if let Some(w) = self.workspace_mut(ws) {
                     w.status = Status::Online(server);
+                    w.tree.reset();
                 }
             }
             Event::ConnectFailed { ws, error } => {
                 if let Some(w) = self.workspace_mut(ws) {
                     w.status = Status::Failed(error);
+                }
+            }
+            Event::Children { req, items } => {
+                for w in &mut self.workspaces {
+                    w.tree.apply_children(req, items.clone());
                 }
             }
             _ => {}
