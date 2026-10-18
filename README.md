@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/imgs/logo.png" alt="cRustDB" width="240">
+  <img src="./assets/imgs/logo.png" alt="cRustDB" width="480">
 </p>
 
 <p align="center">
