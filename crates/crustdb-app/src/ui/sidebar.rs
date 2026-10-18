@@ -21,6 +21,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 }
             }
         });
+    if ui.button("New query").clicked() {
+        out.push(Intent::NewQuery);
+    }
     let mut q = active.tree.filter_text().to_owned();
     if ui
         .add(egui::TextEdit::singleline(&mut q).hint_text("filter"))

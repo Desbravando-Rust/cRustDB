@@ -1,6 +1,7 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
 pub mod confirm_dialog;
 pub mod connection_form;
+pub mod editor;
 pub mod filter_bar;
 pub mod grid;
 pub mod home;
@@ -54,4 +55,11 @@ pub enum Intent {
     ApplyFilters(TabId),
     ClearFilters(TabId),
     SetView(TabId, crate::state::TableView),
+    NewQuery,
+    /// `run` is the selection (or an empty range at the cursor), in chars.
+    RunQuery {
+        tab: TabId,
+        run: std::ops::Range<usize>,
+        all: bool,
+    },
 }

@@ -214,6 +214,19 @@ impl CrustApp {
                     rt.send(c);
                 }
             }
+            Intent::NewQuery => {
+                if let Some(ws) = self.state.active {
+                    let cmd = self.state.open_query(ws, None);
+                    self.send(cmd);
+                }
+            }
+            Intent::RunQuery { tab, run, all } => {
+                let req = self.runtime.as_ref().map(|rt| rt.next_request_id());
+                if let Some(req) = req {
+                    let cmd = self.state.run_query(tab, run, all, req);
+                    self.send(cmd);
+                }
+            }
             Intent::StopTab(tab) => {
                 if let Some(rt) = &self.runtime {
                     rt.send(Command::CancelTab { tab });
@@ -424,6 +437,14 @@ impl eframe::App for CrustApp {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
                 intents.extend(ui::connection_form::show(ui, f));
+                return;
+            }
+            let ws = self
+                .state
+                .active
+                .and_then(|ws| self.state.workspace_mut(ws));
+            if let Some(q) = ws.and_then(|w| w.active_query_mut()) {
+                intents.extend(ui::editor::show(ui, q));
                 return;
             }
             let tab = self

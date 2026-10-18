@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use std::time::Instant;
 
 use crustdb_core::model::{ConnectionId, ObjectRef, ServerVersion};
 use secrecy::SecretString;
 
 use super::dialogs::{Dialog, DialogStack};
+use super::query_tab::{QueryTab, char_to_byte};
 use super::table_tab::{Structure, TableTab, TableView};
 use super::tree::{ObjectTree, OpenAction, open_action};
 use crate::runtime::{Command, Event, RequestId, TabId, WorkspaceId};
@@ -24,6 +26,8 @@ pub struct WorkspaceState {
     pub status: Status,
     pub tree: ObjectTree,
     pub tabs: Vec<Tab>,
+    /// Query editor tabs; ids come from the same counter as `tabs`.
+    pub queries: Vec<QueryTab>,
     pub active_tab: Option<TabId>,
     /// The password this session connected with, for the safety prompt (never read from the keyring).
     pub session_password: Option<SecretString>,
@@ -72,6 +76,11 @@ impl WorkspaceState {
             .iter_mut()
             .map(|Tab::Table(t)| t)
             .find(|t| t.id == id)
+    }
+
+    pub fn active_query_mut(&mut self) -> Option<&mut QueryTab> {
+        let id = self.active_tab?;
+        self.queries.iter_mut().find(|q| q.id == id)
     }
 
     /// The connection form stays up until the workspace is online.
@@ -136,6 +145,51 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Entry point for `Intent::NewQuery`: a blank editor tab.
+    pub fn open_query(&mut self, ws: WorkspaceId, database: Option<String>) -> Option<Command> {
+        let id = self.next_tab_id();
+        let w = self.workspace_mut(ws)?;
+        w.queries
+            .push(QueryTab::new(id, w.config.driver, database.clone()));
+        w.active_tab = Some(id);
+        Some(Command::OpenEditor {
+            ws,
+            tab: id,
+            database,
+        })
+    }
+
+    /// Entry point for `Intent::RunQuery`: always `Evaluate`, never `Execute` (the dialog stack decides).
+    /// `run` is in chars (selection, or an empty range at the cursor); converted against the real text.
+    /// Refuses while an Evaluate for the tab is pending, so a key-repeat cannot execute twice.
+    pub fn run_query(
+        &mut self,
+        tab: TabId,
+        run: Range<usize>,
+        all: bool,
+        req: RequestId,
+    ) -> Option<Command> {
+        if self.evaluating.values().any(|(_, t)| *t == tab) {
+            return None;
+        }
+        let (ws, q) = self.workspaces.iter_mut().find_map(|w| {
+            let id = w.id;
+            Some((id, w.queries.iter_mut().find(|q| q.id == tab)?))
+        })?;
+        let bytes = char_to_byte(&q.text, run.start)..char_to_byte(&q.text, run.end);
+        let selection = (!bytes.is_empty()).then(|| bytes.clone());
+        let statements = q.targets(bytes.end, selection, all);
+        if statements.is_empty() {
+            return None;
+        }
+        self.register_evaluate(req, ws, tab);
+        Some(Command::Evaluate {
+            tab,
+            req,
+            statements,
+        })
+    }
+
     pub fn table_mut(&mut self, id: TabId) -> Option<&mut TableTab> {
         self.workspaces
             .iter_mut()
@@ -164,6 +218,7 @@ impl AppState {
             config,
             status: Status::Connecting,
             tabs: vec![],
+            queries: vec![],
             active_tab: None,
             session_password: None,
         });
@@ -592,6 +647,59 @@ pub(crate) mod tests {
         });
         assert_eq!(s.workspaces[0].status, Status::Failed("refused".into()));
         assert!(s.workspaces[0].form_open());
+    }
+
+    #[test]
+    fn query_tab_opens_and_run_sends_evaluate_only() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
+            panic!("no OpenEditor");
+        };
+        s.workspace_mut(ws)
+            .unwrap()
+            .active_query_mut()
+            .unwrap()
+            .text = "select 1; select 2".into();
+        let Some(Command::Evaluate { statements, .. }) =
+            s.run_query(tab, 3..3, false, RequestId(5))
+        else {
+            panic!("no Evaluate");
+        };
+        assert_eq!(statements, vec!["select 1"]);
+        // Pending run: a repeat is refused.
+        assert!(s.run_query(tab, 0..0, true, RequestId(6)).is_none());
+        assert!(s.take_commands().is_empty());
+        // Once evaluated (Run verdict -> Execute from the dialog stack), the tab can run again.
+        s.apply(Event::Evaluated {
+            req: RequestId(5),
+            evaluation: crustdb_core::safety::Evaluation {
+                verdict: crustdb_core::safety::Verdict::Run,
+                flags: vec![],
+            },
+        });
+        assert!(s.run_query(tab, 0..0, true, RequestId(7)).is_some());
+    }
+
+    #[test]
+    fn run_selection_is_in_chars_not_bytes() {
+        let mut s = state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
+            panic!("no OpenEditor");
+        };
+        s.workspace_mut(ws)
+            .unwrap()
+            .active_query_mut()
+            .unwrap()
+            .text = "select 'ação🦀'; select 2".into();
+        // chars 0..16 = `select 'ação🦀';`
+        let Some(Command::Evaluate { statements, .. }) =
+            s.run_query(tab, 0..16, false, RequestId(1))
+        else {
+            panic!("no Evaluate");
+        };
+        assert_eq!(statements, vec!["select 'ação🦀'"]);
     }
 
     #[test]
