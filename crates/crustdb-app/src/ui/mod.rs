@@ -1,4 +1,5 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
+pub mod confirm_dialog;
 pub mod connection_form;
 pub mod grid;
 pub mod home;
@@ -42,4 +43,9 @@ pub enum Intent {
     PrevPage(TabId),
     StopTab(TabId),
     Retry(TabId),
+    ConfirmSafety,
+    CloseResolve(crate::runtime::TxOp),
+    SaveFile,
+    DiscardFile,
+    AcceptHostKey,
 }

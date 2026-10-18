@@ -7,6 +7,7 @@ use crate::net::ssh::SshSecrets;
 use crate::runtime::{Command, Event, ResolvedSecrets, Runtime, TabId};
 use crate::state::AppState;
 use crate::state::connection_form::ConnectionForm;
+use crate::state::dialogs::SessionAuth;
 use crate::storage::config::{ConfigStore, ConnectionConfig, FieldError, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
 use crate::ui::{self, Intent};
@@ -75,7 +76,38 @@ impl CrustApp {
             }
             Intent::DeleteConnection(id) => self.state.request_delete(id),
             Intent::CancelDialog => {
+                let cmd = self.state.dialogs.cancel();
+                self.send(cmd);
+            }
+            Intent::ConfirmSafety => {
+                let workspaces = &self.state.workspaces;
+                let cmd = self.state.dialogs.submit_safety(
+                    |id| {
+                        let w = workspaces.iter().find(|w| w.id == id)?;
+                        Some(SessionAuth {
+                            password: w.session_password.as_ref(),
+                            database: w.config.database.as_deref().unwrap_or(""),
+                        })
+                    },
+                    std::time::Instant::now(),
+                );
+                self.send(cmd);
+            }
+            Intent::CloseResolve(op) => {
+                let cmd = self.state.dialogs.close_with_tx(op);
+                self.send(cmd);
+            }
+            Intent::DiscardFile => {
+                let cmd = self.state.dialogs.discard_dirty();
+                self.send(cmd);
+            }
+            // Saving belongs to the editor; the tab stays open, so nothing is lost.
+            Intent::SaveFile => {
                 self.state.dialogs.pop();
+            }
+            Intent::AcceptHostKey => {
+                let cmd = self.state.dialogs.accept_host_key();
+                self.send(cmd);
             }
             Intent::ConfirmDelete => self.confirm_delete(),
             Intent::NewConnection => self.open_form(None, false),
@@ -216,18 +248,15 @@ impl CrustApp {
 
     fn connect(&mut self, config: ConnectionConfig, secrets: ResolvedSecrets) {
         let ws = self.state.open_workspace(config.clone());
+        if let Some(w) = self.state.workspace_mut(ws) {
+            w.session_password = secrets.db.clone();
+        }
         if let Some(rt) = &self.runtime {
             rt.send(Command::Connect {
                 ws,
                 config,
                 secrets,
             });
-        }
-    }
-
-    fn send(&self, cmd: Command) {
-        if let Some(rt) = &self.runtime {
-            rt.send(cmd);
         }
     }
 
@@ -309,6 +338,12 @@ impl CrustApp {
         }
     }
 
+    fn send(&self, cmd: impl Into<Option<Command>>) {
+        if let (Some(rt), Some(cmd)) = (&self.runtime, cmd.into()) {
+            rt.send(cmd);
+        }
+    }
+
     fn confirm_delete(&mut self) {
         let store = &self.store;
         match self.state.confirm_delete(|rest| store.save(rest)) {
@@ -358,6 +393,9 @@ impl eframe::App for CrustApp {
                 rt.send(c);
             }
         }
+        for cmd in self.state.take_commands() {
+            self.send(cmd);
+        }
         let mut intents = vec![];
         if self.state.active_online().is_some() {
             egui::Panel::left("sidebar").show(ui, |ui| {
@@ -382,7 +420,7 @@ impl eframe::App for CrustApp {
                 None => intents.extend(ui::home::show(ui, &self.state)),
             }
         });
-        intents.extend(ui::home::dialogs(ui.ctx(), &self.state));
+        intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));
         for i in intents {
             self.handle(i);
         }

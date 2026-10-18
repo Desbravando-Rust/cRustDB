@@ -2,7 +2,7 @@ use eframe::egui;
 use egui_phosphor::regular as icon;
 
 use super::Intent;
-use crate::state::{AppState, Dialog, Status};
+use crate::state::{AppState, Status};
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
@@ -60,30 +60,6 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }
     }
-    out
-}
-
-/// Confirmation window for the top dialog, if any.
-pub fn dialogs(ctx: &egui::Context, state: &AppState) -> Vec<Intent> {
-    let mut out = vec![];
-    let Some(Dialog::DeleteConnection { name, .. }) = state.dialogs.top() else {
-        return out;
-    };
-    egui::Window::new("Delete connection")
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-        .show(ctx, |ui| {
-            ui.label(format!("Delete \"{name}\"? This cannot be undone."));
-            ui.horizontal(|ui| {
-                if ui.button("Delete").clicked() {
-                    out.push(Intent::ConfirmDelete);
-                }
-                if ui.button("Cancel").clicked() {
-                    out.push(Intent::CancelDialog);
-                }
-            });
-        });
     out
 }
 

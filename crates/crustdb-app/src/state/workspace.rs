@@ -1,4 +1,8 @@
+use std::collections::HashMap;
+use std::time::Instant;
+
 use crustdb_core::model::{ConnectionId, ObjectRef, ServerVersion};
+use secrecy::SecretString;
 
 use super::dialogs::{Dialog, DialogStack};
 use super::table_tab::{Structure, TableTab, TableView};
@@ -21,6 +25,8 @@ pub struct WorkspaceState {
     pub tree: ObjectTree,
     pub tabs: Vec<Tab>,
     pub active_tab: Option<TabId>,
+    /// The password this session connected with, for the safety prompt (never read from the keyring).
+    pub session_password: Option<SecretString>,
 }
 
 #[derive(Debug)]
@@ -80,6 +86,9 @@ pub struct AppState {
     pub dialogs: DialogStack,
     next_ws: u64,
     next_tab: u64,
+    evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
+    next_exec: u64,
+    outbox: Vec<Command>,
 }
 
 impl AppState {
@@ -92,6 +101,10 @@ impl AppState {
             // 0 is the runtime's sentinel.
             next_ws: 1,
             next_tab: 1,
+            evaluating: HashMap::new(),
+            // High range so these ids cannot collide with the tabs' own counters.
+            next_exec: 1 << 62,
+            outbox: vec![],
         }
     }
 
@@ -151,6 +164,7 @@ impl AppState {
             status: Status::Connecting,
             tabs: vec![],
             active_tab: None,
+            session_password: None,
         });
         self.active = Some(id);
         id
@@ -161,6 +175,16 @@ impl AppState {
         self.workspaces
             .iter()
             .find(|w| w.id == id && matches!(w.status, Status::Online(_)))
+    }
+
+    /// Called by whoever sends `Command::Evaluate`, so the answer finds its workspace and tab.
+    pub fn register_evaluate(&mut self, req: RequestId, ws: WorkspaceId, tab: TabId) {
+        self.evaluating.insert(req, (ws, tab));
+    }
+
+    /// Commands produced by applied events (e.g. an approved-by-default `Execute`).
+    pub fn take_commands(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.outbox)
     }
 
     pub fn workspace_mut(&mut self, id: WorkspaceId) -> Option<&mut WorkspaceState> {
@@ -249,6 +273,26 @@ impl AppState {
                     t.fail("connection actor crashed".into());
                 }
             }
+            Event::Evaluated { req, evaluation } => {
+                let Some((ws, tab)) = self.evaluating.remove(&req) else {
+                    return;
+                };
+                let exec = RequestId(self.next_exec);
+                self.next_exec += 1;
+                let cmd = self
+                    .dialogs
+                    .on_evaluated(ws, tab, req, exec, evaluation, Instant::now());
+                self.outbox.extend(cmd);
+            }
+            Event::HostKeyPrompt {
+                ws,
+                host,
+                fingerprint,
+            } => self.dialogs.push(Dialog::HostKey {
+                ws,
+                host,
+                fingerprint,
+            }),
             _ => {}
         }
     }
@@ -571,5 +615,63 @@ pub(crate) mod tests {
         s.request_delete(s.config.connections[0].id);
         assert_eq!(s.confirm_delete(|_| Err("io")), Err("io"));
         assert_eq!(s.config.connections.len(), 1);
+    }
+
+    #[test]
+    fn evaluated_routes_by_registered_request() {
+        use crustdb_core::safety::{Evaluation, Flag, FlagReason, Verdict};
+        let ev = |verdict| Evaluation {
+            verdict,
+            flags: vec![Flag {
+                index: 0,
+                verdict,
+                reason: FlagReason::NoWhere,
+            }],
+        };
+        let mut s = state(&["a"]);
+        let (ws, tab) = (WorkspaceId(5), TabId(6));
+        s.register_evaluate(RequestId(1), ws, tab);
+        s.apply(Event::Evaluated {
+            req: RequestId(1),
+            evaluation: ev(Verdict::Confirm),
+        });
+        assert!(matches!(
+            s.dialogs.top(),
+            Some(Dialog::Safety { ws: w, tab: t, req: RequestId(1), .. }) if *w == ws && *t == tab
+        ));
+        assert!(s.take_commands().is_empty());
+
+        let mut s = state(&["a"]);
+        s.apply(Event::Evaluated {
+            req: RequestId(9),
+            evaluation: ev(Verdict::Confirm),
+        });
+        assert!(s.dialogs.top().is_none() && s.take_commands().is_empty());
+
+        s.register_evaluate(RequestId(2), ws, tab);
+        s.apply(Event::Evaluated {
+            req: RequestId(2),
+            evaluation: Evaluation {
+                verdict: Verdict::Run,
+                flags: vec![],
+            },
+        });
+        let cmds = s.take_commands();
+        assert!(matches!(
+            cmds[..],
+            [Command::Execute {
+                evaluation: RequestId(2),
+                ..
+            }]
+        ));
+        // Single use: a repeated answer is ignored.
+        s.apply(Event::Evaluated {
+            req: RequestId(2),
+            evaluation: Evaluation {
+                verdict: Verdict::Run,
+                flags: vec![],
+            },
+        });
+        assert!(s.take_commands().is_empty());
     }
 }
