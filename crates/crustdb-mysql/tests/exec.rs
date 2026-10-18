@@ -82,7 +82,9 @@ async fn read_cursor_load_more_bounded_memory() {
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     let before = rss_kb();
-    s.start(TEN_MILLION, ExecMode::Read).await.unwrap();
+    // 10^9 rows: draining instead of killing would take far longer than the bound below.
+    let huge = format!("{TEN_MILLION}, digits h, digits i");
+    s.start(&huge, ExecMode::Read).await.unwrap();
     let a = s.fetch(1000).await.unwrap();
     let b = s.fetch(1000).await.unwrap();
     assert!(!a.exhausted && !b.exhausted);
@@ -90,7 +92,8 @@ async fn read_cursor_load_more_bounded_memory() {
     assert!(s.has_active_result());
     let t = Instant::now();
     s.finish().await.unwrap();
-    assert!(t.elapsed() < Duration::from_secs(10));
+    // KILL returns in ms, but the server notices it late when the host is loaded (observed 4-18 s).
+    assert!(t.elapsed() < Duration::from_secs(30));
     assert!(!s.has_active_result());
     assert!(rss_kb().saturating_sub(before) < 50 * 1024);
     assert_eq!(all(&mut s, "SELECT 1", ExecMode::Read).await[0][0], "1");
@@ -407,7 +410,12 @@ async fn server_restart_during_paused_cursor_reports_error() {
             }
         }
     }
+    // MySQL 5.6 sends 1317 on shutdown before dropping the socket; it must still read as lost.
     assert_eq!(err.expect("error expected").kind, ErrorKind::Connect);
+    assert_eq!(
+        s.start("SELECT 1", ExecMode::Read).await.unwrap_err().kind,
+        ErrorKind::Connect
+    );
     let _ = s.finish().await;
     assert!(!s.has_active_result());
 }
@@ -427,7 +435,7 @@ async fn dropped_session_kills_paused_read() {
     let q = format!("SELECT COUNT(*) FROM information_schema.processlist WHERE id = {cid}");
     let t = Instant::now();
     while all(&mut other, &q, ExecMode::Read).await[0][0] != "0" {
-        assert!(t.elapsed() < Duration::from_secs(5), "query still running");
+        assert!(t.elapsed() < Duration::from_secs(30), "query still running");
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }

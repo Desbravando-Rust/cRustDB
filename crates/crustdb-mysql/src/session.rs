@@ -75,6 +75,26 @@ impl MysqlSession {
         self.tx.send(cmd(reply)).await.map_err(|_| lost())?;
         rx.await.map_err(|_| lost())?
     }
+
+    /// 1317 is also what a shutting-down server sends before dropping the socket: with the task
+    /// idle, a failed ping means the connection (and its transaction) is gone, not cancelled.
+    async fn lost_if_dead<T>(&self, r: Result<T, DriverError>) -> Result<T, DriverError> {
+        match r {
+            Err(e) if e.kind == ErrorKind::Cancelled => {
+                let alive = tokio::time::timeout(
+                    Duration::from_secs(10),
+                    self.call(|reply| ConnCmd::Ping { reply }),
+                )
+                .await;
+                if matches!(alive, Ok(Ok(_))) {
+                    Err(e)
+                } else {
+                    Err(err(ErrorKind::Connect, e.message))
+                }
+            }
+            r => r,
+        }
+    }
 }
 
 pub(crate) struct MysqlCancel {
@@ -122,9 +142,8 @@ impl Session for MysqlSession {
     async fn start(&mut self, sql: &str, mode: ExecMode) -> Result<ResultHeader, DriverError> {
         self.settle().await?;
         let sql = sql.to_owned();
-        let h = self
-            .call(|reply| ConnCmd::Start { sql, mode, reply })
-            .await?;
+        let r = self.call(|reply| ConnCmd::Start { sql, mode, reply }).await;
+        let h = self.lost_if_dead(r).await?;
         self.active = true;
         Ok(h)
     }
@@ -135,9 +154,10 @@ impl Session for MysqlSession {
     ) -> Result<ResultHeader, DriverError> {
         self.settle().await?;
         let (sql, params) = (sql.to_owned(), params.to_vec());
-        let h = self
+        let r = self
             .call(|reply| ConnCmd::StartParams { sql, params, reply })
-            .await?;
+            .await;
+        let h = self.lost_if_dead(r).await?;
         self.active = true;
         Ok(h)
     }
@@ -148,7 +168,7 @@ impl Session for MysqlSession {
         if r.as_ref().map_or(true, |f| f.exhausted) {
             self.active = false;
         }
-        r
+        self.lost_if_dead(r).await
     }
     async fn finish(&mut self) -> Result<Completion, DriverError> {
         self.active = false;
