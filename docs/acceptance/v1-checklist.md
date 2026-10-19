@@ -3,7 +3,7 @@
 Spec §8 (AC-01…AC-16). Each row names the automated test that covers it, or the manual step and its evidence.
 Tests marked `docker` are `#[ignore = "docker"]` and run with `cargo test -p <crate> -- --include-ignored`.
 
-Status: **auto** = covered by a passing test · **manual** = needs a human run · **pending** = depends on T36 (perf).
+Status: **auto** = covered by a passing test · **manual** = needs a human run · **partial** = some criteria not met or not measured.
 
 | AC | Status | Evidence |
 |---|---|---|
@@ -22,7 +22,7 @@ Status: **auto** = covered by a passing test · **manual** = needs a human run �
 | AC-13 Begin → DML → Rollback undoes; closing a tab with an open transaction asks | auto | `actors::editor::tests::tx_state_follows_buttons_and_statements`, `close_tab_with_open_tx_requires_resolution`; docker: `transaction_states_and_implicit_commit_mysql`, `cursor_inside_user_transaction_keeps_it_open`. |
 | AC-14 CSV export of filtered table and of the full query result, without re-executing | auto + evidence | `actors::export::tests::export_respects_filters_and_sorts`, `export_result_drains_without_reexecuting`; docker: `crustdb-app/tests/export_it.rs`. Same `log_statement=all` run as AC-06 over `export_it`. |
 | AC-15 Status bar shows every §4.8 indicator with tooltips | auto + manual | `ui::status_bar::status_icons_follow_tls_mode`, `tooltip_contains_safety_rules`. Manual: connect over TLS + SSH, hover each indicator. |
-| AC-16 §7 performance budgets measured and within target | pending | T36 (`crustdb-app/tests/perf.rs`, numbers in README). |
+| AC-16 §7 performance budgets measured and within target | **partial** | `crustdb-app/tests/perf.rs`; numbers in the README Performance table. Not met: typing in a 5,000-line file. Open: first rows after the first server row; idle CPU and export throughput with a live server. |
 
 ## Coverage floors (spec §9)
 

@@ -387,6 +387,7 @@ impl CrustApp {
 impl eframe::App for CrustApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.show(ui);
+        crate::metrics::trace_first_frame();
     }
 
     fn on_exit(&mut self) {

@@ -38,6 +38,7 @@ fn init_logging() {
 }
 
 fn main() -> anyhow::Result<()> {
+    let _ = crustdb_app::metrics::PROCESS_START.set(std::time::Instant::now());
     init_logging();
     let store = ConfigStore {
         path: paths::config_dir().join("connections.json"),

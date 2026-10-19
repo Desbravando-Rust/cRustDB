@@ -117,6 +117,25 @@ Integration tests run against PostgreSQL, MySQL and MariaDB in Docker via `testc
 | `$XDG_CONFIG_HOME/crustdb/known_hosts` | Accepted SSH host keys (OpenSSH format) |
 | `$XDG_DATA_HOME/crustdb/history/<id>.jsonl` | Query history per connection, last 10,000 entries (0600) |
 
+## Performance
+
+Release build, Linux x86_64. Reproduce: `cargo test --release -p crustdb-app --test perf -- --include-ignored --test-threads=1 --nocapture`.
+Frame times come from `egui_kittest` (layout and tessellation on the CPU, no GPU rasterization), so they exclude the GPU.
+
+| Metric | Target | Measured | Status |
+|---|---|---|---|
+| Start to first frame | ≤ 300 ms | 117 ms (median of 5, Xvfb) | met |
+| Idle CPU, 1 connection open | < 1% | 0.0% on the home screen (real display, 1 frame/s); 3.3% under Xvfb software rendering; not measured with a connection open | partial |
+| Decode and render 1,000 × 20 cells | ≤ 20 ms | 16.2 ms (8.0 build + format, 8.2 frame) | met |
+| First rows visible after the server's first row | ≤ 50 ms | not measured | open |
+| Frame scrolling 100,000 × 20 rows | ≤ 16 ms | 7.9 ms mean, 10.2 ms worst | met |
+| RSS with 100,000 × 20 text cells | ≤ 200 MB | 172 MB | met |
+| CSV export | ≥ 100,000 rows/s, ≤ +20 MB | 186,000 rows/s encoding 20 columns, +0 MB (client side only; not measured end to end against a server) | partial |
+| Typing in a 5,000-line file | ≤ 16 ms | 53 ms (highlighting off); 13.7 ms at 700 lines with highlighting | **not met** |
+| 250-column table | none (spec §7) | 102 ms mean | recorded |
+
+Typing: highlighting turns off above 750 lines (measured limit). The 5,000-line target needs more than that, because egui's `TextEdit` lays out the whole text on every edit (a bare `TextEdit` with 5,000 lines already takes ~17 ms) and the SQL analysis passes scan the whole text per edit. Reaching it needs a virtualized editor, planned for v2; `perf.rs` guards the current ceiling (100 ms).
+
 ## Known limitations
 
 - The local port of the SSH tunnel is reachable by other local users while the session is open.

@@ -260,9 +260,11 @@ fn tx_badge_state_follows_event() {
 }
 
 #[test]
-fn highlight_disabled_above_1mib() {
+fn highlight_disabled_above_1mib_or_750_lines() {
     assert!(highlight_enabled("select 1"));
     assert!(!highlight_enabled(&"a".repeat(HIGHLIGHT_MAX_BYTES + 1)));
+    assert!(highlight_enabled(&"\n".repeat(HIGHLIGHT_MAX_LINES - 1)));
+    assert!(!highlight_enabled(&"\n".repeat(HIGHLIGHT_MAX_LINES)));
 }
 
 #[test]
