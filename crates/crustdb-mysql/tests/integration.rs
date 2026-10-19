@@ -30,9 +30,18 @@ fn image() -> String {
     std::env::var("CRUSTDB_MYSQL_IMAGE").unwrap_or_else(|_| "mysql:8.4".into())
 }
 
+/// Servers that only offer DHE suites: rustls (ECDHE only) cannot negotiate TLS with them.
+fn server_without_ecdhe() -> bool {
+    let image = image();
+    image.starts_with("mariadb:10.0") || image.starts_with("mysql:5.7")
+}
+
 #[tokio::test]
 #[ignore = "docker"]
 async fn connects_with_each_tls_mode() {
+    if server_without_ecdhe() {
+        return;
+    }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql(Some(&certs), None).await;
     for mode in [TlsMode::Require, TlsMode::VerifyCa, TlsMode::VerifyFull] {
@@ -123,11 +132,11 @@ async fn verify_ca_rejects_untrusted_ca() {
     assert_eq!(err.kind, ErrorKind::Tls, "{err}");
 }
 
-/// Only meaningful against `mariadb:10.0` (rustls cannot negotiate with it).
+/// Only meaningful against servers without ECDHE (rustls cannot negotiate with them).
 #[tokio::test]
 #[ignore = "docker"]
 async fn tls_rejects_server_without_tls12() {
-    if !image().starts_with("mariadb:10.0") {
+    if !server_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
@@ -141,7 +150,7 @@ async fn tls_rejects_server_without_tls12() {
         .err()
         .expect("must fail");
     assert_eq!(err.kind, ErrorKind::Tls, "{err}");
-    // mariadb:10.0 answers with a HandshakeFailure alert (no common cipher), not a version alert,
+    // these servers answer with a HandshakeFailure alert (no common cipher), not a version alert,
     // so the D39 text does not apply; only the kind is asserted.
 }
 
@@ -221,6 +230,9 @@ async fn connect_timeout_after_10s() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn hostname_override_used_with_tunnel_addr() {
+    if server_without_ecdhe() {
+        return;
+    }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql(Some(&certs), None).await;
     let mut t = target(&db, TlsMode::VerifyFull, Some(&certs));

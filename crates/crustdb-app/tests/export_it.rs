@@ -165,9 +165,11 @@ async fn export_full_table_streams_csv_mysql() {
     let seed = [
         "CREATE DATABASE exp".to_string(),
         "CREATE TABLE exp.export_t (id int PRIMARY KEY, v text)".to_string(),
-        "SET SESSION cte_max_recursion_depth = 100000".to_string(),
+        "CREATE TABLE exp.d (i int)".to_string(),
+        "INSERT INTO exp.d VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)".to_string(),
+        // Cross join instead of a recursive CTE: MySQL 5.6/5.7 and MariaDB 10.0 lack CTEs.
         format!(
-            "INSERT INTO exp.export_t WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {ROWS}) SELECT n, CONCAT('v', n) FROM s"
+            "INSERT INTO exp.export_t SELECT n, CONCAT('v', n) FROM (SELECT 1 + a.i + 10 * b.i + 100 * c.i + 1000 * d.i + 10000 * e.i AS n FROM exp.d a, exp.d b, exp.d c, exp.d d, exp.d e) s WHERE n <= {ROWS}"
         ),
     ];
     export_table(
