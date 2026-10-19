@@ -20,13 +20,13 @@
   <img src="https://img.shields.io/badge/MariaDB-%E2%89%A5%2010.0.5-003545?logo=mariadb&logoColor=white" alt="MariaDB 10.0.5+">
 </p>
 
-> **Work in progress.** CrustDB is in its foundation milestone. The feature list below describes the v1 target, not what ships today.
+> **Pre-release.** All v1 features are implemented; packaging and performance budgets are being finalized. Acceptance status per criterion: [`docs/acceptance/v1-checklist.md`](docs/acceptance/v1-checklist.md).
 
 ## What it is
 
 CrustDB browses data in a **read-only grid** and runs **raw SQL** with guards against accidental writes. It is fast, small and keeps your secrets off disk. No data editing, diagrams, import, backup or AI: v1 does a few things and does them well.
 
-## Features (v1 target)
+## Features
 
 - **Connections**: saved connections, import from `postgres://`, `postgresql://`, `mysql://`, `mariadb://` URLs, several connections open at once in one window.
 - **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade.
@@ -47,6 +47,16 @@ CrustDB browses data in a **read-only grid** and runs **raw SQL** with guards ag
 | PostgreSQL | 12 |
 | MySQL | 5.6.5 |
 | MariaDB | 10.0.5 |
+
+Integration suite results (full `cargo test --workspace -- --include-ignored`, 2026-10-18):
+
+| PostgreSQL | MySQL / MariaDB | Result |
+|---|---|---|
+| 12 | MySQL 8.4 | pass |
+| latest | MySQL 5.6 | pass |
+| latest | MySQL 5.7 (5.7.44) | pass, **no TLS** (see limitations) |
+| latest | MariaDB 10.0 | pass, **no TLS** (see limitations) |
+| latest | MariaDB latest | pass |
 
 The floors may move up if the driver fails integration tests on them; any change will be recorded here. SQLite is planned for v2 ([#26](https://github.com/Desbravando-Rust/crustdb/issues/26)).
 
@@ -92,11 +102,14 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
+cargo build --release
 ```
+
+CI also enforces line-coverage floors (`cargo llvm-cov`, `ui/` excluded): `crustdb-core` ≥ 90%, drivers ≥ 70%, `crustdb-app/src/state` ≥ 70%.
 
 Integration tests run against PostgreSQL, MySQL and MariaDB in Docker via `testcontainers`. The design and plan live in [`docs/specs/`](docs/specs/).
 
-## Files on disk (v1 target)
+## Files on disk
 
 | Path | Content |
 |---|---|
@@ -110,6 +123,11 @@ Integration tests run against PostgreSQL, MySQL and MariaDB in Docker via `testc
 - Query history stores SQL in plain text, including any secret typed into a query.
 - CSV export does not neutralize spreadsheet formulas (CSV injection).
 - Pagination uses `OFFSET`, so very deep pages are slow. Keyset pagination is planned for v2.
+- MariaDB 10.0 and MySQL 5.7 (5.7.44 image, OpenSSL 1.0) cannot negotiate TLS with `rustls` because the server only offers DHE suites: use `disable` through an SSH tunnel or a trusted network.
+- MySQL/MariaDB `verify-ca` behaves like `verify-full` (a certificate whose name does not match the host is rejected); use `require` if the certificate lacks the hostname.
+- The MySQL driver trusts the embedded Mozilla roots (`webpki-roots`) instead of the system store; use `ca_path` for a private CA.
+- SSH keys: RSA keys (user or host) are not supported because `russh` is built without its `rsa` feature (RUSTSEC-2023-0071, no patch available); use ed25519 or ECDSA.
+- A one-column CSV export writes a `NULL` cell as an empty line.
 - The grid does not virtualize columns; tables with more than 200 columns may render slower.
 
 ## License

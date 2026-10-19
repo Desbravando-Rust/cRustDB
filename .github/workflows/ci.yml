@@ -32,7 +32,28 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "enabled in Task 35"
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgtk-3-dev
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - run: >-
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+          --ignore-filename-regex 'crustdb-app/src/ui/' -- --include-ignored
+      - name: Enforce line-coverage floors (spec section 9)
+        run: |
+          awk -v floors='crates/crustdb-core/=90,crates/crustdb-postgres/=70,crates/crustdb-mysql/=70,crates/crustdb-app/src/state/=70' '
+            BEGIN { n = split(floors, f, ","); for (i = 1; i <= n; i++) { split(f[i], kv, "="); pat[i] = kv[1]; min[i] = kv[2] } }
+            /^SF:/ { file = substr($0, 4) }
+            /^DA:/ { split(substr($0, 4), a, ","); for (i = 1; i <= n; i++) if (index(file, pat[i])) { tot[i]++; if (a[2] > 0) hit[i]++ } }
+            END {
+              for (i = 1; i <= n; i++) {
+                pct = tot[i] ? 100 * hit[i] / tot[i] : 0
+                printf "%s %.1f%% (floor %d%%)\n", pat[i], pct, min[i]
+                if (pct < min[i]) bad = 1
+              }
+              exit bad
+            }' lcov.info
   integration:
     runs-on: ubuntu-latest
     strategy:
