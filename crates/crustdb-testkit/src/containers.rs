@@ -59,6 +59,10 @@ pub struct SshContainer {
     pub host_public_key: String,
     /// Unencrypted OpenSSH private key authorized for `user`.
     pub client_key_path: PathBuf,
+    /// Server RSA host public key, OpenSSH one-line format.
+    pub host_rsa_public_key: String,
+    /// Unencrypted RSA private key authorized for `user`.
+    pub rsa_client_key_path: PathBuf,
     _dir: tempfile::TempDir,
     _guard: ContainerAsync<GenericImage>,
 }
@@ -247,6 +251,7 @@ pub async fn start_sshd(network: &str) -> SshContainer {
     exec_out(
         &c,
         "mkdir -p /config/.ssh && ssh-keygen -q -t ed25519 -N '' -f /tmp/id && cat /tmp/id.pub >> /config/.ssh/authorized_keys \
+         && ssh-keygen -q -t rsa -b 2048 -N '' -f /tmp/id_rsa && cat /tmp/id_rsa.pub >> /config/.ssh/authorized_keys \
          && chown -R crustdb /config/.ssh && chmod 700 /config/.ssh && chmod 600 /config/.ssh/authorized_keys",
     )
     .await;
@@ -261,14 +266,21 @@ pub async fn start_sshd(network: &str) -> SshContainer {
         .await
         .trim()
         .to_string();
+    let rsa_key = exec_out(&c, "cat /tmp/id_rsa").await;
+    let host_rsa_public_key = exec_out(&c, "cat /config/ssh_host_keys/ssh_host_rsa_key.pub")
+        .await
+        .trim()
+        .to_string();
     let dir = tempfile::tempdir().unwrap();
-    let client_key_path = dir.path().join("id_ed25519");
-    std::fs::write(&client_key_path, key).unwrap();
-    std::fs::set_permissions(
-        &client_key_path,
-        std::os::unix::fs::PermissionsExt::from_mode(0o600),
-    )
-    .unwrap();
+    let write_key = |name: &str, key: String| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, key).unwrap();
+        std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+            .unwrap();
+        path
+    };
+    let client_key_path = write_key("id_ed25519", key);
+    let rsa_client_key_path = write_key("id_rsa", rsa_key);
     let (host, port) = endpoint(&c, 2222).await;
     SshContainer {
         host,
@@ -278,6 +290,8 @@ pub async fn start_sshd(network: &str) -> SshContainer {
         alias,
         host_public_key,
         client_key_path,
+        host_rsa_public_key,
+        rsa_client_key_path,
         _dir: dir,
         _guard: c,
     }

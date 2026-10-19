@@ -112,15 +112,16 @@ fn host_key_prefs(
     if recorded.is_empty() {
         return Ok(None);
     }
-    // ponytail: russh's default list contains RSA even though this build has no `rsa` feature.
-    let usable: Vec<_> = recorded
-        .into_iter()
-        .filter(|a| !a.clone().is_rsa() && supported.contains(a))
+    // A recorded RSA key (hash-less) is served under rsa-sha2-256/512; offer every RSA variant.
+    let rsa = recorded.iter().any(|a| a.clone().is_rsa());
+    let usable: Vec<_> = supported
+        .iter()
+        .filter(|a| recorded.contains(a) || (rsa && (**a).clone().is_rsa()))
+        .cloned()
         .collect();
     if usable.is_empty() {
         return Err(SshError::Io(
-            "host is known only by RSA keys, which are not supported; add an ed25519 or ecdsa host key"
-                .into(),
+            "host key type recorded in known_hosts is not supported by this client".into(),
         ));
     }
     Ok(Some(usable))
@@ -223,13 +224,12 @@ async fn authenticate(
     }
 }
 
-const RSA_MSG: &str = "RSA keys are not supported; use ed25519 or ecdsa";
-
 fn load_key(path: &std::path::Path, pass: Option<&str>) -> Result<PrivateKey, SshError> {
     match load_secret_key(path, pass) {
-        Ok(k) if k.algorithm().is_rsa() => Err(SshError::Io(RSA_MSG.into())),
         Ok(k) => Ok(k),
-        Err(russh::keys::Error::UnsupportedKeyType { .. }) => Err(SshError::Io(RSA_MSG.into())),
+        Err(russh::keys::Error::UnsupportedKeyType { .. }) => {
+            Err(SshError::Io("unsupported SSH key type".into()))
+        }
         Err(_) => Err(SshError::Auth),
     }
 }
@@ -305,13 +305,23 @@ mod tests {
     use russh::keys::Algorithm;
 
     #[test]
-    fn host_key_prefs_drop_rsa_and_fail_when_only_rsa() {
+    fn host_key_prefs_keep_recorded_types_and_fail_when_none_usable() {
         let rsa = Algorithm::Rsa { hash: None };
         let sup = client::Config::default().preferred.key;
-        let got = host_key_prefs(vec![rsa.clone(), Algorithm::Ed25519], &sup).unwrap();
-        assert_eq!(got, Some(vec![Algorithm::Ed25519]));
+        let got = host_key_prefs(vec![rsa.clone(), Algorithm::Ed25519], &sup)
+            .unwrap()
+            .unwrap();
+        assert!(got.contains(&Algorithm::Ed25519));
+        assert!(
+            got.iter().filter(|a| (*a).clone().is_rsa()).count() > 1,
+            "{got:?}"
+        );
+        assert!(
+            got.iter()
+                .all(|a| a.clone().is_rsa() || *a == Algorithm::Ed25519)
+        );
         assert!(matches!(
-            host_key_prefs(vec![rsa], &sup),
+            host_key_prefs(vec![rsa], &[Algorithm::Ed25519]),
             Err(SshError::Io(_))
         ));
         assert_eq!(host_key_prefs(vec![], &sup).unwrap(), None);
@@ -332,15 +342,11 @@ mod tests {
     }
 
     #[test]
-    fn rsa_keys_get_a_clear_error_in_both_formats() {
-        for fmt in ["RFC4716", "PEM"] {
+    fn rsa_and_ed25519_keys_load_in_both_formats() {
+        for (ty, fmt) in [("rsa", "RFC4716"), ("rsa", "PEM"), ("ed25519", "RFC4716")] {
             let dir = tempfile::tempdir().unwrap();
-            let f = keygen(dir.path(), &["-t", "rsa", "-b", "2048", "-m", fmt]);
-            let e = load_key(&f, None).err().unwrap();
-            assert_eq!(e, SshError::Io(RSA_MSG.into()), "{fmt}");
+            let f = keygen(dir.path(), &["-t", ty, "-m", fmt]);
+            assert!(load_key(&f, None).is_ok(), "{ty} {fmt}");
         }
-        let dir = tempfile::tempdir().unwrap();
-        let f = keygen(dir.path(), &["-t", "ed25519"]);
-        assert!(load_key(&f, None).is_ok());
     }
 }

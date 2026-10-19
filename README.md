@@ -126,7 +126,7 @@ Integration tests run against PostgreSQL, MySQL and MariaDB in Docker via `testc
 - MariaDB 10.0 and MySQL 5.7 (5.7.44 image, OpenSSL 1.0) cannot negotiate TLS with `rustls` because the server only offers DHE suites: use `disable` through an SSH tunnel or a trusted network.
 - MySQL/MariaDB `verify-ca` behaves like `verify-full` (a certificate whose name does not match the host is rejected); use `require` if the certificate lacks the hostname.
 - The MySQL driver trusts the embedded Mozilla roots (`webpki-roots`) instead of the system store; use `ca_path` for a private CA.
-- SSH keys: RSA keys (user or host) are not supported because `russh` is built without its `rsa` feature (RUSTSEC-2023-0071, no patch available); use ed25519 or ECDSA.
+- SSH RSA keys (user and host) are supported through `russh`'s `rsa` feature, which pulls in the `rsa` crate (RUSTSEC-2023-0071, Marvin timing leak, no upstream patch). The advisory is ignored in `deny.toml`; it matters only to an observer collecting many signatures from one session. Prefer ed25519 or ECDSA keys when you can.
 - A one-column CSV export writes a `NULL` cell as an empty line.
 - The grid does not virtualize columns; tables with more than 200 columns may render slower.
 
