@@ -230,7 +230,9 @@ pub fn show(
                 return;
             };
             let byte = char_to_byte(&tab.text, usize::from(cur.index));
-            if r.changed() {
+            let force = r.has_focus()
+                && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Space));
+            if r.changed() || force {
                 if in_literal_or_comment(&tab.text, byte, driver) {
                     tab.ac.close();
                 } else {
@@ -403,6 +405,17 @@ mod tests {
         h.get_by_role(role).type_text(typed);
         h.run();
         (h, tab)
+    }
+
+    #[test]
+    fn ctrl_space_reopens_the_popup() {
+        let (mut h, tab) = typed("x ", "s");
+        tab.borrow_mut().ac.close();
+        h.run();
+        assert!(!tab.borrow().ac.open);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Space);
+        h.run();
+        assert!(tab.borrow().ac.open);
     }
 
     #[test]
