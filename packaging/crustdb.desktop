@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=cRustDB
+GenericName=Database client
+Comment=Native client for PostgreSQL and MySQL/MariaDB
+Exec=crustdb
+Icon=crustdb
+Terminal=false
+Categories=Development;Database;
+Keywords=sql;postgres;postgresql;mysql;mariadb;

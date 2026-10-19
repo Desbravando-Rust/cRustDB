@@ -77,6 +77,12 @@ cargo build --release
 cargo run -p crustdb-app
 ```
 
+### Packages
+
+`packaging/build-appimage.sh` builds `crustdb-<version>-x86_64.AppImage` and `crustdb-<version>-x86_64-linux.tar.gz` into `target/dist/`. Build on the oldest Linux you want to support (CI uses Ubuntu 24.04, glibc 2.39): the binary needs at least the glibc it was built with. Tag `v*` publishes both files as a GitHub release.
+
+The packages rely on the system graphics stack (a Vulkan or OpenGL driver, `libxkbcommon`, and X11 or Wayland libraries); they are not bundled. Pushing a `v*` tag runs the `release` job.
+
 ## Workspace layout
 
 ```
