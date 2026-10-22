@@ -25,7 +25,7 @@ cargo deny check
 - Dependency direction: `crustdb-app` → `crustdb-postgres`/`crustdb-mysql` → `crustdb-core`. `crustdb-core` has no IO, no tokio, no egui. `crustdb-testkit` is dev-dependency only.
 - Errors: `thiserror` in core and drivers; `anyhow` only in `crustdb-app/src/main.rs`. Secrets as `secrecy::SecretString`.
 - Generated SQL: user values are always bound parameters; identifiers always go through `Dialect::quote_ident`.
-- Add dependencies with `cargo add` (never type versions from memory). License Apache-2.0 in every `Cargo.toml`. Files ≤ 500 lines.
+- Add dependencies with `cargo add` (never type versions from memory). License BUSL-1.1 (set once in `[workspace.package]`; crates use `license.workspace = true`). Files ≤ 500 lines.
 - UI text is English.
 
 ## Git

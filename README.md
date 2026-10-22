@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml"><img src="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status: pre-alpha">
-  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
+  <img src="https://img.shields.io/badge/license-BUSL--1.1-blue" alt="License: BUSL-1.1">
   <img src="https://img.shields.io/badge/rust-1.99.1-b7410e?logo=rust" alt="Rust 1.99.1">
   <img src="https://img.shields.io/badge/edition-2024-b7410e" alt="Edition 2024">
   <img src="https://img.shields.io/badge/unsafe-forbidden-success" alt="unsafe forbidden">
@@ -158,4 +158,4 @@ Typing: highlighting turns off above 750 lines (measured limit). The 5,000-line 
 
 ## License
 
-Licensed under [Apache-2.0](LICENSE).
+Licensed under the [Business Source License 1.1](LICENSE). Production use is allowed, including inside companies, as long as you do not sell cRustDB or a product or service built mainly on it. Each version converts to Apache-2.0 four years after its release. See [docs/license-evaluation.md](docs/license-evaluation.md).
