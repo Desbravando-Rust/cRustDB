@@ -89,7 +89,7 @@ mod tests {
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 
-    use crustdb_core::model::{Product, ServerVersion};
+    use crustdb_core::model::{DriverKind, Product, ServerVersion};
 
     use super::*;
     use crate::state::workspace::tests::state;
@@ -166,5 +166,13 @@ mod tests {
         h.run();
         drop(h);
         assert!(intents.contains(&Intent::SwitchWorkspace(ws)));
+    }
+
+    #[test]
+    fn engine_colors_differ() {
+        assert_ne!(
+            engine_color(DriverKind::Postgres),
+            engine_color(DriverKind::Mysql)
+        );
     }
 }
