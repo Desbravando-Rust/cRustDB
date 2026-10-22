@@ -4,6 +4,10 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #2
+
+Documenta em `deny.toml` a cadeia de dependências e o gatilho de revisão de cada aviso RUSTSEC ignorado (ttf-parser; zvariant/zbus_names/zvariant_derive). Só comentários, sem mudança de entradas.
+
 ## 2026-10-22 — #37
 
 Corrige falhas de pipeline: `deny` (feature `png` only no `image` do icons_generator, bumps de `rustls-webpki` e `webpki-roots`), skip de `keyring_roundtrip` em integration/coverage e testes `perf` retornam cedo em debug.
