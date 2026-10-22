@@ -5,7 +5,7 @@ Histórico de entregas concluídas via workflow autônomo.
 ---
 
 ## 2026-10-22 — #43
-Avaliação técnica da troca de Apache-2.0 para BSL 1.1 e alternativas (FSL, ELv2, PolyForm, AGPL-3.0, Commons Clause, dual license), com recomendação e riscos em `docs/license-evaluation.md`. Nenhuma licença alterada.
+Avaliação técnica da troca de Apache-2.0 para BSL 1.1 e alternativas (FSL, ELv2, PolyForm, AGPL-3.0, Commons Clause, dual license), com recomendação e riscos em `docs/license-evaluation.md`. Licença trocada para BSL 1.1 (`BUSL-1.1`): Licensor Desbravando-Rust, uso de produção livre exceto revenda, cada versão vira Apache-2.0 após 4 anos. ADR em `docs/adr/0001-licenca-bsl-1.1.md`.
 
 ## 2026-10-22 — #41
 
