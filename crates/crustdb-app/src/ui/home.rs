@@ -110,4 +110,22 @@ mod tests {
         );
         assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
     }
+
+    #[test]
+    fn double_click_connects() {
+        let s = state(&["alpha"]);
+        let id = s.config.connections[0].id;
+        let mut intents = vec![];
+        let mut h = Harness::builder()
+            .with_step_dt(0.05)
+            .build_ui(|ui| intents.extend(show(ui, &s)));
+        h.run();
+        h.get_by_label("alpha").click();
+        h.step();
+        h.get_by_label("alpha").click();
+        h.step();
+        h.run();
+        drop(h);
+        assert!(intents.contains(&Intent::Connect(id)));
+    }
 }
