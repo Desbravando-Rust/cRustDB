@@ -1,11 +1,17 @@
 [advisories]
 version = 2
-# Unmaintained notices for transitive eframe deps; revisit on eframe upgrades.
+# All four are "unmaintained" notices with no patched version (patched = []); each crate is
+# already on its latest published release, so there is nothing to bump.
 ignore = [
-    "RUSTSEC-2026-0192", # ttf-parser
-    "RUSTSEC-2026-0371", # zbus_names
-    "RUSTSEC-2026-0370", # zvariant
-    "RUSTSEC-2026-0372", # zvariant_derive
+    # ttf-parser: winit 0.30 -> sctk-adwaita 0.10 -> ab_glyph -> owned_ttf_parser -> ttf-parser.
+    # Revisit when eframe adopts winit 0.31 / sctk-adwaita >= 0.12.
+    "RUSTSEC-2026-0192",
+    # zbus_names, zvariant, zvariant_derive: folded into zbus 6. Pulled in by eframe
+    # (accesskit_unix/atspi) and by keyring (secret-service / zbus-secret-service-keyring-store).
+    # Revisit when both migrate to zbus 6.
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0372",
     # rsa (Marvin timing leak, no patch upstream) via russh's `rsa` feature. Accepted: it only
     # signs the SSH auth challenge with the user's own RSA key, in a desktop client with no retry
     # loop, so an observer needs many signatures from one session. Without it RSA-only users and
