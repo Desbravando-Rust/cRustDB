@@ -6,6 +6,11 @@ use crate::state::{AppState, Status};
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
+    ui.add(
+        egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
+            .max_height(96.0)
+            .alt_text("cRustDB logo"),
+    );
     ui.horizontal(|ui| {
         ui.heading("cRustDB");
         if ui.button(format!("{} New", icon::PLUS)).clicked() {

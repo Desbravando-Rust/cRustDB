@@ -66,6 +66,7 @@ impl CrustApp {
         history_dir: std::path::PathBuf,
     ) -> Self {
         ui::theme::install_theme(egui_ctx);
+        egui_extras::install_image_loaders(egui_ctx);
         if !secrets.available() {
             config.warning.get_or_insert_with(|| {
                 "OS keyring unavailable: passwords cannot be saved".to_owned()

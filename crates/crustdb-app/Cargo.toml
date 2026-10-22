@@ -15,8 +15,9 @@ crustdb-mysql = { version = "0.1.0", path = "../crustdb-mysql" }
 crustdb-postgres = { version = "0.1.0", path = "../crustdb-postgres" }
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui-phosphor = "0.14.0"
-egui_extras = "0.37.0"
+egui_extras = { version = "0.37.0", features = ["image"] }
 futures-util = "0.3.34"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 keyring = "4.2.0"
 rfd = "0.17.2"
 russh = { version = "0.64.1", default-features = false, features = ["aws-lc-rs", "flate2", "rsa"] }
