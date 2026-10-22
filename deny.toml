@@ -21,7 +21,7 @@ ignore = [
 
 [licenses]
 version = 2
-allow = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "MPL-2.0"]
+allow = ["Apache-2.0", "BUSL-1.1", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "MPL-2.0"]
 
 
 # Transitive eframe deps with licenses outside the global allow list.
