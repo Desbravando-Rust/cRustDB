@@ -7,6 +7,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml"><img src="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status: pre-alpha">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
   <img src="https://img.shields.io/badge/rust-1.99.1-b7410e?logo=rust" alt="Rust 1.99.1">
