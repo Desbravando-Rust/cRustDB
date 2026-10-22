@@ -88,4 +88,15 @@ mod tests {
         h.get_by_label("alpha");
         h.get_by_label("beta");
     }
+
+    #[test]
+    fn home_shows_logo() {
+        let s = state(&[]);
+        let mut h = Harness::new_ui(|ui| {
+            egui_extras::install_image_loaders(ui.ctx());
+            show(ui, &s);
+        });
+        h.run();
+        h.get_by_label("cRustDB logo");
+    }
 }
