@@ -159,6 +159,42 @@ mod tests {
     }
 
     #[test]
+    fn home_shows_book_promo() {
+        let s = state(&[]);
+        let mut h = Harness::new_ui(|ui| {
+            egui_extras::install_image_loaders(ui.ctx());
+            show(ui, &s);
+        });
+        h.run();
+        h.get_by_label(
+            "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+        );
+        h.get_by_label("Read a free chapter →");
+        h.get_by_label("Desbravando Rust book cover");
+        let poll = h.ctx.try_load_image(
+            "bytes://../../../../assets/imgs/book-cover.png",
+            egui::SizeHint::default(),
+        );
+        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
+    }
+
+    #[test]
+    fn book_promo_links_to_site() {
+        let s = state(&[]);
+        let mut h = Harness::new_ui(|ui| {
+            egui_extras::install_image_loaders(ui.ctx());
+            show(ui, &s);
+        });
+        h.run();
+        h.get_by_label("Read a free chapter →").click();
+        h.step();
+        let opened = h.output().platform_output.commands.iter().any(|c| {
+            matches!(c, egui::OutputCommand::OpenUrl(u) if u.url == "https://desbravandorust.com.br/")
+        });
+        assert!(opened);
+    }
+
+    #[test]
     fn double_click_connects() {
         let s = state(&["alpha"]);
         let id = s.config.connections[0].id;
