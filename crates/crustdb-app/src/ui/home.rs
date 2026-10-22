@@ -4,6 +4,8 @@ use egui_phosphor::regular as icon;
 use super::Intent;
 use crate::state::{AppState, Status};
 
+const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
+
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
     ui.add(
@@ -29,7 +31,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     }
     for c in &state.config.connections {
         let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
-        let connecting = ws.is_some_and(|w| w.status == Status::Connecting);
+        let live = state
+            .live_workspace(c.id)
+            .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
+        let connecting = live.is_some_and(|w| w.status == Status::Connecting);
         ui.horizontal(|ui| {
             let name = egui::RichText::new(&c.name).strong();
             if ui.selectable_label(false, name).double_clicked() && !connecting {
@@ -50,6 +55,13 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     .clicked()
                 {
                     out.push(Intent::EditConnection(c.id));
+                }
+                if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
+                    if ui.button("Open").clicked() {
+                        out.push(Intent::SwitchWorkspace(w.id));
+                    }
+                    ui.colored_label(ACTIVE, "Active");
+                    return;
                 }
                 let label = if connecting {
                     "Connecting..."
