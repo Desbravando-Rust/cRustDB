@@ -104,6 +104,10 @@ fn scroll_frames(h: &mut Harness<'_>, n: usize) -> Vec<Duration> {
 #[test]
 #[ignore = "perf"]
 fn startup_first_frame_under_300ms() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     if Command::new("xvfb-run").arg("--help").output().is_err() {
         println!("PERF startup: skipped, xvfb-run not installed");
         return;
@@ -144,6 +148,10 @@ fn startup_first_frame_under_300ms() {
 #[test]
 #[ignore = "perf"]
 fn decode_and_render_1000x20_under_20ms() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let cols = columns(20);
     let t = Instant::now();
     let data = rows(1000, 20);
@@ -166,6 +174,10 @@ fn decode_and_render_1000x20_under_20ms() {
 #[test]
 #[ignore = "perf"]
 fn scroll_100k_rows_frame_under_16ms() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let mut h = grid_harness(20, rows(100_000, 20));
     let frames = scroll_frames(&mut h, 120);
     let (mean, _) = summary("scroll 100k x 20", &frames);
@@ -175,6 +187,10 @@ fn scroll_100k_rows_frame_under_16ms() {
 #[test]
 #[ignore = "perf"]
 fn rss_100k_rows_under_200mb() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let before = rss_mb();
     let mut h = grid_harness(20, rows(100_000, 20));
     let _ = scroll_frames(&mut h, 10);
@@ -189,6 +205,10 @@ fn rss_100k_rows_under_200mb() {
 #[test]
 #[ignore = "perf"]
 fn export_100k_rows_per_second() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let cols = columns(20);
     let before = rss_mb();
     let t = Instant::now();
@@ -242,6 +262,10 @@ fn typing_mean_ms(lines: usize) -> f64 {
 #[test]
 #[ignore = "perf"]
 fn typing_700_lines_with_highlight_under_16ms() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let mean = typing_mean_ms(700);
     assert!(mean <= 16.0, "{mean:.2} ms");
 }
@@ -252,6 +276,10 @@ fn typing_700_lines_with_highlight_under_16ms() {
 #[test]
 #[ignore = "perf"]
 fn typing_5000_lines_stays_under_known_ceiling() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let mean = typing_mean_ms(5000);
     assert!(mean <= 100.0, "{mean:.2} ms");
 }
@@ -260,6 +288,10 @@ fn typing_5000_lines_stays_under_known_ceiling() {
 #[test]
 #[ignore = "perf"]
 fn wide_table_frame_time() {
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
     let mut h = grid_harness(250, rows(1000, 250));
     let frames = scroll_frames(&mut h, 30);
     summary("wide table 250 columns", &frames);
