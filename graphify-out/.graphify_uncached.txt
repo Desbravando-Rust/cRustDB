@@ -1,7 +1,0 @@
-/home/sronly/projects/desbravando-rust/crustdb/.claude/skills/gates/SKILL.md
-/home/sronly/projects/desbravando-rust/crustdb/.github/workflows/ci.yml
-/home/sronly/projects/desbravando-rust/crustdb/CLAUDE.md
-/home/sronly/projects/desbravando-rust/crustdb/README.md
-/home/sronly/projects/desbravando-rust/crustdb/docs/specs/2026-10-17-crustdb-plan.md
-/home/sronly/projects/desbravando-rust/crustdb/docs/specs/2026-10-17-crustdb-spec.md
-/home/sronly/projects/desbravando-rust/crustdb/docs/windows.md

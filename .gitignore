@@ -40,3 +40,7 @@ agentdb.rvf.lock
 scripts/
 # Local ICE prioritization (auto-dev)
 docs/ICE_PRIORITIZATION.md
+
+# Generated diagrams
+.archify/
+graphify-out/
