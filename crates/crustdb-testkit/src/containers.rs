@@ -250,6 +250,12 @@ pub async fn start_sshd(network: &str) -> SshContainer {
          && chown -R crustdb /config/.ssh && chmod 700 /config/.ssh && chmod 600 /config/.ssh/authorized_keys",
     )
     .await;
+    // The image forbids TCP forwarding by default; the tunnel tests need it.
+    exec_out(
+        &c,
+        "sed -i 's/^AllowTcpForwarding no/AllowTcpForwarding yes/' /config/sshd/sshd_config && kill -HUP $(pgrep -o sshd)",
+    )
+    .await;
     let key = exec_out(&c, "cat /tmp/id").await;
     let host_public_key = exec_out(&c, "cat /config/ssh_host_keys/ssh_host_ed25519_key.pub")
         .await
