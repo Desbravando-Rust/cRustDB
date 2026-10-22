@@ -101,7 +101,13 @@ mod tests {
             egui_extras::install_image_loaders(ui.ctx());
             show(ui, &s);
         });
+        // `run` waits for pending images, so the decode must be done by now.
         h.run();
         h.get_by_label("cRustDB logo");
+        let poll = h.ctx.try_load_image(
+            "bytes://../../../../assets/imgs/logo2.png",
+            egui::SizeHint::default(),
+        );
+        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
     }
 }
