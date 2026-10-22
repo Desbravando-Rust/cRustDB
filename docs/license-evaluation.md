@@ -27,7 +27,7 @@ Estrutura (parâmetros preenchidos pelo licenciante):
 - Licensed Work: o CrustDB, na versão indicada.
 - Additional Use Grant: uso de produção permitido além do que a BSL base permite. A BSL base proíbe uso em produção; o grant é o que libera o uso desejado.
 - Change Date: data em que cada versão passa à Change License. Máximo de 4 anos após a publicação daquela versão.
-- Change License: licença para a qual a versão converte. Precisa ser GPL-compatível ou a que o licenciante escolher entre as permitidas pela BSL; Apache-2.0 é a escolha comum.
+- Change License: licença para a qual a versão converte. Precisa ser GPL 2.0 ou posterior, ou uma licença compatível com ela. A Apache-2.0 se qualifica por ser compatível com a GPLv3.
 
 Rascunho de Additional Use Grant (a ser revisado por advogado, não é texto oficial):
 
@@ -49,8 +49,8 @@ Textos oficiais: fsl.software, polyformproject.org, elastic.co/licensing/elastic
 |---|---|---|---|---|
 | Apache-2.0 (atual) | Não | Sim | Já é open source | Não atende ao objetivo 2 |
 | BSL 1.1 + AUG + Apache-2.0 | Sim, conforme o grant | Sim, conforme o grant | Sim, até 4 anos | Grant é redigido por nós; ambiguidade é nossa |
-| FSL-1.1-Apache-2.0 | Sim (proíbe uso concorrente) | Sim (qualquer uso permitido exceto concorrente) | Sim, 2 anos após cada release | Texto padronizado, sem grant a redigir |
-| Elastic License 2.0 | Proíbe oferecer como serviço gerenciado | Sim | Não converte | Não cobre revenda de binário/produto empacotado de forma explícita; confirmar no texto |
+| FSL-1.1-ALv2 | Sim (proíbe uso concorrente) | Sim (qualquer uso permitido exceto concorrente) | Sim, 2 anos após cada release | Texto padronizado, sem grant a redigir |
+| Elastic License 2.0 | Não impede a revenda do binário; limita serviço gerenciado, contornar license keys e remover avisos | Sim | Não converte | Não atende ao objetivo 2 |
 | PolyForm Noncommercial | Sim, mas proíbe todo uso comercial | Não (bloqueia empresas) | Não | Fere o objetivo 3 |
 | PolyForm Shield | Sim (proíbe competir com o produto) | Sim | Não | Parecida com FSL, sem conversão |
 | PolyForm Small Business | Limita por porte da empresa | Só pequenas empresas sem licença paga | Não | Fere o objetivo 3 para empresas maiores |
@@ -64,10 +64,10 @@ Leitura contra os objetivos: FSL e BSL atendem 1, 2 e 3 e convertem para Apache-
 
 - Rótulo open source: a OSI não reconhece BSL, FSL, Elastic, PolyForm nem Commons Clause como open source. O termo correto é "source-available". O README e o site não devem chamar o projeto de open source depois da troca.
 - Não retroativo: versões já publicadas sob Apache-2.0 continuam Apache-2.0 para quem as obteve. A nova licença vale apenas para releases posteriores.
-- Contribuições externas: para manter o direito de licenciar, é preciso CLA (ou DCO com cessão equivalente) antes de aceitar PRs. Isso reduz a participação da comunidade.
-- crates.io: licenças fora da lista SPDX aceita como expressão exigem `license-file` em vez de `license`. BSL-1.1 e FSL têm identificadores SPDX (`BUSL-1.1`, `FSL-1.1-Apache-2.0`); confirmar no momento da troca qual campo usar.
+- Contribuições externas: para manter o direito de relicenciar ou fazer dual license, é preciso CLA ou cessão de copyright antes de aceitar PRs. O DCO não cede direitos de relicenciamento; só basta em inbound=outbound sem relicenciamento futuro. Isso reduz a participação da comunidade.
+- crates.io: licenças fora da lista SPDX aceita como expressão exigem `license-file` em vez de `license`. BSL-1.1 e FSL têm identificadores SPDX (`BUSL-1.1`, `FSL-1.1-ALv2`; há também a variante `FSL-1.1-MIT`); confirmar no momento da troca qual campo usar.
 - Dependentes: projetos que dependem do CrustDB via `cargo-deny` precisam de exceção na sua `allow`. Isso só se aplica a bibliotecas; o app é um binário final.
-- `deny.toml` do projeto: não muda. Ele avalia as licenças das dependências, não a do próprio projeto.
+- `deny.toml` do projeto: precisa mudar. O `cargo deny check` também verifica a licença dos crates do workspace, e o arquivo não tem `[licenses.private] ignore = true`. Sem ajuste, a troca quebra o gate: é preciso adicionar `[licenses.private] ignore = true` ou a nova licença em `allow`.
 - Distribuições Linux: Debian, Fedora e similares não empacotam software fora de suas políticas de licença livre, o que limita a distribuição por repositórios oficiais.
 - Adoção: algumas empresas barram licenças source-available por política interna; espere perda de usuários e contribuidores.
 - Atividade-fim: o limite entre "usar" e "ter como atividade-fim" é subjetivo e caro de fazer valer na prática. Um grant mais estreito (FSL: "uso concorrente") reduz a ambiguidade.
@@ -79,7 +79,7 @@ Nenhum impedimento. O arquivo `.github/funding.yml` (`github: Desbravando-Rust`,
 
 ## 7. Recomendação
 
-FSL-1.1-Apache-2.0.
+FSL-1.1-ALv2.
 
 Justificativa: atende aos três objetivos com texto padronizado e revisado por terceiros, sem precisar redigir um Additional Use Grant próprio (a parte mais frágil da BSL). Converte para Apache-2.0 em 2 anos por release. A BSL 1.1 com AUG e Change License Apache-2.0 é equivalente em efeito e preferível só se for necessário um prazo de conversão de até 4 anos ou um grant sob medida.
 
@@ -95,5 +95,6 @@ Se o rótulo OSI for inegociável: AGPL-3.0 com dual license comercial. Nesse ca
 - [ ] Substituir `LICENSE` e registrar a data/versão de corte (releases anteriores seguem Apache-2.0).
 - [ ] Ajustar `Cargo.toml` (`license` ou `license-file`) conforme a decisão sobre o crates.io.
 - [ ] Atualizar `README.md` (badge e seção de licença; remover "open source" se for source-available).
-- [ ] Definir CLA/DCO antes de aceitar contribuições externas.
+- [ ] Definir CLA ou cessão de copyright (DCO não basta para relicenciar) antes de aceitar contribuições externas.
+- [ ] Ajustar `deny.toml`: `[licenses.private] ignore = true` ou a nova licença em `allow`, para o gate `cargo deny check` continuar passando.
 - [ ] Entrada no `CHANGELOG.md`.
