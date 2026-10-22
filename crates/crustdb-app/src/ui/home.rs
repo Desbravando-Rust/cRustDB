@@ -1,3 +1,4 @@
+use crustdb_core::model::DriverKind;
 use eframe::egui;
 use egui_phosphor::regular as icon;
 
@@ -5,6 +6,22 @@ use super::Intent;
 use crate::state::{AppState, Status};
 
 const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
+const POSTGRES_BLUE: egui::Color32 = egui::Color32::from_rgb(80, 140, 210);
+const MYSQL_ORANGE: egui::Color32 = egui::Color32::from_rgb(230, 140, 40);
+
+fn engine_color(kind: DriverKind) -> egui::Color32 {
+    match kind {
+        DriverKind::Postgres => POSTGRES_BLUE,
+        DriverKind::Mysql => MYSQL_ORANGE,
+    }
+}
+
+fn engine_name(kind: DriverKind) -> &'static str {
+    match kind {
+        DriverKind::Postgres => "PostgreSQL",
+        DriverKind::Mysql => "MySQL",
+    }
+}
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
@@ -36,6 +53,8 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
         let connecting = live.is_some_and(|w| w.status == Status::Connecting);
         ui.horizontal(|ui| {
+            let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
+            ui.label(engine).on_hover_text(engine_name(c.driver));
             let name = egui::RichText::new(&c.name).strong();
             if ui.selectable_label(false, name).double_clicked() && !connecting {
                 out.push(Intent::Connect(c.id));
@@ -89,7 +108,7 @@ mod tests {
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 
-    use crustdb_core::model::{DriverKind, Product, ServerVersion};
+    use crustdb_core::model::{Product, ServerVersion};
 
     use super::*;
     use crate::state::workspace::tests::state;
