@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml"><img src="https://github.com/Desbravando-Rust/cRustDB/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://codecov.io/gh/Desbravando-Rust/cRustDB"><img src="https://codecov.io/gh/Desbravando-Rust/cRustDB/branch/main/graph/badge.svg" alt="coverage"></a>
   <img src="https://img.shields.io/badge/status-pre--alpha-orange" alt="Status: pre-alpha">
   <img src="https://img.shields.io/badge/license-BUSL--1.1-blue" alt="License: BUSL-1.1">
   <img src="https://img.shields.io/badge/rust-1.99.1-b7410e?logo=rust" alt="Rust 1.99.1">
