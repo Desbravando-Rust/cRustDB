@@ -14,6 +14,7 @@ use crate::storage::config::ConnectionConfig;
 
 mod data;
 mod editor;
+pub(crate) use editor::{LOST, STALE_EVALUATION};
 mod export;
 mod workspace;
 
@@ -116,15 +117,15 @@ impl Actors {
                     None => Some(Command::Disconnect { ws }),
                 }
             }
-            Command::HostKeyDecision { ws, .. } | Command::LoadChildren { ws, .. } => {
-                match self.ws.get(&ws) {
-                    Some(e) => {
-                        let _ = e.tx.send(WsMsg::Cmd(cmd));
-                        None
-                    }
-                    None => Some(cmd),
+            Command::HostKeyDecision { ws, .. }
+            | Command::LoadChildren { ws, .. }
+            | Command::LoadColumns { ws, .. } => match self.ws.get(&ws) {
+                Some(e) => {
+                    let _ = e.tx.send(WsMsg::Cmd(cmd));
+                    None
                 }
-            }
+                None => Some(cmd),
+            },
             Command::OpenTable { ws, tab, object } => {
                 match self.ws.get(&ws).map(|e| e.shared.clone()) {
                     Some(shared) => self.open_table(ws, tab, object, shared),

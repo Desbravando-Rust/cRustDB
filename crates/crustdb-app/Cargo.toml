@@ -11,24 +11,31 @@ workspace = true
 [dependencies]
 anyhow = "1.0.104"
 crustdb-core = { version = "0.1.0", path = "../crustdb-core" }
-eframe = "0.37.0"
+crustdb-mysql = { version = "0.1.0", path = "../crustdb-mysql" }
+crustdb-postgres = { version = "0.1.0", path = "../crustdb-postgres" }
+eframe = { version = "0.37.0", features = ["persistence"] }
+egui-phosphor = "0.14.0"
+egui_extras = "0.37.0"
 futures-util = "0.3.34"
 keyring = "4.2.0"
+rfd = "0.17.2"
 russh = { version = "0.64.1", default-features = false, features = ["aws-lc-rs", "flate2"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 tokio = { version = "1.53.3", features = ["rt", "net", "time", "io-util", "rt-multi-thread", "sync"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = { version = "1.28.0", features = ["v4"] }
+zeroize = "1.9.1"
 
 [[bin]]
 name = "crustdb"
 path = "src/main.rs"
 
 [dev-dependencies]
-crustdb-postgres = { path = "../crustdb-postgres" }
-crustdb-mysql = { path = "../crustdb-mysql" }
 crustdb-testkit = { path = "../crustdb-testkit" }
+egui_kittest = "0.37.0"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-util"] }
-uuid = "1.28.0"

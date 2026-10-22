@@ -165,9 +165,11 @@ fn no_actor(cmd: &Command) -> Event {
                 error: "workspace actor not available".into(),
             };
         }
-        Disconnect { .. } | HostKeyDecision { .. } | LoadChildren { .. } | CancelExport { .. } => {
-            TabId(0)
-        }
+        Disconnect { .. }
+        | HostKeyDecision { .. }
+        | LoadChildren { .. }
+        | LoadColumns { .. }
+        | CancelExport { .. } => TabId(0),
     };
     Event::Notice {
         tab,

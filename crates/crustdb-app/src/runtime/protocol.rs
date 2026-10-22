@@ -67,6 +67,12 @@ pub enum Command {
         schema: Option<String>,
         kind: Option<ObjectKind>,
     },
+    /// Column names of `object` for autocomplete, answered by `Event::Columns`.
+    LoadColumns {
+        ws: WorkspaceId,
+        req: RequestId,
+        object: ObjectRef,
+    },
     OpenTable {
         ws: WorkspaceId,
         tab: TabId,
@@ -149,6 +155,11 @@ pub enum Event {
         ws: WorkspaceId,
         host: String,
         fingerprint: String,
+    },
+    /// `None` when the lookup failed (so the caller may ask again).
+    Columns {
+        req: RequestId,
+        columns: Option<Vec<String>>,
     },
     Children {
         req: RequestId,

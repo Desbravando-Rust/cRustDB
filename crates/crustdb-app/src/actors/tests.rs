@@ -420,3 +420,43 @@ async fn load_children_failure_still_answers_with_empty_children() {
             .any(|e| matches!(e, Event::Children { req: RequestId(5), items } if items.is_empty()))
     );
 }
+
+#[tokio::test]
+async fn load_columns_uses_the_metadata_session_only() {
+    let mut h = harness(FakeScript::default());
+    connect(&mut h, Some("a")).await;
+    let mut object = object();
+    object.database = "a".into();
+    h.actors.dispatch(Command::LoadColumns {
+        ws: WS,
+        req: RequestId(7),
+        object,
+    });
+    let Event::Columns { req, columns } = next(&h.rx).await else {
+        panic!("expected Columns");
+    };
+    assert_eq!(req, RequestId(7));
+    assert_eq!(columns, Some(vec![]));
+    assert_eq!(connects(&h), [(SessionPurpose::Metadata, Some("a".into()))]);
+}
+
+#[tokio::test]
+async fn load_columns_failure_answers_none() {
+    let mut h = harness(FakeScript::default());
+    connect(&mut h, Some("a")).await;
+    h.drv.log.fail_connects.store(1, Ordering::SeqCst);
+    let mut object = object();
+    object.database = "other".into();
+    h.actors.dispatch(Command::LoadColumns {
+        ws: WS,
+        req: RequestId(8),
+        object,
+    });
+    assert!(matches!(
+        next(&h.rx).await,
+        Event::Columns {
+            req: RequestId(8),
+            columns: None
+        }
+    ));
+}

@@ -132,6 +132,9 @@ impl WorkspaceActor {
                 kind,
                 ..
             }) => self.load_children(req, database, schema, kind).await,
+            WsMsg::Cmd(Command::LoadColumns { req, object, .. }) => {
+                self.load_columns(req, object).await
+            }
             WsMsg::Cmd(_) | WsMsg::Disconnect => {}
             WsMsg::AskHostKey(tx) => self.decision = Some(tx),
             WsMsg::Connected(Ok(ready)) => self.on_connected(ready),
@@ -259,6 +262,35 @@ impl WorkspaceActor {
         sh.driver.connect(&target, SessionPurpose::Metadata).await
     }
 
+    async fn ensure_metadata(&mut self, key: &str) -> Result<(), DriverError> {
+        if !self.sessions.contains_key(key) {
+            let s = self.open_metadata(key).await?;
+            self.sessions.insert(key.to_string(), s);
+        }
+        Ok(())
+    }
+
+    /// Column names for autocomplete, from the Metadata session (no data connection).
+    async fn load_columns(&mut self, req: RequestId, object: ObjectRef) {
+        let r = async {
+            let sh = self.shared.clone().ok_or_else(not_connected)?;
+            let key = if sh.driver.kind() == DriverKind::Postgres {
+                object.database.clone()
+            } else {
+                self.home.clone()
+            };
+            self.ensure_metadata(&key).await?;
+            let s = self.sessions.get_mut(&key).ok_or_else(not_connected)?;
+            sh.driver.introspector().columns(s.as_mut(), &object).await
+        }
+        .await;
+        let columns = r
+            .map(|c| c.into_iter().map(|c| c.meta.name).collect())
+            .inspect_err(|e| tracing::warn!("column lookup failed: {}", e.message))
+            .ok();
+        self.out.emit(Event::Columns { req, columns });
+    }
+
     async fn load_children(
         &mut self,
         req: RequestId,
@@ -299,13 +331,9 @@ impl WorkspaceActor {
             } else {
                 self.home.clone()
             };
-        if !self.sessions.contains_key(&key) {
-            let s = self
-                .open_metadata(&key)
-                .await
-                .map_err(|e| (key.clone(), e))?;
-            self.sessions.insert(key.clone(), s);
-        }
+        self.ensure_metadata(&key)
+            .await
+            .map_err(|e| (key.clone(), e))?;
         let Some(s) = self.sessions.get_mut(&key) else {
             return Err((key, not_connected()));
         };
