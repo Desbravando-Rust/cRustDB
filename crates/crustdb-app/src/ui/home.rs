@@ -101,21 +101,23 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }
     }
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.add(
-            egui::Image::new(egui::include_image!(
-                "../../../../assets/imgs/book-cover.png"
-            ))
-            .max_height(48.0)
-            .alt_text("Desbravando Rust book cover"),
-        );
-        ui.vertical(|ui| {
-            ui.weak(
-                "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+    ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::Image::new(egui::include_image!(
+                    "../../../../assets/imgs/book-cover.png"
+                ))
+                .max_height(48.0)
+                .alt_text("Desbravando Rust book cover"),
             );
-            ui.hyperlink_to("Read a free chapter →", BOOK_URL);
+            ui.vertical(|ui| {
+                ui.weak(
+                    "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+                );
+                ui.hyperlink_to("Read a free chapter →", BOOK_URL);
+            });
         });
+        ui.separator();
     });
     out
 }
