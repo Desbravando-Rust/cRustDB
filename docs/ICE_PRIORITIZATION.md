@@ -4,6 +4,7 @@ Coluna **Ordem** define a execução (não o ICE). Linha sem Ordem não é imple
 
 | Ordem | ID | Título | I | C | F | ICE | Tipo | Status |
 |---|---|---|---|---|---|---|---|---|
+|  | 43 | Avalie a mudança do Licence para Business Source License (BSL 1.1) | 6 | 7 | 8 | 336 | feat | Done |
 |  | 41 | Melhorar a eficiência da pipeline | 6 | 7 | 6 | 252 | feat | Done |
 |  | 36 | Corrigir formatação de tools/icons_generator | 3 | 10 | 10 | 300 | fix | Done |
 |  | 37 | Corrigir todos os pipelines que falham no PR | 7 | 6 | 6 | 252 | fix | Done |
