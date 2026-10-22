@@ -67,7 +67,7 @@ Leitura contra os objetivos: FSL e BSL atendem 1, 2 e 3 e convertem para Apache-
 - Contribuições externas: para manter o direito de relicenciar ou fazer dual license, é preciso CLA ou cessão de copyright antes de aceitar PRs. O DCO não cede direitos de relicenciamento; só basta em inbound=outbound sem relicenciamento futuro. Isso reduz a participação da comunidade.
 - crates.io: licenças fora da lista SPDX aceita como expressão exigem `license-file` em vez de `license`. BSL-1.1 e FSL têm identificadores SPDX (`BUSL-1.1`, `FSL-1.1-ALv2`; há também a variante `FSL-1.1-MIT`); confirmar no momento da troca qual campo usar.
 - Dependentes: projetos que dependem do CrustDB via `cargo-deny` precisam de exceção na sua `allow`. Isso só se aplica a bibliotecas; o app é um binário final.
-- `deny.toml` do projeto: precisa mudar. O `cargo deny check` também verifica a licença dos crates do workspace, e o arquivo não tem `[licenses.private] ignore = true`. Sem ajuste, a troca quebra o gate: é preciso adicionar `[licenses.private] ignore = true` ou a nova licença em `allow`.
+- `deny.toml` do projeto: precisa mudar. O `cargo deny check` também verifica a licença dos crates do workspace. Core, postgres, mysql e app são publicáveis, então `[licenses.private] ignore = true` não os cobre (só ignora crates com `publish = false` ou de registry privado). Solução: incluir a nova licença em `allow` ou usar `[[licenses.exceptions]]` por crate do workspace. `private.ignore` só serve se os crates passarem a `publish = false`.
 - Distribuições Linux: Debian, Fedora e similares não empacotam software fora de suas políticas de licença livre, o que limita a distribuição por repositórios oficiais.
 - Adoção: algumas empresas barram licenças source-available por política interna; espere perda de usuários e contribuidores.
 - Atividade-fim: o limite entre "usar" e "ter como atividade-fim" é subjetivo e caro de fazer valer na prática. Um grant mais estreito (FSL: "uso concorrente") reduz a ambiguidade.
@@ -96,5 +96,5 @@ Se o rótulo OSI for inegociável: AGPL-3.0 com dual license comercial. Nesse ca
 - [ ] Ajustar `Cargo.toml` (`license` ou `license-file`) conforme a decisão sobre o crates.io.
 - [ ] Atualizar `README.md` (badge e seção de licença; remover "open source" se for source-available).
 - [ ] Definir CLA ou cessão de copyright (DCO não basta para relicenciar) antes de aceitar contribuições externas.
-- [ ] Ajustar `deny.toml`: `[licenses.private] ignore = true` ou a nova licença em `allow`, para o gate `cargo deny check` continuar passando.
+- [ ] Ajustar `deny.toml`: incluir a nova licença em `allow` (ou `[[licenses.exceptions]]` por crate do workspace) para o gate `cargo deny check` continuar passando.
 - [ ] Entrada no `CHANGELOG.md`.
