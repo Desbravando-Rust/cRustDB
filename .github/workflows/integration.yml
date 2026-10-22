@@ -1,0 +1,41 @@
+name: integration
+# Manual only: the image matrix pulls many containers and is slow/flaky on registry
+# hiccups, so it stays off push/PR. Trigger it from Actions > integration > Run workflow
+# (any branch), or by adding the `run_integration_tests` label to a PR.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  integration:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run_integration_tests'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # postgres:latest + mysql:8.4 (the default images) is covered by the coverage job.
+        include:
+          - { pg: "postgres:12", mysql: "mysql:8.4" }
+          - { pg: "postgres:latest", mysql: "mysql:5.6" }
+          - { pg: "postgres:latest", mysql: "mysql:5.7" }
+          - { pg: "postgres:latest", mysql: "mariadb:10.0" }
+          - { pg: "postgres:latest", mysql: "mariadb:latest" }
+    env:
+      CRUSTDB_PG_IMAGE: ${{ matrix.pg }}
+      CRUSTDB_MYSQL_IMAGE: ${{ matrix.mysql }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+      - name: Pre-pull test images (retry transient registry errors)
+        run: |
+          for img in "${CRUSTDB_PG_IMAGE:-postgres:latest}" "${CRUSTDB_MYSQL_IMAGE:-mysql:8.4}" linuxserver/openssh-server:latest; do
+            for i in 1 2 3 4 5; do docker pull -q "$img" && break; [ "$i" = 5 ] && exit 1; sleep $((i * 10)); done
+          done
+      - run: cargo test --workspace -- --include-ignored --skip keyring_roundtrip
