@@ -28,3 +28,13 @@ rustc-ice-*.txt
 .claude-flow/
 .swarm/
 ruvector.db
+
+# AgendDB
+agentdb.rvf
+agentdb.rvf.lock
+
+# AI Workflow
+.claude/CLAUDE.md
+.claude/agents/
+.claude/commands/
+scripts/

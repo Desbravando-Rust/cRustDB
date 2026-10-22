@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="imgs/logo-transparent.png" alt="CrustDB" width="240">
+  <img src="assets/imgs/logo.svg" alt="CrustDB" width="360">
 </p>
 
 <p align="center">
@@ -24,14 +24,14 @@
 
 ## What it is
 
-CrustDB browses data in a **read-only grid** and runs **raw SQL** with guards against accidental writes. It is fast, small and keeps your secrets off disk. No data editing, diagrams, import, backup or AI: v1 does a few things and does them well.
+**cRustDB** browses data in a **read-only grid** and runs **raw SQL** with guards against accidental writes. It is fast, small and keeps your secrets off disk. No data editing, diagrams, import, backup or AI: v1 does a few things and does them well.
 
 ## Features
 
 - **Connections**: saved connections, import from `postgres://`, `postgresql://`, `mysql://`, `mariadb://` URLs, several connections open at once in one window.
 - **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade.
 - **SSH tunnel** via `russh`: password, key file (+ passphrase) or agent, strict `known_hosts`.
-- **Secrets** in the system keyring (Secret Service). Without one, CrustDB asks every time and never writes passwords to disk.
+- **Secrets** in the system keyring (Secret Service). Without one, **cRustDB** asks every time and never writes passwords to disk.
 - **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily.
 - **Table tab**: virtualized grid, `LIMIT/OFFSET` pagination, multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
 - **SQL editor**: highlighting, autocomplete, run statement under cursor / selection / all, cancel, "Load more" from a server-side cursor, history, open/save `.sql` files.
