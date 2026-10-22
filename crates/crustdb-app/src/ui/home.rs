@@ -77,6 +77,8 @@ mod tests {
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 
+    use crustdb_core::model::{Product, ServerVersion};
+
     use super::*;
     use crate::state::workspace::tests::state;
 
@@ -130,5 +132,27 @@ mod tests {
         h.run();
         drop(h);
         assert!(intents.contains(&Intent::Connect(id)));
+    }
+
+    #[test]
+    fn live_connection_shows_open_instead_of_connect() {
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].status = Status::Online(ServerVersion {
+            product: Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        });
+        let mut intents = vec![];
+        let mut h = Harness::new_ui(|ui| intents.extend(show(ui, &s)));
+        h.run();
+        h.get_by_label("Active");
+        assert!(h.query_by_label("Connect").is_none());
+        h.get_by_label("Open").click();
+        h.run();
+        drop(h);
+        assert!(intents.contains(&Intent::SwitchWorkspace(ws)));
     }
 }
