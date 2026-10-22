@@ -31,7 +31,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
         let connecting = ws.is_some_and(|w| w.status == Status::Connecting);
         ui.horizontal(|ui| {
-            ui.strong(&c.name);
+            let name = egui::RichText::new(&c.name).strong();
+            if ui.selectable_label(false, name).double_clicked() && !connecting {
+                out.push(Intent::Connect(c.id));
+            }
             ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
