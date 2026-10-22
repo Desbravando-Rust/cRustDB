@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #35
+Tela de conexão: duplo clique conecta na conexão salva, ícone colorido por engine (PostgreSQL/MySQL) e conexão online mostra "Active" com botão "Open" que reusa o workspace vivo em vez de abrir outro.
+
 ## 2026-10-22 — #32
 Logo do cRustDB (`assets/imgs/logo2.png`) no topo da tela de conexão, via `include_image!` com altura máxima de 96px.
 
