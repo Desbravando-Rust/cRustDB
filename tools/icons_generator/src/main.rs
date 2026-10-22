@@ -1,5 +1,5 @@
-use image::imageops::FilterType;
 use ico_builder::IcoBuilder;
+use image::imageops::FilterType;
 use std::fs;
 use std::path::Path;
 
@@ -8,7 +8,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input_path = "./assets/icons/original.png";
 
     if !Path::new(input_path).exists() {
-        println!("❌ Error: The file '{}' was not found in the project root.", input_path);
+        println!(
+            "❌ Error: The file '{}' was not found in the project root.",
+            input_path
+        );
         println!("Please place a 1024x1024 PNG in the repository root with this name.");
         return Ok(());
     }
@@ -37,13 +40,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // -------------------------------------------------------------
     println!("📦 Generating 'icon.ico' file for Windows...");
     fs::create_dir_all(windows_folder)?;
-    
+
     let windows_sizes = vec![16, 24, 32, 48, 256];
     let mut builder = IcoBuilder::default();
-    
+
     for size in &windows_sizes {
         let temp_path = format!("{}/temp_{}.png", windows_folder, size);
-        img.resize_exact(*size, *size, FilterType::Lanczos3).save(&temp_path)?;
+        img.resize_exact(*size, *size, FilterType::Lanczos3)
+            .save(&temp_path)?;
         builder.add_source_file(&temp_path);
     }
 
