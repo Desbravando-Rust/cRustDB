@@ -1,4 +1,4 @@
-# Technical Spec: CrustDB v1
+# Technical Spec: cRustDB v1
 
 Client desktop Linux para MySQL/MariaDB e PostgreSQL, escrito em Rust. Escopo v1: explorar dados em grid **somente leitura** e executar **SQL raw** com proteções contra escrita acidental. Sem features avançadas (edição de dados, diagramas, import, backup, IA).
 
@@ -205,7 +205,7 @@ Da esquerda para a direita: estado da conexão (cor) + nome + versão do servido
 ### 4.11 Layout (wireframe)
 
 ```
-┌ CrustDB ──────────────────────────────────────────────────────────────────┐
+┌ cRustDB ──────────────────────────────────────────────────────────────────┐
 │ [prod-pg ▾][+] │ users × │ Query 1 • × │ orders × │                        │
 │ 🔍 filter      │ [Data|Structure|DDL]                                       │
 │ ▾ app_db       │ ┌ column ▾ ┐┌ op ▾ ┐┌ value ┐ [×]  [+] [Apply] [Clear]      │
