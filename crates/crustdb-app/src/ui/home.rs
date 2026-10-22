@@ -85,6 +85,9 @@ mod tests {
             // Fonts apply on the pass after `set_fonts`; skip drawing until then.
             if !std::mem::replace(&mut fonts_ready, true) {
                 crate::ui::theme::install_theme(ui.ctx());
+                // Without loaders the logo renders egui's "⚠️" error glyph,
+                // which the themed fonts cannot draw.
+                egui_extras::install_image_loaders(ui.ctx());
                 return;
             }
             show(ui, &s);
