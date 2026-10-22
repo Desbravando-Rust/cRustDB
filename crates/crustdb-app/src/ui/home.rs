@@ -23,6 +23,8 @@ fn engine_name(kind: DriverKind) -> &'static str {
     }
 }
 
+const BOOK_URL: &str = "https://desbravandorust.com.br/";
+
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
     ui.add(
@@ -99,6 +101,22 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }
     }
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::Image::new(egui::include_image!(
+                "../../../../assets/imgs/book-cover.png"
+            ))
+            .max_height(48.0)
+            .alt_text("Desbravando Rust book cover"),
+        );
+        ui.vertical(|ui| {
+            ui.weak(
+                "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+            );
+            ui.hyperlink_to("Read a free chapter →", BOOK_URL);
+        });
+    });
     out
 }
 
