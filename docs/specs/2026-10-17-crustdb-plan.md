@@ -1,8 +1,8 @@
-# CrustDB v1 Implementation Plan
+# cRustDB v1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir o CrustDB v1: client desktop Linux (egui) para PostgreSQL e MySQL/MariaDB, com grid somente leitura, editor SQL raw e política de segurança contra escrita acidental.
+**Goal:** Construir o cRustDB v1: client desktop Linux (egui) para PostgreSQL e MySQL/MariaDB, com grid somente leitura, editor SQL raw e política de segurança contra escrita acidental.
 
 **Architecture:** Workspace Cargo com `crustdb-core` (domínio puro, sem IO), `crustdb-postgres` e `crustdb-mysql` (implementam os traits do core) e `crustdb-app` (UI egui + runtime tokio com atores de sessão + storage). A UI nunca bloqueia: envia `Command` e recebe `Event` por canais. Tudo que o banco devolve trafega como texto, mais metadado de tipo.
 
@@ -51,11 +51,11 @@
 - Create: `crates/crustdb-app/Cargo.toml`, `crates/crustdb-app/src/main.rs`
 
 **Interfaces:**
-- Produces: workspace compilável; binário `crustdb` que abre uma janela vazia com o título `CrustDB`.
+- Produces: workspace compilável; binário `crustdb` que abre uma janela vazia com o título `cRustDB`.
 
 - [ ] **Step 1:** `git checkout -b feat/m0-foundation`. Rodar `rustup update stable && rustc --version` e fixar essa versão exata em `rust-toolchain.toml` (`components = ["rustfmt", "clippy", "llvm-tools-preview"]`).
 - [ ] **Step 2:** Criar o `Cargo.toml` raiz: `members = ["crates/*"]`, `resolver = "3"`, `[workspace.package]` (`edition = "2024"`, `license = "Apache-2.0"`, `rust-version` = versão fixada), `[workspace.lints.rust] unsafe_code = "forbid"`, `[workspace.lints.clippy] unwrap_used = "deny"`, `expect_used = "deny"`, `[profile.release] lto = "thin"`, `codegen-units = 1`, `strip = "symbols"`. Cada crate usa `lints.workspace = true`. Adicionar dependências com `cargo add` (versão mais recente compatível; não digitar versões de memória).
-- [ ] **Step 3:** No `main.rs`, `eframe::run_native("CrustDB", …)` com `ViewportBuilder` de título `CrustDB` e `egui::Visuals::dark()`. Testes de módulo usam `#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]`.
+- [ ] **Step 3:** No `main.rs`, `eframe::run_native("cRustDB", …)` com `ViewportBuilder` de título `cRustDB` e `egui::Visuals::dark()`. Testes de módulo usam `#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]`.
 - [ ] **Step 4:** `deny.toml`: advisories deny, licenças permitidas `Apache-2.0`, `MIT`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Unicode-3.0`, `Zlib`, `MPL-2.0` (só via dependência). CI (`ci.yml`): jobs `fmt`, `clippy`, `test`, `deny`, `coverage` (stub até a Task 35) e `integration` (matriz de imagens; stub até a Task 10).
 - [ ] **Step 5:** Verificar: `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo deny check && cargo build --release`. Esperado: tudo verde. `cargo run -p crustdb-app` abre a janela escura.
 - [ ] **Step 6:** Pedir aprovação e commitar `chore: scaffold workspace, toolchain and CI gates`.
