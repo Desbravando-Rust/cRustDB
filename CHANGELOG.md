@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #32
+Logo do cRustDB (`assets/imgs/logo2.png`) no topo da tela de conexão, via `include_image!` com altura máxima de 96px.
+
 ## 2026-10-22 — #45
 fmt, clippy e deny rodam em paralelo; test depende dos três e usa `cargo nextest run --workspace --fail-fast`, parando no primeiro teste quebrado. Job coverage envia `lcov.info` ao Codecov (`codecov-action@v5`, secret `CODECOV_TOKEN`) e o README ganha badge de coverage.
 
