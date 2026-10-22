@@ -15,6 +15,8 @@ use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
 
 /// Above this the editor skips highlighting (D40).
 pub const HIGHLIGHT_MAX_BYTES: usize = 1 << 20;
+/// Measured (perf.rs, release): typing stays under 16 ms up to ~750 lines with highlighting on.
+pub const HIGHLIGHT_MAX_LINES: usize = 750;
 
 #[derive(Debug)]
 pub struct QueryTab {
@@ -295,6 +297,7 @@ impl QueryTab {
 
 pub fn highlight_enabled(text: &str) -> bool {
     text.len() <= HIGHLIGHT_MAX_BYTES
+        && text.bytes().filter(|b| *b == b'\n').count() < HIGHLIGHT_MAX_LINES
 }
 
 /// Byte offset of the `char_idx`-th char, clamped to the text length.

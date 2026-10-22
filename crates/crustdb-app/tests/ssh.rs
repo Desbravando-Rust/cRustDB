@@ -188,6 +188,35 @@ async fn ssh_tunnel_with_key_password_agent() {
     );
 }
 
+#[tokio::test]
+#[ignore = "docker"]
+async fn ssh_tunnel_with_rsa_user_key_and_rsa_host_key() {
+    let net = network("rsa");
+    let ssh = start_sshd(&net).await;
+    let dir = tempfile::tempdir().unwrap();
+    let k = known(dir.path());
+    // known_hosts holds only the RSA host key, so the client must offer and verify RSA.
+    k.add(
+        &ssh.host,
+        ssh.port,
+        &ssh.host_rsa_public_key.parse().unwrap(),
+    )
+    .unwrap();
+    let auth = SshAuth::Key {
+        key_path: ssh.rsa_client_key_path.clone(),
+    };
+    open(
+        &ssh,
+        auth,
+        SshSecrets::default(),
+        "127.0.0.1",
+        &k,
+        answer(false),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("rsa: {e}"));
+}
+
 /// Runs inside the child process of `ssh_tunnel_with_key_password_agent`; no-op otherwise.
 #[tokio::test]
 #[ignore = "child of ssh_tunnel_with_key_password_agent"]

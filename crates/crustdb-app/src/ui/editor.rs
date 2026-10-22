@@ -172,7 +172,7 @@ pub fn show(
     let driver = tab.driver;
     let cursor = sel.end;
     if !highlight_enabled(&tab.text) {
-        ui.weak("Highlighting disabled above 1 MiB");
+        ui.weak("Highlighting disabled for large files (1 MiB or 750 lines)");
     }
     let lines = tab.text.split('\n').count();
     let err_line = tab.error_marker.as_ref().map(|(l, _)| *l);

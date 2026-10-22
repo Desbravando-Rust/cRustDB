@@ -6,6 +6,11 @@ ignore = [
     "RUSTSEC-2026-0371", # zbus_names
     "RUSTSEC-2026-0370", # zvariant
     "RUSTSEC-2026-0372", # zvariant_derive
+    # rsa (Marvin timing leak, no patch upstream) via russh's `rsa` feature. Accepted: it only
+    # signs the SSH auth challenge with the user's own RSA key, in a desktop client with no retry
+    # loop, so an observer needs many signatures from one session. Without it RSA-only users and
+    # RSA-only hosts cannot use the tunnel. Revisit when `rsa` ships a fix (then drop this entry).
+    "RUSTSEC-2023-0071",
 ]
 
 [licenses]

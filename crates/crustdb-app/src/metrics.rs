@@ -1,4 +1,21 @@
+use std::sync::{Once, OnceLock};
 use std::time::Instant;
+
+/// Set first thing in `main`; `trace_first_frame` reports the time elapsed since then.
+pub static PROCESS_START: OnceLock<Instant> = OnceLock::new();
+
+/// `CRUSTDB_TRACE_STARTUP=1`: prints `first_frame_ms=<n>` to stderr once, on the first frame.
+pub fn trace_first_frame() {
+    static FIRST: Once = Once::new();
+    FIRST.call_once(|| {
+        if let (Some(start), Some(_)) = (
+            PROCESS_START.get(),
+            std::env::var_os("CRUSTDB_TRACE_STARTUP"),
+        ) {
+            eprintln!("first_frame_ms={}", start.elapsed().as_millis());
+        }
+    });
+}
 
 /// Kernel clock ticks per second for /proc stat fields (D31).
 const USER_HZ: f64 = 100.0;
