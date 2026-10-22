@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #3
+Remove `libgtk-3-dev` dos steps apt-get do `ci.yml` (clippy, test, coverage, integration, release) e do README: `Cargo.lock` não tem crates gtk/gdk/glib/ashpd, `rfd` usa backend xdg-portal e fontconfig é carregado via dlopen, então `libfontconfig-dev` também não é necessário no build.
+
 ## 2026-10-22 — #45
 fmt, clippy e deny rodam em paralelo; test depende dos três e usa `cargo nextest run --workspace --fail-fast`, parando no primeiro teste quebrado. Job coverage envia `lcov.info` ao Codecov (`codecov-action@v5`, secret `CODECOV_TOKEN`) e o README ganha badge de coverage.
 
