@@ -2,7 +2,7 @@
 
 <p align="center"><i>Please remain calm. This is a safe space.</i></p>
 
-We have some news, and we'll be gentle about it: **CrustDB runs on Linux x86_64 only.**
+We have some news, and we'll be gentle about it: **cRustDB runs on Linux x86_64 only.**
 No `.exe`, no `.msi`, no "Install now and restart 4 times".
 
 We looked into a Windows port. Then the update dialog showed up and asked us to keep the
@@ -13,18 +13,18 @@ computer on, and we haven't seen it since.
 - That restart for an update you didn't ask for, right as you hit "Run query"
 - The Start menu showing you the news when you searched for `notepad`
 - `C:\Program Files (x86)\` and its quiet sense of mystery
-- Reinstalling the whole OS once a year "to clean things up"
+<!-- - Reinstalling the whole OS once a year "to clean things up" -->
 
 ## What you get instead
 
 - A terminal you will be weirdly proud of after a week
 - Updates that wait until **you** say so
-- CrustDB, running natively, on X11 or Wayland
+- **cRustDB**, running natively, on X11 or Wayland
 - Bragging rights in every meeting. Use them wisely.
 
 ## Pick your new home
 
-Any of the distros below runs CrustDB. Not sure which one? Pick Ubuntu or Linux Mint and come back
+Any of the distros below runs **cRustDB**. Not sure which one? Pick Ubuntu or Linux Mint and come back
 later to argue about it on the internet like everyone else.
 
 <table>
@@ -77,3 +77,9 @@ That's fine, relationships take time.
   were warned in writing.
 
 Once you're in, head back to [Building](../README.md#building). We'll keep the terminal warm for you.
+
+## Still here?
+
+After all this, if you're still not convinced... relax, it's just a joke. A Windows port is on the
+roadmap and will land in the future. Your operating system already sucks, but your Database
+Client doesn't have to.
