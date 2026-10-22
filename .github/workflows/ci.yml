@@ -53,6 +53,11 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      - name: Pre-pull test images (retry transient registry errors)
+        run: |
+          for img in "${CRUSTDB_PG_IMAGE:-postgres:latest}" "${CRUSTDB_MYSQL_IMAGE:-mysql:8.4}" linuxserver/openssh-server:latest; do
+            for i in 1 2 3 4 5; do docker pull -q "$img" && break; [ "$i" = 5 ] && exit 1; sleep $((i * 10)); done
+          done
       - run: >-
           cargo llvm-cov --workspace --lcov --output-path lcov.info
           --ignore-filename-regex 'crustdb-app/src/ui/' -- --include-ignored --skip keyring_roundtrip
@@ -97,6 +102,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
+      - name: Pre-pull test images (retry transient registry errors)
+        run: |
+          for img in "${CRUSTDB_PG_IMAGE:-postgres:latest}" "${CRUSTDB_MYSQL_IMAGE:-mysql:8.4}" linuxserver/openssh-server:latest; do
+            for i in 1 2 3 4 5; do docker pull -q "$img" && break; [ "$i" = 5 ] && exit 1; sleep $((i * 10)); done
+          done
       - run: cargo test --workspace -- --include-ignored --skip keyring_roundtrip
   release:
     # Tag pushes only (v*); never on branch pushes or pull requests.
