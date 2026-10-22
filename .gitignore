@@ -38,3 +38,5 @@ agentdb.rvf.lock
 .claude/agents/
 .claude/commands/
 scripts/
+# Local ICE prioritization (auto-dev)
+docs/ICE_PRIORITIZATION.md
