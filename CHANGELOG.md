@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #43
+Avaliação técnica da troca de Apache-2.0 para BSL 1.1 e alternativas (FSL, ELv2, PolyForm, AGPL-3.0, Commons Clause, dual license), com recomendação e riscos em `docs/license-evaluation.md`. Nenhuma licença alterada.
+
 ## 2026-10-22 — #41
 
 Pipeline de CI roda uma vez por commit (push só em `main` e tags `v*`, mais `pull_request`), com concurrency que cancela runs antigos só em PR. Cache cargo em clippy, test, coverage e integration; cadeia fail-fast fmt → clippy/deny → test → coverage/integration → release. Matriz de integration sem a linha postgres:latest/mysql:8.4 (coberta pelo coverage). Badge `ci` no README.
