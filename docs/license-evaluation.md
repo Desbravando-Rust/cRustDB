@@ -2,7 +2,7 @@
 
 > Aviso: este documento é um insumo técnico, não um parecer jurídico. A decisão final deve passar por um advogado. Os textos oficiais prevalecem sobre qualquer resumo aqui.
 
-Issue: #43. Status: proposta, nenhuma licença foi alterada.
+Issue: #43. Status: decidido, BSL 1.1 adotada (ver `docs/adr/0001-licenca-bsl-1.1.md`).
 
 ## 1. Objetivos
 
