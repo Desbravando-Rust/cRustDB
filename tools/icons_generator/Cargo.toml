@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-image = "0.25"
+image = { version = "0.25", default-features = false, features = ["png"] }
 ico-builder = "0.1"
 
 [lints]
