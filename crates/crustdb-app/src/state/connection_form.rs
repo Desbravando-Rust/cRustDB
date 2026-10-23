@@ -122,7 +122,12 @@ impl ConnectionForm {
         } = parse_connection_url(s.trim())?;
         self.set_driver(driver);
         if self.draft.name.trim().is_empty() {
-            self.draft.name.clone_from(&host);
+            // SQLite has no host: name it after the file.
+            let file = database.as_deref().and_then(|d| Path::new(d).file_name());
+            self.draft.name = match file {
+                Some(f) if host.is_empty() => f.to_string_lossy().into_owned(),
+                _ => host.clone(),
+            };
         }
         self.draft.host = host;
         self.draft.port = port.unwrap_or_else(|| default_port(driver));
@@ -173,6 +178,12 @@ impl ConnectionForm {
         let mut c = self.draft.clone();
         c.save_password = self.saves_secrets();
         c.database = c.database.filter(|d| !d.is_empty());
+        if c.driver == DriverKind::Sqlite {
+            // A local file: no tunnel, CA or saved password.
+            c.ssh = None;
+            c.tls.ca_path = None;
+            c.save_password = false;
+        }
         let mut errs = validate(&c, others).err().unwrap_or_default();
         let mut bad = |field, message: &str| {
             errs.push(FieldError {
