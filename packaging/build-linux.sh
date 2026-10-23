@@ -43,7 +43,7 @@ tar -C "$work" -czf "$dist/$name.tar.gz" "$name"
 
 # Debian and RPM packages (metadata in crates/crustdb-app/Cargo.toml).
 # Pre-release tags (1.0.0-rc1): "-" is invalid in RPM versions and sorts wrong in deb; "~" sorts before.
-pkg_version="${version//-/~}"
+pkg_version="${version//-/\~}"
 cargo deb -p crustdb-app --no-build --deb-version "$pkg_version" -o "$dist/crustdb-$version-x86_64.deb"
 cargo generate-rpm -p crates/crustdb-app -s "version = \"$pkg_version\"" -o "$dist/crustdb-$version-x86_64.rpm"
 
