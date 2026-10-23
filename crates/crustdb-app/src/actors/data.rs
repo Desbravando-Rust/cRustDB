@@ -1,8 +1,9 @@
 //! One table tab: owns a lazily opened `Data` session and serves page/structure/DDL requests.
+//! Cell edits run on a second, also lazy, `Editor` session (the only writable purpose).
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use crustdb_core::dialect::build_table_query;
+use crustdb_core::dialect::{BuiltQuery, build_table_query};
 use crustdb_core::driver::{ResultHeader, Session, SessionPurpose};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{ObjectRef, Row};
@@ -34,6 +35,7 @@ pub(crate) struct DataActor {
     shared: SharedRx,
     out: Emitter,
     session: Option<Box<dyn Session>>,
+    writer: Option<Box<dyn Session>>,
 }
 
 impl DataActor {
@@ -44,6 +46,7 @@ impl DataActor {
             shared,
             out,
             session: None,
+            writer: None,
         }
     }
 
@@ -67,12 +70,16 @@ impl DataActor {
                     inbox.latest = req;
                     self.fetch_page(&mut inbox, req, query).await;
                 }
+                Command::UpdateCell { req, update, .. } => self.update_cell(req, update).await,
                 Command::LoadStructure { req, .. } => self.structure(req).await,
                 Command::LoadDdl { req, .. } => self.ddl(req).await,
                 _ => {}
             }
         }
-        if let Some(s) = self.session.take() {
+        for s in [self.session.take(), self.writer.take()]
+            .into_iter()
+            .flatten()
+        {
             s.close().await;
         }
     }
@@ -84,11 +91,15 @@ impl DataActor {
         });
     }
 
-    async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
-        let shared = self.shared.borrow().clone().ok_or_else(|| DriverError {
+    fn shared(&self) -> Result<Arc<Shared>, DriverError> {
+        self.shared.borrow().clone().ok_or_else(|| DriverError {
             kind: ErrorKind::Connect,
             message: "workspace is not connected".into(),
-        })?;
+        })
+    }
+
+    async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
+        let shared = self.shared()?;
         if self.session.is_none() {
             let target = shared.target_for(&self.object.database);
             self.session = Some(shared.driver.connect(&target, SessionPurpose::Data).await?);
@@ -129,6 +140,38 @@ impl DataActor {
             }),
             Err(_) if cancelled => self.notice("cancelled".into()),
             Err(e) => self.failed(&e),
+        }
+    }
+
+    /// Autocommit, one statement. `Some(0)` means the keyed row is gone (or, on MySQL, unchanged).
+    async fn update_cell(&mut self, req: RequestId, q: BuiltQuery) {
+        let r = async {
+            if self.writer.is_none() {
+                let shared = self.shared()?;
+                let target = shared.target_for(&self.object.database);
+                let s = shared
+                    .driver
+                    .connect(&target, SessionPurpose::Editor)
+                    .await?;
+                self.writer = Some(s);
+            }
+            let w = self.writer.as_mut().ok_or_else(closed)?;
+            w.start_params(&q.sql, &q.params).await?;
+            w.finish().await
+        }
+        .await;
+        match r {
+            Ok(c) if c.affected_rows == Some(0) => self.notice("row not found".into()),
+            Ok(_) => self.out.emit(Event::CellUpdated { req }),
+            Err(e) => {
+                if matches!(
+                    e.kind,
+                    ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
+                ) {
+                    self.writer = None;
+                }
+                self.notice(e.message);
+            }
         }
     }
 
