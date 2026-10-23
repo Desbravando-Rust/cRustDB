@@ -69,6 +69,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
                 .selected_text(match driver {
                     DriverKind::Postgres => "PostgreSQL",
                     DriverKind::Mysql => "MySQL/MariaDB",
+                    DriverKind::Sqlite => "SQLite",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut driver, DriverKind::Postgres, "PostgreSQL");

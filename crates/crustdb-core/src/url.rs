@@ -42,6 +42,7 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
     let driver = match url.scheme() {
         "postgres" | "postgresql" => DriverKind::Postgres,
         "mysql" | "mariadb" => DriverKind::Mysql,
+        "sqlite" => return sqlite(&url),
         other => return Err(UrlError::UnsupportedScheme(other.to_owned())),
     };
     let host = url
@@ -91,6 +92,23 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         database,
         tls_mode,
         warnings,
+    })
+}
+
+/// `sqlite:///abs/path.db`: the decoded path is the database file; there is no host.
+fn sqlite(url: &::url::Url) -> Result<ParsedUrl, UrlError> {
+    let path = percent_decode_str(url.path())
+        .decode_utf8()
+        .map_err(|_| UrlError::Malformed)?;
+    Ok(ParsedUrl {
+        driver: DriverKind::Sqlite,
+        host: String::new(),
+        port: None,
+        user: None,
+        password: None,
+        database: Some(path.into_owned()).filter(|d| !d.is_empty()),
+        tls_mode: None,
+        warnings: Vec::new(),
     })
 }
 
