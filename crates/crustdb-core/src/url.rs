@@ -179,6 +179,17 @@ mod tests {
         assert_eq!(p.host, "");
         let p = parse_connection_url("sqlite:///tmp/a.db").unwrap();
         assert_eq!(p.database.as_deref(), Some("/tmp/a.db"));
+        let p = parse_connection_url("sqlite://localhost/tmp/a.db").unwrap();
+        assert_eq!(p.database.as_deref(), Some("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_url_with_host_rejected() {
+        // `dados.db` would be the host, silently leaving no file.
+        assert_eq!(
+            parse_connection_url("sqlite://dados.db").unwrap_err(),
+            UrlError::Malformed
+        );
     }
 
     #[test]
