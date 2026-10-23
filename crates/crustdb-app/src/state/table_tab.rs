@@ -1,4 +1,4 @@
-use crustdb_core::edit::build_update;
+use crustdb_core::edit::{build_update, is_opaque};
 use crustdb_core::model::{
     Cell, ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
     Row,
@@ -254,10 +254,8 @@ impl TableTab {
         let keyed =
             self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
         let text = match self.rows.get(row).and_then(|r| r.get(col)) {
-            Some(Cell::Text {
-                value,
-                truncated: false,
-            }) => value.to_string(),
+            Some(c) if is_opaque(c) => return,
+            Some(Cell::Text { value, .. }) => value.to_string(),
             Some(Cell::Null) => String::new(),
             _ => return,
         };
