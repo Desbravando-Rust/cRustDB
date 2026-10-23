@@ -2,6 +2,7 @@
 use std::ops::Range;
 
 use super::query_tab::char_to_byte;
+use super::workspace::WorkspaceState;
 
 #[derive(Debug, Default)]
 pub struct Find {
@@ -11,6 +12,8 @@ pub struct Find {
     pub case_sensitive: bool,
     /// Index into the matches; clamped when the text changes under it.
     pub current: usize,
+    /// The find field takes keyboard focus on the next frame.
+    pub focus: bool,
 }
 
 /// Non-overlapping occurrences of `needle` in `text`.
@@ -34,6 +37,18 @@ pub fn matches(text: &str, needle: &str, case: bool) -> Vec<Range<usize>> {
         }
     }
     out
+}
+
+impl WorkspaceState {
+    /// Ctrl+F: the find bar on a query tab, the filter bar on a table tab.
+    pub fn toggle_find_or_filter(&mut self) {
+        if let Some(q) = self.active_query_mut() {
+            q.find.open = !q.find.open;
+            q.find.focus = q.find.open;
+        } else if let Some(t) = self.active_table_mut() {
+            t.toggle_filter_bar();
+        }
+    }
 }
 
 impl Find {

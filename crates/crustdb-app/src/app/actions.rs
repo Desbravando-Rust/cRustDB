@@ -89,8 +89,8 @@ impl CrustApp {
                 None => Intent::RefreshRoot,
             }],
             (Action::Filter, _) => {
-                if let Some(t) = self.active_ws().and_then(|w| w.active_table_mut()) {
-                    t.toggle_filter_bar();
+                if let Some(w) = self.active_ws() {
+                    w.toggle_find_or_filter();
                 }
                 vec![]
             }

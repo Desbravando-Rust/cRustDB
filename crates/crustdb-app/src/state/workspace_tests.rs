@@ -454,3 +454,20 @@ fn live_workspace_ignores_failed_and_returns_latest() {
     assert_eq!(s.live_workspace(a), Some(ws));
     assert_eq!(s.live_workspace(b), None);
 }
+
+#[test]
+fn ctrl_f_toggles_find_on_query_tabs_and_filter_on_table_tabs() {
+    let mut s = state(&["a"]);
+    let ws = s.open_workspace(s.config.connections[0].clone());
+    s.open_table(ws, obj(), RequestId(1));
+    let w = s.workspace_mut(ws).unwrap();
+    w.toggle_find_or_filter();
+    assert!(w.active_table_mut().unwrap().filter_open);
+    s.open_query(ws, None);
+    let w = s.workspace_mut(ws).unwrap();
+    w.toggle_find_or_filter();
+    let q = w.active_query_mut().unwrap();
+    assert!(q.find.open && q.find.focus);
+    w.toggle_find_or_filter();
+    assert!(!w.active_query_mut().unwrap().find.open);
+}
