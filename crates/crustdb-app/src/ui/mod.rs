@@ -2,6 +2,7 @@
 pub mod autocomplete;
 pub mod confirm_dialog;
 pub mod connection_form;
+pub mod diagram;
 pub mod editor;
 pub mod filter_bar;
 pub mod grid;
