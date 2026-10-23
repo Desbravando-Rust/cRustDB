@@ -195,3 +195,14 @@ async fn multiple_statements_rejected() {
     assert!(!s.has_active_result());
     assert_eq!(all(&mut s, "SELECT 2").await, [["2"]]);
 }
+
+#[tokio::test]
+async fn comment_only_sql_is_noop() {
+    let f = NamedTempFile::new().unwrap();
+    let mut s = open(f.path(), SessionPurpose::Editor).await;
+    for sql in ["", "-- just a comment", "/* block */"] {
+        let h = s.start(sql, ExecMode::Other).await.unwrap();
+        assert!(h.columns.is_empty(), "{sql:?}");
+        assert_eq!(s.finish().await.unwrap().affected_rows, Some(0), "{sql:?}");
+    }
+}
