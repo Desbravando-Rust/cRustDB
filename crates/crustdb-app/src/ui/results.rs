@@ -79,7 +79,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
     match tab.pane.tab {
         ResultTab::Result => match &tab.pane.header {
             Some(h) => {
-                grid::grid(ui, &h.columns, &tab.pane.rows, &mut tab.pane.selected);
+                grid::grid(
+                    ui,
+                    &h.columns,
+                    &tab.pane.rows,
+                    &mut tab.pane.selected,
+                    &mut tab.pane.select_anchor,
+                );
             }
             None => {
                 ui.weak("No result");

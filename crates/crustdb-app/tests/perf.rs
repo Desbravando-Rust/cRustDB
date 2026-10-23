@@ -66,7 +66,7 @@ fn summary(label: &str, frames: &[Duration]) -> (f64, f64) {
 
 fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
     let columns = columns(cols);
-    let mut selected = None;
+    let (mut selected, mut anchor) = (None, None);
     let mut ready = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1280.0, 720.0))
@@ -76,7 +76,7 @@ fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
                 install_theme(ui.ctx());
                 return;
             }
-            grid(ui, &columns, &data, &mut selected);
+            grid(ui, &columns, &data, &mut selected, &mut anchor);
         });
     h.run();
     h

@@ -32,6 +32,8 @@ pub struct ResultPane {
     /// Execute request whose events this pane shows.
     pub req: Option<RequestId>,
     pub selected: Option<usize>,
+    /// Other end of a Shift+click range; `selected` is the cursor.
+    pub select_anchor: Option<usize>,
 }
 
 impl ResultPane {
@@ -42,6 +44,7 @@ impl ResultPane {
                 self.rows.clear();
                 self.exhausted = false;
                 self.selected = None;
+                self.select_anchor = None;
             }
             Event::Rows {
                 rows, exhausted, ..
