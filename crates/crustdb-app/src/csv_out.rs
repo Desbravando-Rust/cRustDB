@@ -1,6 +1,6 @@
 use std::io::{self, BufWriter, Write};
 
-use crustdb_core::model::{Cell, ColumnMeta};
+use crustdb_core::model::{Cell, ColumnMeta, Row};
 
 pub struct CsvOut<W: Write> {
     inner: BufWriter<W>,
@@ -14,18 +14,11 @@ impl<W: Write> CsvOut<W> {
     }
 
     pub fn header(&mut self, cols: &[ColumnMeta]) -> io::Result<()> {
-        self.line(cols.iter().map(|c| field(&c.name, false)))
+        self.line(cols.iter().map(|c| field(&c.name, false, ',')))
     }
 
     pub fn row(&mut self, cells: &[Cell]) -> io::Result<()> {
-        self.line(cells.iter().map(|c| match c {
-            Cell::Null => String::new(),
-            Cell::Text { value, .. } => field(value, true),
-            Cell::Bytes { value, .. } => value.iter().fold(String::from("0x"), |mut s, b| {
-                s.push_str(&format!("{b:02x}"));
-                s
-            }),
-        }))
+        self.line(cells.iter().map(|c| quoted(c, ',')))
     }
 
     pub fn finish(mut self) -> io::Result<()> {
@@ -43,10 +36,43 @@ impl<W: Write> CsvOut<W> {
     }
 }
 
-/// Quotes on `,` `"` `\n` `\r`; an empty string is quoted only when `quote_empty`
+/// Raw cell value: NULL is empty, binary is `0x` + hex. No quoting.
+pub fn cell_text(c: &Cell) -> String {
+    match c {
+        Cell::Null => String::new(),
+        Cell::Text { value, .. } => value.to_string(),
+        Cell::Bytes { value, .. } => value.iter().fold(String::from("0x"), |mut s, b| {
+            s.push_str(&format!("{b:02x}"));
+            s
+        }),
+    }
+}
+
+/// Tab-separated rows (clipboard format), optional header line, no trailing newline.
+pub fn to_tsv<'a>(
+    cols: &[ColumnMeta],
+    rows: impl IntoIterator<Item = &'a Row>,
+    header: bool,
+) -> String {
+    let line = |fields: Vec<String>| fields.join("\t");
+    let head = header.then(|| line(cols.iter().map(|c| field(&c.name, false, '\t')).collect()));
+    let body = rows
+        .into_iter()
+        .map(|r| line(r.iter().map(|c| quoted(c, '\t')).collect()));
+    head.into_iter().chain(body).collect::<Vec<_>>().join("\n")
+}
+
+fn quoted(c: &Cell, sep: char) -> String {
+    match c {
+        Cell::Text { value, .. } => field(value, true, sep),
+        c => cell_text(c),
+    }
+}
+
+/// Quotes on `sep` `"` `\n` `\r`; an empty string is quoted only when `quote_empty`
 /// (cell values, so it differs from NULL; header names are never empty-quoted).
-fn field(s: &str, quote_empty: bool) -> String {
-    if s.contains([',', '"', '\n', '\r']) || (quote_empty && s.is_empty()) {
+fn field(s: &str, quote_empty: bool, sep: char) -> String {
+    if s.contains([sep, '"', '\n', '\r']) || (quote_empty && s.is_empty()) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
         s.to_owned()
@@ -94,19 +120,46 @@ mod tests {
         assert_eq!(out(&[c]), "0xdead\n");
     }
 
-    #[test]
-    fn csv_header_uses_column_names() {
-        let col = |n: &str| ColumnMeta {
+    fn col(n: &str) -> ColumnMeta {
+        ColumnMeta {
             name: n.into(),
             type_name: "text".into(),
             category: crustdb_core::model::TypeCategory::Text,
             nullable: None,
             is_primary_key: false,
-        };
+        }
+    }
+
+    #[test]
+    fn csv_header_uses_column_names() {
         let mut buf = Vec::new();
         let mut w = CsvOut::new(&mut buf);
         w.header(&[col("id"), col("a,b")]).unwrap();
         w.finish().unwrap();
         assert_eq!(String::from_utf8(buf).unwrap(), "id,\"a,b\"\n");
+    }
+
+    #[test]
+    fn tsv_quotes_tab_newline_quote_and_optional_header() {
+        let bytes = Cell::Bytes {
+            value: vec![0xde, 0xad].into(),
+            total_len: 2,
+            truncated: false,
+        };
+        let rows: Vec<Row> = vec![
+            vec![Cell::Null, text(""), text("a,b")].into(),
+            vec![text("a\tb"), text("x\ny"), text("q\"")].into(),
+            vec![bytes, text("r\rs"), text("plain")].into(),
+        ];
+        let cols = [col("id"), col("a\tb"), col("c")];
+        assert_eq!(to_tsv(&cols, &rows[..1], false), "\t\"\"\ta,b");
+        assert_eq!(
+            to_tsv(&cols, &rows, true),
+            "id\t\"a\tb\"\tc\n\
+             \t\"\"\ta,b\n\
+             \"a\tb\"\t\"x\ny\"\t\"q\"\"\"\n\
+             0xdead\t\"r\rs\"\tplain"
+        );
+        assert_eq!(to_tsv(&cols, &[], true), "id\t\"a\tb\"\tc");
     }
 }

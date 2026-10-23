@@ -6,6 +6,7 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ## 2026-10-23
 
+- [#6](https://github.com/Desbravando-Rust/cRustDB/issues/6) — Copy grid cells and rows to the clipboard: row range selection with Shift+click, Ctrl+C copies rows as TSV, cell context menu.
 - [#19](https://github.com/Desbravando-Rust/cRustDB/issues/19) — Export results and tables to JSON Lines and SQL INSERT (by file extension), in addition to CSV.
 - [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 2 of 2: wires `crustdb-sqlite` into the app (driver registration, file-only connection form, `sqlite://` URL import).
 - [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 1 of 2: core support and new `crustdb-sqlite` crate (rusqlite). Not yet selectable in the UI; part 2 wires it into the app.

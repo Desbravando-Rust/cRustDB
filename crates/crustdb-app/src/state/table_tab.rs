@@ -35,6 +35,8 @@ pub struct TableTab {
     pub filters: Vec<Filter>,
     pub loading: Option<RequestId>,
     pub selected_row: Option<usize>,
+    /// Other end of a Shift+click range; `selected_row` is the cursor.
+    pub select_anchor: Option<usize>,
     pub view: TableView,
     pub structure: Option<Structure>,
     /// Pending `LoadStructure`; the first page is fetched once it arrives.
@@ -66,6 +68,7 @@ impl TableTab {
             filters: vec![],
             loading: None,
             selected_row: None,
+            select_anchor: None,
             view: TableView::Data,
             structure: None,
             structure_req: None,
@@ -232,6 +235,7 @@ impl TableTab {
         rows.truncate(self.page_size as usize);
         self.rows = rows;
         self.selected_row = None;
+        self.select_anchor = None;
         self.loading = None;
         self.notice = None;
     }

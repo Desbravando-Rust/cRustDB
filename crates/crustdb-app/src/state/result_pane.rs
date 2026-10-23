@@ -36,6 +36,8 @@ pub struct ResultPane {
     pub req: Option<RequestId>,
     /// Index into `rows`, not into `view`.
     pub selected: Option<usize>,
+    /// Other end of a Shift+click range; `selected` is the cursor.
+    pub select_anchor: Option<usize>,
     /// Client-side sort of the loaded rows.
     pub sorts: Vec<Sort>,
     pub filter: String,
@@ -51,6 +53,7 @@ impl ResultPane {
                 self.rows.clear();
                 self.exhausted = false;
                 self.selected = None;
+                self.select_anchor = None;
                 self.sorts.clear();
                 self.view.clear();
             }
