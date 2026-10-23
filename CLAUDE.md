@@ -27,6 +27,7 @@ cargo deny check
 - Generated SQL: user values are always bound parameters; identifiers always go through `Dialect::quote_ident`.
 - Add dependencies with `cargo add` (never type versions from memory). License BUSL-1.1 (set once in `[workspace.package]`; crates use `license.workspace = true`). Files ≤ 500 lines.
 - UI text is English.
+- Tests follow AAA: `// Arrange`, `// Act`, `// Assert` sections separated by a blank line (`// Act & Assert` when inseparable; omit `// Arrange` without setup). See `CONTRIBUTING.md`.
 
 ## Git
 
