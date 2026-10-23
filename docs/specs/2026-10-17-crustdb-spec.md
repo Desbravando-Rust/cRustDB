@@ -233,7 +233,7 @@ Repositório: `https://github.com/Desbravando-Rust/crustdb` (privado, branch pad
 | `rust-toolchain.toml` | stable mais recente no início (fixar a versão exata); componentes `rustfmt`, `clippy`, `llvm-tools-preview` |
 | `deny.toml` | `cargo-deny`: advisories, licenças permitidas, fontes |
 | `.github/workflows/ci.yml` | gates do §9 + matriz de bancos |
-| `packaging/crustdb.desktop`, `packaging/crustdb.png`, `packaging/build-appimage.sh` | distribuição (D32) |
+| `packaging/crustdb.desktop`, `packaging/crustdb.png`, `packaging/build-linux.sh` | distribuição (D32) |
 
 ### `crates/crustdb-core/src/`
 | File | Responsibility |
