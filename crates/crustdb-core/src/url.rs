@@ -154,6 +154,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_sqlite_url_as_file_path() {
+        let p = parse_connection_url("sqlite:///tmp/a%20b.db").unwrap();
+        assert_eq!(p.driver, DriverKind::Sqlite);
+        assert_eq!(p.database.as_deref(), Some("/tmp/a b.db"));
+        assert_eq!(p.host, "");
+        let p = parse_connection_url("sqlite:///tmp/a.db").unwrap();
+        assert_eq!(p.database.as_deref(), Some("/tmp/a.db"));
+    }
+
+    #[test]
     fn unknown_scheme_rejected() {
         assert_eq!(
             parse_connection_url("redis://h").unwrap_err(),
