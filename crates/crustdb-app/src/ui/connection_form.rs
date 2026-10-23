@@ -284,4 +284,20 @@ mod tests {
         h.get_by_label("Test");
         h.get_by_label("OS keyring unavailable: passwords cannot be saved");
     }
+
+    #[test]
+    fn sqlite_form_shows_only_file_fields() {
+        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+        h.run();
+        h.get_by_label("Database file");
+        h.get_by_label("Page size");
+        for hidden in ["Host", "Port", "User", "Password", "TLS mode", "SSH tunnel"] {
+            assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
+        }
+    }
 }
