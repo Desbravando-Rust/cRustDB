@@ -224,12 +224,21 @@ mod tests {
     #[test]
     fn format_at_formats_selection_only() {
         let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
-        q.text = "-- é\nselect a,b from t\nselect  1".into();
-        let start = "-- é\n".chars().count();
-        let end = start + "select a,b from t".chars().count();
-        q.format_at(start..end);
-        assert_eq!(q.text, "-- é\nselect a, b\nfrom t\nselect  1");
+        q.text = "-- é\nselect a,b from t;\nselect  1".into();
+        // Only `a,b` is selected: the whole statement around it is formatted.
+        let start = "-- é\nselect ".chars().count();
+        q.format_at(start..start + 3);
+        assert_eq!(q.text, "-- é\nselect a, b\nfrom t;\nselect  1");
         assert!(q.dirty);
+    }
+
+    #[test]
+    fn format_at_selection_ending_inside_a_comment_keeps_it() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "select 1 -- delete from t".into();
+        q.format_at(0.."select 1 -- ".chars().count());
+        assert_eq!(q.text, "select 1 -- delete from t");
+        assert!(!q.dirty);
     }
 
     #[test]
