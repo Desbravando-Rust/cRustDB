@@ -82,7 +82,7 @@ impl Introspector for SqliteIntrospector {
         let r = query_rows(
             s,
             "SELECT name FROM sqlite_schema \
-             WHERE type = ?1 AND name NOT LIKE 'sqlite_%' ORDER BY name",
+             WHERE type = ?1 AND name NOT LIKE 'sqlite!_%' ESCAPE '!' ORDER BY name",
             &[schema_type(kind)?],
         )
         .await?;
