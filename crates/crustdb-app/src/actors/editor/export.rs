@@ -75,7 +75,9 @@ impl EditorActor {
         kept: &mut Kept,
     ) -> Result<(u64, bool), (Failure, bool)> {
         let out = self.out.clone();
-        let mut sink = Sink::create(path).map_err(|e| (e.into(), false))?;
+        let kind = self.kind();
+        let table = crate::export_fmt::dialect(kind).quote_ident("result");
+        let mut sink = Sink::create(path, table, kind).map_err(|e| (e.into(), false))?;
         let head = (|| {
             sink.header(&kept.header.columns)?;
             for chunk in kept.rows.chunks(BATCH) {

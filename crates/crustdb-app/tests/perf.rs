@@ -76,7 +76,7 @@ fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
                 install_theme(ui.ctx());
                 return;
             }
-            grid(ui, &columns, &data, &mut selected, &mut anchor);
+            grid(ui, &columns, &data, None, &mut selected, &mut anchor, &[]);
         });
     h.run();
     h

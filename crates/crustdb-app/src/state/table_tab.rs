@@ -240,27 +240,8 @@ impl TableTab {
         self.notice = None;
     }
 
-    /// Click cycles asc -> desc -> off; shift keeps the other sorted columns.
     pub fn click_header(&mut self, column: &str, shift: bool) {
-        let current = self.sorts.iter().find(|s| s.column == column).cloned();
-        if !shift {
-            self.sorts.clear();
-        }
-        match current {
-            None => self.sorts.push(Sort {
-                column: column.into(),
-                descending: false,
-            }),
-            Some(s) if !s.descending => {
-                if !shift {
-                    self.sorts.push(s);
-                }
-                if let Some(s) = self.sorts.iter_mut().find(|s| s.column == column) {
-                    s.descending = true;
-                }
-            }
-            Some(_) => self.sorts.retain(|s| s.column != column),
-        }
+        toggle_sort(&mut self.sorts, column, shift);
         self.page = 0;
     }
 
@@ -307,6 +288,29 @@ fn short(n: u64) -> String {
         1_000_000.. => format!("{:.1}M", n as f64 / 1e6),
         1_000.. => format!("{:.1}K", n as f64 / 1e3),
         _ => n.to_string(),
+    }
+}
+
+/// Click cycles asc -> desc -> off; shift keeps the other sorted columns.
+pub(crate) fn toggle_sort(sorts: &mut Vec<Sort>, column: &str, shift: bool) {
+    let current = sorts.iter().find(|s| s.column == column).cloned();
+    if !shift {
+        sorts.clear();
+    }
+    match current {
+        None => sorts.push(Sort {
+            column: column.into(),
+            descending: false,
+        }),
+        Some(s) if !s.descending => {
+            if !shift {
+                sorts.push(s);
+            }
+            if let Some(s) = sorts.iter_mut().find(|s| s.column == column) {
+                s.descending = true;
+            }
+        }
+        Some(_) => sorts.retain(|s| s.column != column),
     }
 }
 
