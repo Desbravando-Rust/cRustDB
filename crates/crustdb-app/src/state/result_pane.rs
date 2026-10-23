@@ -1,9 +1,12 @@
 //! Result pane of a query tab: last grid, Messages lines and tab selection.
+use std::cmp::Ordering;
 use std::time::Duration;
 
 use crustdb_core::driver::ResultHeader;
-use crustdb_core::model::Row;
+use crustdb_core::model::{Cell, Row, TypeCategory};
+use crustdb_core::query::Sort;
 
+use super::table_tab::toggle_sort;
 use crate::runtime::{Event, RequestId};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +34,13 @@ pub struct ResultPane {
     pub tab: ResultTab,
     /// Execute request whose events this pane shows.
     pub req: Option<RequestId>,
+    /// Index into `rows`, not into `view`.
     pub selected: Option<usize>,
+    /// Client-side sort of the loaded rows.
+    pub sorts: Vec<Sort>,
+    pub filter: String,
+    /// Indexes into `rows` that pass `filter`, in `sorts` order.
+    pub view: Vec<usize>,
 }
 
 impl ResultPane {
@@ -42,12 +51,15 @@ impl ResultPane {
                 self.rows.clear();
                 self.exhausted = false;
                 self.selected = None;
+                self.sorts.clear();
+                self.view.clear();
             }
             Event::Rows {
                 rows, exhausted, ..
             } => {
                 self.rows.extend(rows.iter().cloned());
                 self.exhausted = *exhausted;
+                self.refresh_view();
             }
             Event::StatementDone {
                 index,
@@ -79,9 +91,75 @@ impl ResultPane {
         });
     }
 
+    pub fn click_header(&mut self, column: &str, shift: bool) {
+        toggle_sort(&mut self.sorts, column, shift);
+        self.refresh_view();
+    }
+
+    /// Rebuilds `view` from `rows`, `filter` and `sorts`.
+    pub fn refresh_view(&mut self) {
+        let needle = self.filter.to_lowercase();
+        let rows = &self.rows;
+        self.view = (0..rows.len())
+            .filter(|&i| {
+                needle.is_empty()
+                    || rows[i].iter().any(|c| match c {
+                        Cell::Text { value, .. } => value.to_lowercase().contains(&needle),
+                        _ => false,
+                    })
+            })
+            .collect();
+        let Some(h) = &self.header else { return };
+        let keys: Vec<(usize, TypeCategory, bool)> = self
+            .sorts
+            .iter()
+            .filter_map(|s| {
+                let c = h.columns.iter().position(|c| c.name == s.column)?;
+                Some((c, h.columns[c].category, s.descending))
+            })
+            .collect();
+        if keys.is_empty() {
+            return;
+        }
+        self.view.sort_by(|&a, &b| {
+            keys.iter()
+                .map(|&(c, cat, desc)| cmp_cells(rows[a].get(c), rows[b].get(c), cat, desc))
+                .find(|o| o.is_ne())
+                .unwrap_or(Ordering::Equal)
+        });
+    }
+
     pub fn load_more_visible(&self) -> bool {
         self.header.is_some() && !self.exhausted
     }
+}
+
+/// Nulls last in both directions; numbers by value, the rest as text/bytes.
+fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) -> Ordering {
+    let (a, b) = match (a, b) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return Ordering::Equal,
+    };
+    let o = match (a, b) {
+        (Cell::Null, Cell::Null) => return Ordering::Equal,
+        (Cell::Null, _) => return Ordering::Greater,
+        (_, Cell::Null) => return Ordering::Less,
+        (Cell::Text { value: x, .. }, Cell::Text { value: y, .. }) => {
+            // ponytail: Decimal via f64 loses precision > 2^53; switch to decimal compare if needed
+            let numeric = matches!(
+                cat,
+                TypeCategory::Integer | TypeCategory::Decimal | TypeCategory::Float
+            );
+            match (numeric, x.parse::<f64>(), y.parse::<f64>()) {
+                (true, Ok(x), Ok(y)) => x.total_cmp(&y),
+                _ => x.cmp(y),
+            }
+        }
+        (Cell::Bytes { value: x, .. }, Cell::Bytes { value: y, .. }) => x.cmp(y),
+        (Cell::Text { .. }, Cell::Bytes { .. }) => Ordering::Less,
+        (Cell::Bytes { .. }, Cell::Text { .. }) => Ordering::Greater,
+    };
+    if desc { o.reverse() } else { o }
 }
 
 #[cfg(test)]
