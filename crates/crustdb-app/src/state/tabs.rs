@@ -49,6 +49,11 @@ impl QueryTab {
         self.text = toggle_comment(&self.text, a..b + 1);
         self.dirty = true;
     }
+
+    /// Ctrl+Shift+F: beautifies the selection (chars), or the whole buffer when it is empty.
+    pub fn format_at(&mut self, sel: std::ops::Range<usize>) {
+        let _ = sel;
+    }
 }
 
 impl AppState {
@@ -203,6 +208,31 @@ mod tests {
         assert_eq!(q.text, "a\n-- b\n-- c");
         q.toggle_comment_at(2..9);
         assert_eq!(q.text, "a\nb\nc");
+    }
+
+    #[test]
+    fn format_at_formats_selection_only() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "-- é\nselect a,b from t\nselect  1".into();
+        let start = "-- é\n".chars().count();
+        let end = start + "select a,b from t".chars().count();
+        q.format_at(start..end);
+        assert_eq!(q.text, "-- é\nselect a, b\nfrom t\nselect  1");
+        assert!(q.dirty);
+    }
+
+    #[test]
+    fn format_at_empty_selection_formats_buffer() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "select a from t where x=1".into();
+        q.format_at(3..3);
+        assert_eq!(q.text, "select a\nfrom t\nwhere x = 1");
+        assert!(q.dirty);
+        q.dirty = false;
+        q.text = "select 'open".into();
+        q.format_at(0..0);
+        assert_eq!(q.text, "select 'open");
+        assert!(!q.dirty, "untokenizable text is left alone");
     }
 
     #[test]
