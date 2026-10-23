@@ -206,3 +206,56 @@ async fn comment_only_sql_is_noop() {
         assert_eq!(s.finish().await.unwrap().affected_rows, Some(0), "{sql:?}");
     }
 }
+
+#[tokio::test]
+async fn update_cell_via_build_update_affects_one_row() {
+    use crustdb_core::edit::build_update;
+    use crustdb_core::model::{ColumnMeta, ObjectKind, ObjectRef};
+
+    let f = NamedTempFile::new().unwrap();
+    let mut s = open(f.path(), SessionPurpose::Editor).await;
+    affected(
+        &mut s,
+        "CREATE TABLE t(id INTEGER, k TEXT, v TEXT, PRIMARY KEY (id, k))",
+    )
+    .await;
+    affected(&mut s, "INSERT INTO t VALUES (1, 'a', 'x'), (1, 'b', 'y')").await;
+    let col = |name: &str, type_name: &str, category, pk| ColumnMeta {
+        name: name.into(),
+        type_name: type_name.into(),
+        category,
+        nullable: None,
+        is_primary_key: pk,
+    };
+    let cols = vec![
+        col("id", "INTEGER", TypeCategory::Integer, true),
+        col("k", "TEXT", TypeCategory::Text, true),
+        col("v", "TEXT", TypeCategory::Text, false),
+    ];
+    let object = ObjectRef {
+        database: "main".into(),
+        schema: None,
+        name: "t".into(),
+        kind: ObjectKind::Table,
+    };
+    let row = vec![
+        Cell::text_capped("1"),
+        Cell::text_capped("a"),
+        Cell::text_capped("x"),
+    ];
+    let b = build_update(
+        SqliteDriver.dialect(),
+        &object,
+        &cols,
+        &row,
+        2,
+        Some("z".into()),
+    )
+    .unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+    assert_eq!(
+        all(&mut s, "SELECT v FROM t ORDER BY k").await,
+        vec![vec!["z".to_string()], vec!["y".to_string()]]
+    );
+}
