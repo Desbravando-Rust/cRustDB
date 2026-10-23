@@ -52,7 +52,18 @@ impl QueryTab {
 
     /// Ctrl+Shift+F: beautifies the selection (chars), or the whole buffer when it is empty.
     pub fn format_at(&mut self, sel: std::ops::Range<usize>) {
-        let _ = sel;
+        let r = if sel.is_empty() {
+            0..self.text.len()
+        } else {
+            char_to_byte(&self.text, sel.start)..char_to_byte(&self.text, sel.end)
+        };
+        let Some(out) = crustdb_core::sql::beautify(&self.text[r.clone()], self.driver) else {
+            return;
+        };
+        if out != self.text[r.clone()] {
+            self.text.replace_range(r, &out);
+            self.dirty = true;
+        }
     }
 }
 
