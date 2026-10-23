@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Builds target/dist/crustdb-<version>-x86_64.AppImage and dist/crustdb-<version>-x86_64-linux.tar.gz.
-# Usage: packaging/build-appimage.sh [version]   (default: version of crates/crustdb-app)
+# Builds into target/dist/: crustdb-<version>-x86_64.{AppImage,deb,rpm,flatpak} and
+# crustdb-<version>-x86_64-linux.tar.gz. Needs cargo-deb and cargo-generate-rpm; the
+# .flatpak is skipped when flatpak-builder is missing.
+# Usage: packaging/build-linux.sh [version]   (default: version of crates/crustdb-app)
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,5 +40,22 @@ rm -rf "${work:?}/$name"
 mkdir -p "$work/$name"
 cp target/release/crustdb packaging/crustdb.desktop packaging/crustdb.png "$work/$name/"
 tar -C "$work" -czf "$dist/$name.tar.gz" "$name"
+
+# Debian and RPM packages (metadata in crates/crustdb-app/Cargo.toml).
+# Pre-release tags (1.0.0-rc1): "-" is invalid in RPM versions and sorts wrong in deb; "~" sorts before.
+pkg_version="${version//-/\~}"
+cargo deb -p crustdb-app --no-build --deb-version "$pkg_version" -o "$dist/crustdb-$version-x86_64.deb"
+cargo generate-rpm -p crates/crustdb-app -s "version = \"$pkg_version\"" -o "$dist/crustdb-$version-x86_64.rpm"
+
+# Flatpak bundle (runtime org.freedesktop.Platform must be installed).
+app_id="io.github.desbravando_rust.crustdb"
+if command -v flatpak-builder >/dev/null; then
+  flatpak-builder --force-clean --disable-rofiles-fuse --state-dir="$work/flatpak-state" \
+    --repo="$work/flatpak-repo" "$work/flatpak-build" "packaging/flatpak/$app_id.yml"
+  flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+    "$work/flatpak-repo" "$dist/crustdb-$version-x86_64.flatpak" "$app_id"
+else
+  echo "warning: flatpak-builder not found, skipping .flatpak" >&2
+fi
 
 ls -l "$dist"

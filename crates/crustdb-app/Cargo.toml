@@ -4,6 +4,7 @@ version = "0.1.0"
 license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "Native client for PostgreSQL and MySQL/MariaDB"
 
 [lints]
 workspace = true
@@ -41,3 +42,29 @@ crustdb-testkit = { path = "../crustdb-testkit" }
 egui_kittest = "0.37.0"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-util"] }
+
+# Linux packages (packaging/build-linux.sh). Source paths are relative to this crate;
+# target/release/* is resolved against the workspace target dir.
+[package.metadata.deb]
+name = "crustdb"
+maintainer = "zejuniortdr <zejuniortdr@gmail.com>"
+section = "database"
+# eframe (wgpu) dlopens xkbcommon and libvulkan.so.1 (fallback libEGL.so.1), so $auto cannot see them.
+depends = "$auto, libxkbcommon0, libvulkan1 | libegl1"
+assets = [
+  ["target/release/crustdb", "usr/bin/", "755"],
+  ["../../packaging/crustdb.desktop", "usr/share/applications/", "644"],
+  ["../../packaging/crustdb.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "crustdb"
+assets = [
+  { source = "target/release/crustdb", dest = "/usr/bin/crustdb", mode = "755" },
+  { source = "../../packaging/crustdb.desktop", dest = "/usr/share/applications/crustdb.desktop", mode = "644" },
+  { source = "../../packaging/crustdb.png", dest = "/usr/share/icons/hicolor/256x256/apps/crustdb.png", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+libxkbcommon = "*"
+vulkan-loader = "*"

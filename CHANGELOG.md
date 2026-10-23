@@ -1,45 +1,21 @@
 # Changelog
 
-Histórico de entregas concluídas via workflow autônomo.
+Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
-## 2026-10-22 — #58
-Testes unitários para o `tools/icons_generator`: a geração foi extraída de `main` para `generate(input, out_root)`, cobrindo entrada ausente, PNGs Linux, `icon.ico` Windows e iconset macOS.
+## 2026-10-22
 
-## 2026-10-22 — #34
-Rodapé discreto fixado no fim da tela inicial/conexão com a capa e um link para o livro *Desbravando Rust* (abre o site no navegador do sistema).
-
-## 2026-10-22 — #33
-Spec de melhorias de UI/UX do crustdb-app (`docs/specs/2026-10-22-crustdb-uiux-spec.md`): 46 melhorias (P1 15, P2 21, P3 10) com problema, evidência, proposta, prioridade e aceite por tela; itens conflitantes com a spec v1 movidos para backlog v2. Apenas documentação.
-
-## 2026-10-22 — #35
-Tela de conexão: duplo clique conecta na conexão salva, ícone colorido por engine (PostgreSQL/MySQL) e conexão online mostra "Active" com botão "Open" que reusa o workspace vivo em vez de abrir outro.
-
-## 2026-10-22 — #32
-Logo do cRustDB (`assets/imgs/logo2.png`) no topo da tela de conexão, via `include_image!` com altura máxima de 96px.
-
-## 2026-10-22 — #3
-Remove `libgtk-3-dev` dos steps apt-get do `ci.yml` (clippy, test, coverage, integration, release) e do README: `Cargo.lock` não tem crates gtk/gdk/glib/ashpd, `rfd` usa backend xdg-portal e fontconfig é carregado via dlopen, então `libfontconfig-dev` também não é necessário no build.
-
-## 2026-10-22 — #45
-fmt, clippy e deny rodam em paralelo; test depende dos três e usa `cargo nextest run --workspace --fail-fast`, parando no primeiro teste quebrado. Job coverage envia `lcov.info` ao Codecov (`codecov-action@v5`, secret `CODECOV_TOKEN`) e o README ganha badge de coverage.
-
-## 2026-10-22 — #43
-Avaliação técnica da troca de Apache-2.0 para BSL 1.1 e alternativas (FSL, ELv2, PolyForm, AGPL-3.0, Commons Clause, dual license), com recomendação e riscos em `docs/license-evaluation.md`. Licença trocada para BSL 1.1 (`BUSL-1.1`): Licensor Desbravando-Rust, uso de produção livre exceto revenda, cada versão vira Apache-2.0 após 4 anos. ADR em `docs/adr/0001-licenca-bsl-1.1.md`.
-
-## 2026-10-22 — #41
-
-Pipeline de CI roda uma vez por commit (push só em `main` e tags `v*`, mais `pull_request`), com concurrency que cancela runs antigos só em PR. Cache cargo em clippy, test, coverage e integration; cadeia fail-fast fmt → clippy/deny → test → coverage/integration → release. Matriz de integration sem a linha postgres:latest/mysql:8.4 (coberta pelo coverage). Badge `ci` no README.
-
-## 2026-10-22 — #2
-
-Documenta em `deny.toml` a cadeia de dependências e o gatilho de revisão de cada aviso RUSTSEC ignorado (ttf-parser; zvariant/zbus_names/zvariant_derive). Só comentários, sem mudança de entradas.
-
-## 2026-10-22 — #37
-
-Corrige falhas de pipeline: `deny` (feature `png` only no `image` do icons_generator, bumps de `rustls-webpki` e `webpki-roots`), skip de `keyring_roundtrip` em integration/coverage e testes `perf` retornam cedo em debug.
-
-## 2026-10-22 — #36
-
-Aplica `cargo fmt` em `tools/icons_generator/src/main.rs`, que fazia `cargo fmt --all --check` falhar em todas as branches. Mudanças só de formatação, sem mudança de comportamento.
+- [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
+- [#58](https://github.com/Desbravando-Rust/cRustDB/issues/58) — Unit tests for `tools/icons_generator`; generation extracted into `generate(input, out_root)`.
+- [#34](https://github.com/Desbravando-Rust/cRustDB/issues/34) — Home/connection screen footer promoting the *Desbravando Rust* book, opening the site in the system browser.
+- [#33](https://github.com/Desbravando-Rust/cRustDB/issues/33) — UI/UX improvement spec for crustdb-app (`docs/specs/2026-10-22-crustdb-uiux-spec.md`), 46 items by priority. Docs only.
+- [#35](https://github.com/Desbravando-Rust/cRustDB/issues/35) — Connection screen: double-click connects, engine-colored icons, and live connections show "Active" with an "Open" button that reuses the workspace.
+- [#32](https://github.com/Desbravando-Rust/cRustDB/issues/32) — cRustDB logo at the top of the connection screen.
+- [#3](https://github.com/Desbravando-Rust/cRustDB/issues/3) — Drop `libgtk-3-dev` from CI apt-get steps and the README; it is not needed to build.
+- [#45](https://github.com/Desbravando-Rust/cRustDB/issues/45) — CI runs fmt, clippy and deny in parallel; tests use `cargo nextest` with fail-fast; coverage uploaded to Codecov with a README badge.
+- [#43](https://github.com/Desbravando-Rust/cRustDB/issues/43) — License changed from Apache-2.0 to BSL 1.1 (`BUSL-1.1`), with evaluation in `docs/license-evaluation.md` and ADR 0001.
+- [#41](https://github.com/Desbravando-Rust/cRustDB/issues/41) — CI runs once per commit with cargo caching, a fail-fast job chain and a trimmed integration matrix; `ci` badge in the README.
+- [#2](https://github.com/Desbravando-Rust/cRustDB/issues/2) — Document the dependency chain and review trigger for each ignored RUSTSEC advisory in `deny.toml`. Comments only.
+- [#37](https://github.com/Desbravando-Rust/cRustDB/issues/37) — Fix CI failures: `deny` (icons_generator `image` features, `rustls-webpki`/`webpki-roots` bumps), skip `keyring_roundtrip` in CI, and `perf` tests return early in debug.
+- [#36](https://github.com/Desbravando-Rust/cRustDB/issues/36) — Apply `cargo fmt` to `tools/icons_generator/src/main.rs`. Formatting only.

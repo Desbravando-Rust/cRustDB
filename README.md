@@ -81,7 +81,7 @@ cargo run -p crustdb-app
 
 ### Packages
 
-`packaging/build-appimage.sh` builds `crustdb-<version>-x86_64.AppImage` and `crustdb-<version>-x86_64-linux.tar.gz` into `target/dist/`. Build on the oldest Linux you want to support (CI uses Ubuntu 24.04, glibc 2.39): the binary needs at least the glibc it was built with. Tag `v*` publishes both files as a GitHub release.
+`packaging/build-linux.sh` builds `crustdb-<version>-x86_64.{AppImage,deb,rpm,flatpak}` and `crustdb-<version>-x86_64-linux.tar.gz` into `target/dist/`. It needs `cargo-deb` and `cargo-generate-rpm`; the `.flatpak` (manifest in `packaging/flatpak/`, runtime `org.freedesktop.Platform//26.08`) is skipped when `flatpak-builder` is missing. Build on the oldest Linux you want to support (CI uses Ubuntu 24.04, glibc 2.39): the binary needs at least the glibc it was built with. Tag `v*` publishes all files as a GitHub release.
 
 The packages rely on the system graphics stack (a Vulkan or OpenGL driver, `libxkbcommon`, and X11 or Wayland libraries); they are not bundled. Pushing a `v*` tag runs the `release` job.
 

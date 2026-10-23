@@ -2,7 +2,14 @@
 REMOTE ?= origin
 BRANCHES := $(shell git for-each-ref --format='%(refname:short)' 'refs/heads/feat/*')
 
-.PHONY: push-branches list-branches lockfix icons test
+.PHONY: push-branches list-branches lockfix icons test release release-tag
+
+# Release: 1) bump de versão + PR; 2) após o merge, tag vX.Y.Z que dispara os instaladores no CI.
+release:
+	@./packaging/release.sh bump
+
+release-tag:
+	@./packaging/release.sh tag
 
 # Resolve conflito no Cargo.lock: parte de um lado (SIDE=ours|theirs) e o cargo
 # reconcilia com os Cargo.toml mesclados, sem atualizar as demais versões.

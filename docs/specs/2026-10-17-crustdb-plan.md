@@ -708,9 +708,9 @@ Regra para todas as tasks da M4: a lógica fica em `state/` (testada sem GUI); `
 
 ### Task 37: Empacotamento
 
-**Files:** Create: `packaging/crustdb.desktop`, `packaging/crustdb.png`, `packaging/build-appimage.sh`; Modify: `.github/workflows/ci.yml`
+**Files:** Create: `packaging/crustdb.desktop`, `packaging/crustdb.png`, `packaging/build-linux.sh`; Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1:** `build-appimage.sh`: `cargo build --release`, `linuxdeploy` (ou equivalente) com `.desktop` e ícone, e geração de `crustdb-<versão>-x86_64.AppImage` e `crustdb-<versão>-x86_64-linux.tar.gz` (binário + `.desktop` + ícone).
+- [ ] **Step 1:** `build-linux.sh`: `cargo build --release`, `linuxdeploy` (ou equivalente) com `.desktop` e ícone, e geração de `crustdb-<versão>-x86_64.AppImage` e `crustdb-<versão>-x86_64-linux.tar.gz` (binário + `.desktop` + ícone).
 - [ ] **Step 2:** Verificar num container limpo (`ubuntu:24.04` com sessão X virtual `xvfb`): o AppImage abre e o primeiro frame é logado. Esperado: exit 0.
 - [ ] **Step 3:** Job `release` no CI, só com tag `v*`. Ele publica os artefatos e não roda em push.
 - [ ] **Step 4:** Commit (com aprovação): `build: appimage and tarball packaging`. Abrir o PR da M5. Revisão final do branch inteiro com o agente `diff-reviewer` (Opus) antes do merge.
