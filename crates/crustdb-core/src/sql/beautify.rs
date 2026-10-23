@@ -22,13 +22,21 @@ pub fn beautify(text: &str, kind: DriverKind) -> Option<String> {
     let idx = LineIndex::new(text);
     let mut items = Vec::with_capacity(tokens.len());
     let (mut pos, mut spaced) = (0, false);
+    // Spans must tile the text: MySQL comment hints (`/*!40101 ... */`) are re-tokenized with
+    // shifted spans, and copying those would drop characters.
     for t in &tokens {
+        if idx.offset(t.span.start) != pos {
+            return None;
+        }
         let end = idx.offset(t.span.end).max(pos);
         let src = &text[pos..end];
         pos = end;
         if let Token::Whitespace(Whitespace::Space | Whitespace::Newline | Whitespace::Tab) =
             t.token
         {
+            if !src.trim().is_empty() {
+                return None;
+            }
             spaced = true;
             continue;
         }
@@ -38,6 +46,9 @@ pub fn beautify(text: &str, kind: DriverKind) -> Option<String> {
             spaced,
         });
         spaced = false;
+    }
+    if pos != text.len() {
+        return None;
     }
 
     let mut out = String::with_capacity(text.len());
