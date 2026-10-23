@@ -34,6 +34,15 @@ impl CrustApp {
                 }
             }
             Intent::LoadColumns(object) => self.load_columns(object),
+            Intent::OpenDiagram { database, schema } => {
+                let Some(req) = self.runtime.as_ref().map(|rt| rt.next_request_id()) else {
+                    return;
+                };
+                let cmd = self
+                    .active_ws()
+                    .map(|w| w.open_diagram(req, database, schema));
+                self.send(cmd);
+            }
             _ => {}
         }
     }

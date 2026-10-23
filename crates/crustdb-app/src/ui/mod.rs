@@ -91,4 +91,9 @@ pub enum Intent {
         sql: String,
     },
     LoadColumns(ObjectRef),
+    /// ER diagram of a schema (PG) or database (MySQL, `schema: None`).
+    OpenDiagram {
+        database: String,
+        schema: Option<String>,
+    },
 }

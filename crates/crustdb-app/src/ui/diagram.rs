@@ -1,11 +1,68 @@
 //! Read-only ER diagram window: one box per table, one line per foreign key.
 use eframe::egui;
 
-use crate::state::diagram::Diagram;
+use crate::runtime::DiagramTable;
+use crate::state::diagram::{Diagram, edges, layout};
 
 /// Draws the diagram window; closing it clears `diagram`.
 pub fn show(ctx: &egui::Context, diagram: &mut Option<Diagram>) {
-    let _ = (ctx, diagram);
+    let Some(d) = diagram.as_ref() else {
+        return;
+    };
+    let mut open = true;
+    egui::Window::new("ER diagram")
+        .open(&mut open)
+        .default_size([800.0, 600.0])
+        .show(ctx, |ui| {
+            ui.strong(d.title.as_str());
+            match &d.tables {
+                _ if d.failed => {
+                    ui.label("Could not load the diagram.");
+                }
+                None => {
+                    ui.label("Loading…");
+                }
+                Some(t) if t.is_empty() => {
+                    ui.label("No tables.");
+                }
+                Some(t) => {
+                    egui::ScrollArea::both().show(ui, |ui| draw(ui, t));
+                }
+            }
+        });
+    if !open {
+        *diagram = None;
+    }
+}
+
+fn draw(ui: &mut egui::Ui, tables: &[DiagramTable]) {
+    let rects = layout(tables);
+    let size = rects
+        .iter()
+        .fold(egui::Vec2::ZERO, |s, r| s.max(r.max.to_vec2()));
+    let (resp, painter) = ui.allocate_painter(size, egui::Sense::hover());
+    let offset = resp.rect.min.to_vec2();
+    let fill = ui.visuals().window_fill;
+    let stroke = ui.visuals().widgets.noninteractive.fg_stroke;
+    // Lines go first so the boxes cover their ends.
+    for (a, b) in edges(tables) {
+        let (a, b) = (rects[a].translate(offset), rects[b].translate(offset));
+        painter.line_segment([a.center(), b.center()], stroke);
+    }
+    for (t, r) in tables.iter().zip(&rects) {
+        let r = r.translate(offset);
+        painter.rect_filled(r, 4.0, fill);
+        painter.rect_stroke(r, 4.0, stroke, egui::StrokeKind::Inside);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink(4.0)), |ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.add(egui::Label::new(egui::RichText::new(&t.object.name).strong()).truncate());
+            for c in &t.columns {
+                let pk = if c.is_primary_key { " PK" } else { "" };
+                let text = format!("{} {}{pk}", c.name, c.type_name);
+                ui.add(egui::Label::new(text).truncate());
+            }
+        });
+    }
 }
 
 #[cfg(test)]
