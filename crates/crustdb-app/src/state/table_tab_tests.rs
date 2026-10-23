@@ -331,3 +331,11 @@ fn cell_updated_marks_needs_fetch() {
     t.cell_updated(RequestId(3));
     assert!(t.needs_fetch && t.edit_req.is_none());
 }
+
+#[test]
+fn begin_edit_skips_text_at_memory_cap() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.rows[0][1] = text(&"a".repeat(crustdb_core::model::CELL_MEMORY_CAP));
+    t.begin_edit(0, 1);
+    assert!(t.editing.is_none());
+}
