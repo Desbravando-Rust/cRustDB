@@ -4,7 +4,7 @@ version = "0.1.0"
 license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Native client for PostgreSQL and MySQL/MariaDB"
+description = "Native client for PostgreSQL, MySQL/MariaDB and SQLite"
 
 [lints]
 workspace = true
@@ -14,6 +14,7 @@ anyhow = "1.0.104"
 crustdb-core = { version = "0.1.0", path = "../crustdb-core" }
 crustdb-mysql = { version = "0.1.0", path = "../crustdb-mysql" }
 crustdb-postgres = { version = "0.1.0", path = "../crustdb-postgres" }
+crustdb-sqlite = { version = "0.1.0", path = "../crustdb-sqlite" }
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui-phosphor = "0.14.0"
 egui_extras = { version = "0.37.0", features = ["image"] }
