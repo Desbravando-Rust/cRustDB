@@ -2,7 +2,7 @@
 
 use crate::dialect::{BuiltQuery, Dialect};
 use crate::driver::Param;
-use crate::model::{Cell, ColumnMeta, ObjectKind, ObjectRef};
+use crate::model::{CELL_MEMORY_CAP, Cell, ColumnMeta, ObjectKind, ObjectRef};
 use crate::query::QueryError;
 
 /// `row` holds the page cells in the order of `columns`. `value = None` writes `NULL`.
@@ -34,10 +34,7 @@ pub fn build_update(
     let mut conds = Vec::new();
     for (i, c) in columns.iter().enumerate().filter(|(_, c)| c.is_primary_key) {
         let key = match row.get(i) {
-            Some(Cell::Text {
-                value,
-                truncated: false,
-            }) => value.to_string(),
+            Some(cell @ Cell::Text { value, .. }) if !is_opaque(cell) => value.to_string(),
             _ => return Err(QueryError::NotEditable(c.name.clone())),
         };
         params.push(Param(Some(key)));
@@ -51,22 +48,21 @@ pub fn build_update(
     Ok(BuiltQuery { sql, params })
 }
 
-fn is_opaque(c: &Cell) -> bool {
-    matches!(
-        c,
-        Cell::Bytes { .. }
-            | Cell::Text {
-                truncated: true,
-                ..
-            }
-    )
+/// Binary, truncated, or text at `CELL_MEMORY_CAP` (servers cap it without flagging): the
+/// value held may not be the stored one, so it can neither be edited nor key a row.
+pub fn is_opaque(c: &Cell) -> bool {
+    match c {
+        Cell::Null => false,
+        Cell::Text { value, truncated } => *truncated || value.len() >= CELL_MEMORY_CAP,
+        Cell::Bytes { .. } => true,
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::model::{CELL_MEMORY_CAP, DriverKind, TypeCategory};
+    use crate::model::{DriverKind, TypeCategory};
 
     struct TestDialect;
     impl Dialect for TestDialect {
