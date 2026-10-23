@@ -133,17 +133,26 @@ mod tests {
     use super::*;
     use crate::state::workspace::tests::state;
 
+    /// Installs theme fonts and image loaders on the first pass and returns
+    /// `false` then: fonts apply on the next pass, and without loaders the
+    /// logo renders egui's "⚠️" error glyph, which no installed font draws.
+    fn ready(ui: &egui::Ui, done: &mut bool) -> bool {
+        if std::mem::replace(done, true) {
+            return true;
+        }
+        crate::ui::theme::install_theme(ui.ctx());
+        egui_extras::install_image_loaders(ui.ctx());
+        false
+    }
+
     #[test]
     fn home_lists_saved_connections() {
         let s = state(&["alpha", "beta"]);
-        let mut fonts_ready = false;
+        let mut done = false;
         let mut h = Harness::new_ui(|ui| {
-            // Fonts apply on the pass after `set_fonts`; skip drawing until then.
-            if !std::mem::replace(&mut fonts_ready, true) {
-                crate::ui::theme::install_theme(ui.ctx());
-                return;
+            if ready(ui, &mut done) {
+                show(ui, &s);
             }
-            show(ui, &s);
         });
         h.run();
         h.get_by_label("alpha");
@@ -153,9 +162,11 @@ mod tests {
     #[test]
     fn home_shows_logo() {
         let s = state(&[]);
+        let mut done = false;
         let mut h = Harness::new_ui(|ui| {
-            egui_extras::install_image_loaders(ui.ctx());
-            show(ui, &s);
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
         });
         // `run` waits for pending images, so the decode must be done by now.
         h.run();
@@ -208,9 +219,12 @@ mod tests {
         let s = state(&["alpha"]);
         let id = s.config.connections[0].id;
         let mut intents = vec![];
-        let mut h = Harness::builder()
-            .with_step_dt(0.05)
-            .build_ui(|ui| intents.extend(show(ui, &s)));
+        let mut done = false;
+        let mut h = Harness::builder().with_step_dt(0.05).build_ui(|ui| {
+            if ready(ui, &mut done) {
+                intents.extend(show(ui, &s));
+            }
+        });
         h.run();
         h.get_by_label("alpha").click();
         h.step();
@@ -233,7 +247,12 @@ mod tests {
             raw: "16.0".into(),
         });
         let mut intents = vec![];
-        let mut h = Harness::new_ui(|ui| intents.extend(show(ui, &s)));
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                intents.extend(show(ui, &s));
+            }
+        });
         h.run();
         h.get_by_label("Active");
         assert!(h.query_by_label("Connect").is_none());
