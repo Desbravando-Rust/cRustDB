@@ -4,6 +4,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
+## 2026-10-23
+
+- [#6](https://github.com/Desbravando-Rust/cRustDB/issues/6) — Copy grid cells and rows to the clipboard: row range selection with Shift+click, Ctrl+C copies rows as TSV, cell context menu.
+
 ## 2026-10-22
 
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
