@@ -139,7 +139,14 @@ impl Session for SqliteSession {
         }
     }
     async fn close(self: Box<Self>) {
-        let Self { tx, thread, .. } = *self;
+        let Self {
+            tx,
+            thread,
+            interrupt,
+            ..
+        } = *self;
+        // A long step would hold the thread (and this join) until it ends.
+        interrupt.interrupt();
         let _ = tx.send(ConnCmd::Close).await;
         let _ = tokio::task::spawn_blocking(move || thread.join()).await;
     }
