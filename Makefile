@@ -2,7 +2,7 @@
 REMOTE ?= origin
 BRANCHES := $(shell git for-each-ref --format='%(refname:short)' 'refs/heads/feat/*')
 
-.PHONY: push-branches list-branches lockfix icons test release release-tag hooks lint ci
+.PHONY: push-branches list-branches lockfix icons test release release-tag hooks lint test
 
 # Release: 1) bump de versão + PR; 2) após o merge, tag vX.Y.Z que dispara os instaladores no CI.
 release:
@@ -42,7 +42,7 @@ lint:
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
 
-ci: lint
+test: lint
 	cargo deny check
 	cargo nextest run --workspace --fail-fast
 

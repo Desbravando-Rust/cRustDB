@@ -21,6 +21,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<R
     // Same limit as highlighting: past it, matches are only scanned on demand.
     let big = !highlight_enabled(&tab.text);
     let fid = editor.with("find");
+    // An unfocused editor collapses its selection, so the last landing is remembered here.
+    let lid = fid.with("landed");
+    let landed = ui.data(|d| d.get_temp::<Range<usize>>(lid));
     let had = ui.memory(|m| m.has_focus(fid));
     let shift = ui.input(|i| i.modifiers.shift);
     // Taken before any TextEdit sees it, so it never reaches the editor as a newline.
@@ -45,7 +48,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<R
             click = prev_btn || next_btn;
             // The first jump lands on the current match unless it is already selected.
             let cur = tab.find.current_match(&tab.text);
-            select = if cur.is_some() && cur != sel {
+            select = if cur.is_some() && cur != sel && cur != landed {
                 cur
             } else {
                 tab.find.step(&tab.text, next)
@@ -73,6 +76,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<R
             tab.find.open = false;
         }
     });
+    if let Some(r) = select.clone() {
+        ctx.data_mut(|d| d.insert_temp(lid, r));
+    }
     if let (Some(r), Some(mut st)) = (select.clone(), state) {
         st.cursor.set_char_range(Some(CCursorRange::two(
             CCursor::new(r.start),
@@ -136,7 +142,11 @@ mod tests {
         let id = egui::Id::unique("editor");
         let mut h = Harness::new_ui(|ui| {
             show(ui, &mut tab, id);
-            ui.add(egui::TextEdit::multiline(&mut tab.text).id(id));
+            ui.add(
+                egui::TextEdit::multiline(&mut tab.text)
+                    .id(id)
+                    .hint_text("SQL"),
+            );
         });
         h.run();
         h.event(egui::Event::Text("select".into()));
