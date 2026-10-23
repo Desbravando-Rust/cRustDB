@@ -156,8 +156,8 @@ fn start(
     let ncols = stmt.column_count();
     if ncols == 0 {
         // Empty or comment-only SQL prepares to a NULL statement (no expanded SQL); stepping it
-        // would be SQLITE_MISUSE.
-        if stmt.expanded_sql().is_none() {
+        // would be SQLITE_MISUSE. With parameters, None may be OOM/SQLITE_LIMIT_LENGTH instead.
+        if stmt.parameter_count() == 0 && stmt.expanded_sql().is_none() {
             *done = Ok(Some(0));
             let _ = reply.send(Ok(ResultHeader { columns: vec![] }));
             return None;
