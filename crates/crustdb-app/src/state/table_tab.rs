@@ -1,5 +1,7 @@
+use crustdb_core::edit::build_update;
 use crustdb_core::model::{
-    ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectRef, Row,
+    Cell, ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
+    Row,
 };
 use crustdb_core::query::{Filter, Sort, TableQuery};
 
@@ -246,17 +248,75 @@ impl TableTab {
         self.notice = None;
     }
 
-    pub fn begin_edit(&mut self, _row: usize, _col: usize) {}
-
-    pub fn commit_edit(&mut self, _req: RequestId) -> Option<Command> {
-        None
+    /// Opens the inline editor on a text or NULL cell of a table with a primary key.
+    pub fn begin_edit(&mut self, row: usize, col: usize) {
+        let keyed =
+            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
+        let text = match self.rows.get(row).and_then(|r| r.get(col)) {
+            Some(Cell::Text {
+                value,
+                truncated: false,
+            }) => value.to_string(),
+            Some(Cell::Null) => String::new(),
+            _ => return,
+        };
+        if keyed {
+            self.editing = Some((row, col, text));
+        }
     }
 
-    pub fn set_null(&mut self, _row: usize, _col: usize, _req: RequestId) -> Option<Command> {
-        None
+    /// Closes the inline editor; the typed text becomes an `UpdateCell` if it changed anything.
+    pub fn commit_edit(&mut self, req: RequestId) -> Option<Command> {
+        let (row, col, text) = self.editing.take()?;
+        self.update_cell(row, col, Some(text), req)
     }
 
-    pub fn cell_updated(&mut self, _req: RequestId) {}
+    pub fn set_null(&mut self, row: usize, col: usize, req: RequestId) -> Option<Command> {
+        self.editing = None;
+        self.update_cell(row, col, None, req)
+    }
+
+    /// Rejections (no key, binary or truncated cells) land in `notice`. An unchanged value sends
+    /// nothing (MySQL would also report 0 affected rows for it).
+    fn update_cell(
+        &mut self,
+        row: usize,
+        col: usize,
+        value: Option<String>,
+        req: RequestId,
+    ) -> Option<Command> {
+        let cells = self.rows.get(row)?;
+        let unchanged = match (cells.get(col), &value) {
+            (Some(Cell::Null), None) => true,
+            (Some(Cell::Text { value: old, .. }), Some(new)) => **old == **new,
+            _ => false,
+        };
+        if unchanged {
+            return None;
+        }
+        let d = crate::export_fmt::dialect(self.driver);
+        match build_update(d, &self.object, &self.columns, cells, col, value) {
+            Ok(update) => {
+                self.edit_req = Some(req);
+                Some(Command::UpdateCell {
+                    tab: self.id,
+                    req,
+                    update,
+                })
+            }
+            Err(e) => {
+                self.notice = Some(e.to_string());
+                None
+            }
+        }
+    }
+
+    pub fn cell_updated(&mut self, req: RequestId) {
+        if self.edit_req == Some(req) {
+            self.edit_req = None;
+            self.needs_fetch = true;
+        }
+    }
 
     pub fn click_header(&mut self, column: &str, shift: bool) {
         toggle_sort(&mut self.sorts, column, shift);
