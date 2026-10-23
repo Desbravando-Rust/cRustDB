@@ -7,6 +7,7 @@ use crustdb_core::format::hex_preview;
 use crustdb_core::model::{Cell, ColumnMeta, DriverKind, TypeCategory};
 use crustdb_mysql::MysqlDialect;
 use crustdb_postgres::PgDialect;
+use crustdb_sqlite::SqliteDialect;
 
 use crate::csv_out::CsvOut;
 
@@ -38,6 +39,7 @@ pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
     match kind {
         DriverKind::Postgres => &PgDialect,
         DriverKind::Mysql => &MysqlDialect,
+        DriverKind::Sqlite => &SqliteDialect,
     }
 }
 
@@ -139,7 +141,7 @@ pub fn sql_literal(kind: DriverKind, c: &Cell) -> String {
         (Cell::Bytes { value, .. }, DriverKind::Postgres) => {
             format!("'\\x{}'::bytea", hex_preview(value, usize::MAX))
         }
-        (Cell::Bytes { value, .. }, DriverKind::Mysql) => {
+        (Cell::Bytes { value, .. }, DriverKind::Mysql | DriverKind::Sqlite) => {
             format!("X'{}'", hex_preview(value, usize::MAX))
         }
     }
