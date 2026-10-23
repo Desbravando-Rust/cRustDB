@@ -141,19 +141,61 @@ impl ResultPane {
 /// Missing cell (row shorter than the header) sorts as null.
 static MISSING: Cell = Cell::Null;
 
-/// Nulls last in both directions; numbers by value before non-numeric text, the rest as text/bytes.
+/// Splits `[+-]?\d+(\.\d*)?` into (negative, int digits, fraction digits), normalized; zero is positive.
+fn split_decimal(s: &str) -> Option<(bool, &str, &str)> {
+    let s = s.trim();
+    let (neg, s) = match s.as_bytes().first()? {
+        b'-' => (true, &s[1..]),
+        b'+' => (false, &s[1..]),
+        _ => (false, s),
+    };
+    let (int, frac) = s.split_once('.').unwrap_or((s, ""));
+    if int.is_empty()
+        || !int.bytes().all(|b| b.is_ascii_digit())
+        || !frac.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let (int, frac) = (int.trim_start_matches('0'), frac.trim_end_matches('0'));
+    Some((neg && !(int.is_empty() && frac.is_empty()), int, frac))
+}
+
+/// Exact decimal comparison without f64; `None` if either side is not a plain decimal literal.
+fn cmp_exact(x: &str, y: &str) -> Option<Ordering> {
+    let ((nx, ix, fx), (ny, iy, fy)) = (split_decimal(x)?, split_decimal(y)?);
+    if nx != ny {
+        return Some(if nx {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        });
+    }
+    let mag = ix
+        .len()
+        .cmp(&iy.len())
+        .then_with(|| ix.cmp(iy))
+        .then_with(|| fx.cmp(fy));
+    Some(if nx { mag.reverse() } else { mag })
+}
+
+/// Nulls last in both directions; numbers by value (Integer/Decimal exactly, Float via f64)
+/// before non-numeric text, the rest as text/bytes.
 fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) -> Ordering {
     let o = match (a.unwrap_or(&MISSING), b.unwrap_or(&MISSING)) {
         (Cell::Null, Cell::Null) => return Ordering::Equal,
         (Cell::Null, _) => return Ordering::Greater,
         (_, Cell::Null) => return Ordering::Less,
         (Cell::Text { value: x, .. }, Cell::Text { value: y, .. }) => {
-            // ponytail: Decimal via f64 loses precision > 2^53; switch to decimal compare if needed
             let numeric = matches!(
                 cat,
                 TypeCategory::Integer | TypeCategory::Decimal | TypeCategory::Float
             );
-            if numeric {
+            let exact = matches!(cat, TypeCategory::Integer | TypeCategory::Decimal)
+                .then(|| cmp_exact(x, y))
+                .flatten();
+            if let Some(o) = exact {
+                o
+            } else if numeric {
                 match (x.parse::<f64>(), y.parse::<f64>()) {
                     (Ok(x), Ok(y)) => x.total_cmp(&y),
                     (Ok(_), Err(_)) => Ordering::Less,
