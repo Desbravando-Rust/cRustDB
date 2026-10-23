@@ -164,5 +164,7 @@ pub fn keywords(kind: DriverKind) -> &'static [&'static str] {
     match kind {
         DriverKind::Postgres => &PG,
         DriverKind::Mysql => &MY,
+        // ponytail: SQLite borrows the PostgreSQL list; own list when completion feels off.
+        DriverKind::Sqlite => &PG,
     }
 }

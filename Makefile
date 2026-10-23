@@ -34,8 +34,11 @@ icons:
 	cargo run -p icons_generator --release
 
 
-ci:
+lint:
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
+
+ci: lint
 	cargo deny check
 	cargo nextest run --workspace --fail-fast
+

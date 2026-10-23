@@ -69,5 +69,6 @@ pub(crate) fn dialect(kind: crate::model::DriverKind) -> &'static dyn sqlparser:
     match kind {
         crate::model::DriverKind::Postgres => &sqlparser::dialect::PostgreSqlDialect {},
         crate::model::DriverKind::Mysql => &sqlparser::dialect::MySqlDialect {},
+        crate::model::DriverKind::Sqlite => &sqlparser::dialect::SQLiteDialect {},
     }
 }

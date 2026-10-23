@@ -124,7 +124,8 @@ pub fn show(
     if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::F)) {
         tab.format_at(sel.clone());
     }
-    ui.horizontal(|ui| {
+    // Wraps so a narrow window does not push the editor and results off-screen.
+    ui.horizontal_wrapped(|ui| {
         if ui
             .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
             .clicked()

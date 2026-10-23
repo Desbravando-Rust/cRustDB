@@ -58,7 +58,22 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
         ui.selectable_value(&mut tab.pane.tab, ResultTab::Result, "Result");
         ui.selectable_value(&mut tab.pane.tab, ResultTab::Messages, "Messages");
         if tab.pane.header.is_some() {
-            ui.weak(format!("{} rows", tab.pane.rows.len()));
+            let p = &mut tab.pane;
+            if ui
+                .add(
+                    egui::TextEdit::singleline(&mut p.filter)
+                        .hint_text("Filter rows")
+                        .desired_width(160.0),
+                )
+                .changed()
+            {
+                p.refresh_view();
+            }
+            if p.filter.is_empty() {
+                ui.weak(format!("{} rows", p.rows.len()));
+            } else {
+                ui.weak(format!("{} of {} rows", p.view.len(), p.rows.len()));
+            }
         }
         if tab.pane.load_more_visible()
             && ui
@@ -77,14 +92,27 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
     });
     ui.separator();
     match tab.pane.tab {
-        ResultTab::Result => match &tab.pane.header {
-            Some(h) => {
-                grid::grid(ui, &h.columns, &tab.pane.rows, &mut tab.pane.selected);
+        ResultTab::Result => {
+            let p = &mut tab.pane;
+            let clicked = match &p.header {
+                Some(h) => grid::grid(
+                    ui,
+                    &h.columns,
+                    &p.rows,
+                    Some(p.view.as_slice()),
+                    &mut p.selected,
+                    &mut p.select_anchor,
+                    &p.sorts,
+                ),
+                None => {
+                    ui.weak("No result");
+                    None
+                }
+            };
+            if let Some((column, shift)) = clicked {
+                p.click_header(&column, shift);
             }
-            None => {
-                ui.weak("No result");
-            }
-        },
+        }
         ResultTab::Messages => {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for m in &tab.pane.messages {
@@ -110,7 +138,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crustdb_core::driver::ResultHeader;
-    use crustdb_core::model::DriverKind;
+    use crustdb_core::model::{Cell, ColumnMeta, DriverKind, TypeCategory};
     use egui_kittest::Harness;
     use egui_kittest::kittest::{NodeT, Queryable};
 
@@ -150,5 +178,88 @@ mod tests {
         assert!(run(&mut tab, show).query_by_label("Load more").is_some());
         tab.pane.exhausted = true;
         assert!(run(&mut tab, show).query_by_label("Load more").is_none());
+    }
+
+    fn tab_with_rows() -> QueryTab {
+        let col = |n: &str| ColumnMeta {
+            name: n.into(),
+            type_name: "text".into(),
+            category: TypeCategory::Text,
+            nullable: None,
+            is_primary_key: false,
+        };
+        let text = |s: &str| Cell::Text {
+            value: s.into(),
+            truncated: false,
+        };
+        let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+        tab.pane.header = Some(ResultHeader {
+            columns: vec![col("id"), col("name")],
+        });
+        tab.pane.rows = [("1", "a"), ("2", "b"), ("3", "c")]
+            .into_iter()
+            .map(|(i, n)| vec![text(i), text(n)].into())
+            .collect();
+        tab.pane.refresh_view();
+        tab
+    }
+
+    fn copied(h: &Harness<'_>) -> Vec<String> {
+        h.output()
+            .platform_output
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                egui::OutputCommand::CopyText(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn copy_event_copies_selected_row_as_tsv() {
+        let mut tab = tab_with_rows();
+        tab.pane.selected = Some(1);
+        tab.pane.select_anchor = Some(1);
+        let mut h = run(&mut tab, show);
+        h.event(egui::Event::Copy);
+        h.step();
+        assert_eq!(copied(&h), ["2\tb"]);
+    }
+
+    #[test]
+    fn copy_follows_display_order_of_sorted_view() {
+        let mut tab = tab_with_rows();
+        tab.pane.view = vec![2, 1, 0];
+        tab.pane.select_anchor = Some(2);
+        tab.pane.selected = Some(1);
+        let mut h = run(&mut tab, show);
+        h.event(egui::Event::Copy);
+        h.step();
+        assert_eq!(copied(&h), ["3\tc\n2\tb"]);
+    }
+
+    #[test]
+    fn shift_click_extends_selection_to_copy_two_rows() {
+        let mut tab = tab_with_rows();
+        let mut h = run(&mut tab, show);
+        h.get_by_label("1").click();
+        h.run();
+        h.get_by_label("2").click_modifiers(egui::Modifiers::SHIFT);
+        h.run();
+        h.event(egui::Event::Copy);
+        h.step();
+        assert_eq!(copied(&h), ["1\ta\n2\tb"]);
+    }
+
+    #[test]
+    fn context_menu_copies_raw_cell() {
+        let mut tab = tab_with_rows();
+        let mut h = run(&mut tab, show);
+        h.get_by_label("b").click_secondary();
+        h.run();
+        h.get_by_label("Copy cell").click();
+        h.step();
+        assert_eq!(copied(&h), ["b"]);
     }
 }
