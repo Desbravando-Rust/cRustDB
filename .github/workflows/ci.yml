@@ -101,9 +101,7 @@ jobs:
     permissions:
       contents: write
     env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      HAS_SENTRY: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -112,8 +110,13 @@ jobs:
         id: ver
         run: |
           v="$(awk -F'"' '/^version/ {print $2; exit}' crates/crustdb-app/Cargo.toml)"
-          [ "$v" = "${GITHUB_REF_NAME#v}" ] || { echo "tag $GITHUB_REF_NAME != crate version $v"; exit 1; }
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$v" = "${GITHUB_REF_NAME#v}" ]; then
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "match=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::tag $GITHUB_REF_NAME != crate version $v; skipping Sentry release"
+          fi
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev flatpak flatpak-builder
       - uses: taiki-e/install-action@v2
         with:
@@ -135,10 +138,17 @@ jobs:
             target/dist/*.deb
             target/dist/*.rpm
             target/dist/*.flatpak
+      - name: Sentry not configured
+        if: env.HAS_SENTRY != 'true'
+        run: echo "::warning::Sentry not configured; skipping release"
       - name: Sentry release
-        if: env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != ''
+        if: env.HAS_SENTRY == 'true' && steps.ver.outputs.match == 'true'
         continue-on-error: true
         uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
           environment: production
           release: crustdb-app@${{ steps.ver.outputs.version }}
