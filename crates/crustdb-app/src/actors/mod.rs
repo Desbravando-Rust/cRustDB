@@ -315,3 +315,42 @@ impl Actors {
         );
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod target_tests {
+    use std::time::Duration;
+
+    use crustdb_core::driver::ConnectTarget;
+    use crustdb_core::model::DriverKind;
+    use crustdb_testkit::fake_driver::{FakeDriver, FakeScript};
+
+    use super::Shared;
+    use super::tests::config;
+
+    fn shared(kind: DriverKind) -> Shared {
+        let config = config(Some("/tmp/a.db"));
+        Shared {
+            driver: FakeDriver::with_kind(FakeScript::default(), kind),
+            target: ConnectTarget {
+                host: String::new(),
+                port: 0,
+                connect_addr: None,
+                user: String::new(),
+                password: None,
+                database: config.database.clone(),
+                tls: config.tls.clone(),
+                connect_timeout: Duration::from_secs(1),
+            },
+            config,
+        }
+    }
+
+    #[test]
+    fn sqlite_target_keeps_file_path() {
+        let t = shared(DriverKind::Sqlite).target_for("main");
+        assert_eq!(t.database.as_deref(), Some("/tmp/a.db"));
+        let t = shared(DriverKind::Mysql).target_for("main");
+        assert_eq!(t.database.as_deref(), Some("main"));
+    }
+}

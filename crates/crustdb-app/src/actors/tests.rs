@@ -460,3 +460,39 @@ async fn load_columns_failure_answers_none() {
         }
     ));
 }
+
+#[tokio::test]
+async fn sqlite_editor_opens_configured_file() {
+    let script = FakeScript {
+        columns: vec![col("id")],
+        rows: rows(1),
+        ..FakeScript::default()
+    };
+    let mut h = harness_with(FakeDriver::with_kind(script, DriverKind::Sqlite));
+    let mut config = config(Some("/tmp/a.db"));
+    config.driver = DriverKind::Sqlite;
+    let secrets = ResolvedSecrets::default();
+    let (ws, tab) = (WS, TAB);
+    h.actors.dispatch(Command::Connect {
+        ws,
+        config,
+        secrets,
+    });
+    assert!(matches!(next(&h.rx).await, Event::Connected { .. }));
+    let database = Some("main".to_string());
+    h.actors.dispatch(Command::OpenEditor { ws, tab, database });
+    let statements = vec!["SELECT 1".to_string()];
+    h.actors.dispatch(Command::Evaluate {
+        tab,
+        req: RequestId(1),
+        statements,
+    });
+    h.actors.dispatch(Command::Execute {
+        tab,
+        req: RequestId(2),
+        evaluation: RequestId(1),
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let file = Some("/tmp/a.db".to_string());
+    assert!(connects(&h).contains(&(SessionPurpose::Editor, file)));
+}
