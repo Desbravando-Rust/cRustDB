@@ -96,4 +96,29 @@ mod tests {
         assert_eq!(tab.text, "x 1; x 2");
         assert!(tab.dirty);
     }
+
+    #[test]
+    fn enter_in_find_keeps_the_editor_text() {
+        let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+        tab.text = "select 1; select 2".into();
+        tab.find.open = true;
+        tab.find.focus = true;
+        let id = egui::Id::new("editor");
+        let mut h = Harness::new_ui(|ui| {
+            show(ui, &mut tab, id);
+            ui.add(egui::TextEdit::multiline(&mut tab.text).id(id));
+        });
+        h.run();
+        h.event(egui::Event::Text("select".into()));
+        h.run();
+        h.key_press(Key::Enter);
+        h.run();
+        h.key_press(Key::Enter);
+        h.run();
+        let focus_kept = h.ctx.memory(|m| m.has_focus(id.with("find")));
+        drop(h);
+        assert_eq!(tab.text, "select 1; select 2");
+        assert_eq!(tab.find.current, 1);
+        assert!(focus_kept);
+    }
 }
