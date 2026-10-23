@@ -122,7 +122,12 @@ impl ConnectionForm {
         } = parse_connection_url(s.trim())?;
         self.set_driver(driver);
         if self.draft.name.trim().is_empty() {
-            self.draft.name.clone_from(&host);
+            // SQLite has no host: name it after the file.
+            let file = database.as_deref().and_then(|d| Path::new(d).file_name());
+            self.draft.name = match file {
+                Some(f) if host.is_empty() => f.to_string_lossy().into_owned(),
+                _ => host.clone(),
+            };
         }
         self.draft.host = host;
         self.draft.port = port.unwrap_or_else(|| default_port(driver));
@@ -173,6 +178,12 @@ impl ConnectionForm {
         let mut c = self.draft.clone();
         c.save_password = self.saves_secrets();
         c.database = c.database.filter(|d| !d.is_empty());
+        if c.driver == DriverKind::Sqlite {
+            // A local file: no tunnel, CA or saved password.
+            c.ssh = None;
+            c.tls.ca_path = None;
+            c.save_password = false;
+        }
         let mut errs = validate(&c, others).err().unwrap_or_default();
         let mut bad = |field, message: &str| {
             errs.push(FieldError {
@@ -429,5 +440,28 @@ mod tests {
         f.test = TestResult::Ok("v".into());
         assert_eq!(f.take_pending_test(), None);
         assert_eq!(f.test, TestResult::Ok("v".into()));
+    }
+
+    #[test]
+    fn sqlite_form_drops_network_fields() {
+        let mut f = form();
+        f.set_ssh(true);
+        f.draft.tls.ca_path = Some("/nonexistent/ca.pem".into());
+        f.password = "pw".to_owned().into();
+        f.save_in_keyring = true;
+        f.set_driver(DriverKind::Sqlite);
+        f.draft.database = Some("/tmp/a.db".into());
+        let (cfg, secrets) = f.to_save(&[]).unwrap();
+        assert!(cfg.ssh.is_none() && cfg.tls.ca_path.is_none());
+        assert!(!cfg.save_password && secrets.is_empty());
+    }
+
+    #[test]
+    fn import_sqlite_url_names_from_file() {
+        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+        f.import_url("sqlite:///tmp/a.db").unwrap();
+        assert_eq!(f.draft.driver, DriverKind::Sqlite);
+        assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
+        assert_eq!(f.draft.name, "a.db");
     }
 }

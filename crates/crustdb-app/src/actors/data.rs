@@ -90,8 +90,7 @@ impl DataActor {
             message: "workspace is not connected".into(),
         })?;
         if self.session.is_none() {
-            let mut target = shared.target.clone();
-            target.database = Some(self.object.database.clone());
+            let target = shared.target_for(&self.object.database);
             self.session = Some(shared.driver.connect(&target, SessionPurpose::Data).await?);
         }
         Ok(shared)

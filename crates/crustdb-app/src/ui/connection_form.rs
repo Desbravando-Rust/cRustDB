@@ -37,6 +37,77 @@ fn error_for(ui: &mut egui::Ui, f: &ConnectionForm, field: &str) {
     }
 }
 
+/// Server fields; SQLite has none of these.
+fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
+    ui.label("Host");
+    ui.text_edit_singleline(&mut f.draft.host);
+    ui.end_row();
+    error_for(ui, f, "host");
+    ui.end_row();
+
+    ui.label("Port");
+    ui.add(egui::DragValue::new(&mut f.draft.port));
+    ui.end_row();
+    error_for(ui, f, "port");
+    ui.end_row();
+
+    ui.label("User");
+    ui.text_edit_singleline(&mut f.draft.user);
+    ui.end_row();
+
+    ui.label("Password");
+    secret_edit(ui, &mut f.password);
+    ui.end_row();
+
+    ui.label("");
+    ui.add_enabled(
+        f.keyring_available,
+        egui::Checkbox::new(&mut f.save_in_keyring, "Save in keyring"),
+    );
+    ui.end_row();
+    if let Some(h) = f.keyring_hint() {
+        ui.label("");
+        ui.weak(h);
+        ui.end_row();
+    }
+
+    ui.label("Database");
+    let mut db = f.draft.database.clone().unwrap_or_default();
+    if ui.text_edit_singleline(&mut db).changed() {
+        f.draft.database = (!db.is_empty()).then_some(db);
+    }
+    ui.end_row();
+
+    ui.label("TLS mode");
+    egui::ComboBox::from_id_salt("tls")
+        .selected_text(format!("{:?}", f.draft.tls.mode))
+        .show_ui(ui, |ui| {
+            for (m, l) in [
+                (TlsMode::Disable, "Disable"),
+                (TlsMode::Require, "Require"),
+                (TlsMode::VerifyCa, "VerifyCa"),
+                (TlsMode::VerifyFull, "VerifyFull"),
+            ] {
+                ui.selectable_value(&mut f.draft.tls.mode, m, l);
+            }
+        });
+    ui.end_row();
+    for n in f.tls_notes() {
+        ui.label("");
+        ui.colored_label(ui.visuals().warn_fg_color, n);
+        ui.end_row();
+    }
+
+    ui.label("CA file");
+    path_edit(ui, &mut f.draft.tls.ca_path);
+    ui.end_row();
+    ui.label("");
+    ui.weak("Empty = system roots");
+    ui.end_row();
+    error_for(ui, f, "ca_path");
+    ui.end_row();
+}
+
 pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
     let mut out = vec![];
     ui.heading("Connection");
@@ -74,79 +145,25 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut driver, DriverKind::Postgres, "PostgreSQL");
                     ui.selectable_value(&mut driver, DriverKind::Mysql, "MySQL/MariaDB");
+                    ui.selectable_value(&mut driver, DriverKind::Sqlite, "SQLite");
                 });
             if driver != f.draft.driver {
                 f.set_driver(driver);
             }
             ui.end_row();
 
-            ui.label("Host");
-            ui.text_edit_singleline(&mut f.draft.host);
-            ui.end_row();
-            error_for(ui, f, "host");
-            ui.end_row();
-
-            ui.label("Port");
-            ui.add(egui::DragValue::new(&mut f.draft.port));
-            ui.end_row();
-            error_for(ui, f, "port");
-            ui.end_row();
-
-            ui.label("User");
-            ui.text_edit_singleline(&mut f.draft.user);
-            ui.end_row();
-
-            ui.label("Password");
-            secret_edit(ui, &mut f.password);
-            ui.end_row();
-
-            ui.label("");
-            ui.add_enabled(
-                f.keyring_available,
-                egui::Checkbox::new(&mut f.save_in_keyring, "Save in keyring"),
-            );
-            ui.end_row();
-            if let Some(h) = f.keyring_hint() {
-                ui.label("");
-                ui.weak(h);
+            if f.draft.driver == DriverKind::Sqlite {
+                // A local file: no server, credentials, TLS or tunnel.
+                ui.label("Database file");
+                let mut p = f.draft.database.as_ref().map(PathBuf::from);
+                path_edit(ui, &mut p);
+                f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
                 ui.end_row();
-            }
-
-            ui.label("Database");
-            let mut db = f.draft.database.clone().unwrap_or_default();
-            if ui.text_edit_singleline(&mut db).changed() {
-                f.draft.database = (!db.is_empty()).then_some(db);
-            }
-            ui.end_row();
-
-            ui.label("TLS mode");
-            egui::ComboBox::from_id_salt("tls")
-                .selected_text(format!("{:?}", f.draft.tls.mode))
-                .show_ui(ui, |ui| {
-                    for (m, l) in [
-                        (TlsMode::Disable, "Disable"),
-                        (TlsMode::Require, "Require"),
-                        (TlsMode::VerifyCa, "VerifyCa"),
-                        (TlsMode::VerifyFull, "VerifyFull"),
-                    ] {
-                        ui.selectable_value(&mut f.draft.tls.mode, m, l);
-                    }
-                });
-            ui.end_row();
-            for n in f.tls_notes() {
-                ui.label("");
-                ui.colored_label(ui.visuals().warn_fg_color, n);
+                error_for(ui, f, "database");
                 ui.end_row();
+            } else {
+                network_fields(ui, f);
             }
-
-            ui.label("CA file");
-            path_edit(ui, &mut f.draft.tls.ca_path);
-            ui.end_row();
-            ui.label("");
-            ui.weak("Empty = system roots");
-            ui.end_row();
-            error_for(ui, f, "ca_path");
-            ui.end_row();
 
             ui.label("Page size");
             ui.add(egui::DragValue::new(&mut f.draft.page_size));
@@ -165,11 +182,12 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
             ui.end_row();
         });
 
+    let sqlite = f.draft.driver == DriverKind::Sqlite;
     let mut ssh_on = f.draft.ssh.is_some();
-    if ui.checkbox(&mut ssh_on, "SSH tunnel").changed() {
+    if !sqlite && ui.checkbox(&mut ssh_on, "SSH tunnel").changed() {
         f.set_ssh(ssh_on);
     }
-    if let Some(ssh) = &mut f.draft.ssh {
+    if let Some(ssh) = f.draft.ssh.as_mut().filter(|_| !sqlite) {
         egui::Grid::new("ssh_form").num_columns(2).show(ui, |ui| {
             ui.label("SSH host");
             ui.text_edit_singleline(&mut ssh.host);
@@ -283,5 +301,21 @@ mod tests {
         h.get_by_label("Save");
         h.get_by_label("Test");
         h.get_by_label("OS keyring unavailable: passwords cannot be saved");
+    }
+
+    #[test]
+    fn sqlite_form_shows_only_file_fields() {
+        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+        h.run();
+        h.get_by_label("Database file");
+        h.get_by_label("Page size");
+        for hidden in ["Host", "Port", "User", "Password", "TLS mode", "SSH tunnel"] {
+            assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
+        }
     }
 }
