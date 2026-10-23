@@ -4,6 +4,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
+## 2026-10-23
+
+- [#17](https://github.com/Desbravando-Rust/cRustDB/issues/17) — Find and replace bar in the SQL query editor (Ctrl+F on query tabs), with match case, previous/next, replace and replace all.
+
 ## 2026-10-22
 
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
