@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use std::sync::atomic::Ordering;
+
 use crustdb_core::dialect::BuiltQuery;
 use crustdb_core::driver::{Param, SessionPurpose};
+use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_testkit::fake_driver::FakeScript;
 
 use super::tests::{
@@ -81,4 +84,54 @@ async fn update_cell_zero_rows_reports_row_not_found() {
         next(&h.rx).await,
         Event::CellUpdated { req: RequestId(2), error: Some(e) } if e == "row not found"
     ));
+}
+
+async fn failed_update(h: &mut H, req: u64) {
+    update(h, req);
+    assert!(matches!(
+        next(&h.rx).await,
+        Event::CellUpdated { error: Some(_), .. }
+    ));
+}
+
+#[tokio::test]
+async fn connection_error_drops_writer_and_next_update_reconnects() {
+    let mut h = harness(FakeScript {
+        rows: rows(1),
+        ..FakeScript::default()
+    });
+    ready(&mut h).await;
+    h.drv.log.drop_next.store(true, Ordering::SeqCst);
+    failed_update(&mut h, 2).await;
+    update(&mut h, 3);
+    assert!(matches!(
+        next(&h.rx).await,
+        Event::CellUpdated { error: None, .. }
+    ));
+    assert_eq!(editors(&h), 2);
+}
+
+#[tokio::test]
+async fn query_error_keeps_writer() {
+    let mut h = harness(FakeScript {
+        rows: rows(1),
+        ..FakeScript::default()
+    });
+    ready(&mut h).await;
+    let e = DriverError {
+        kind: ErrorKind::Query {
+            code: None,
+            position: None,
+        },
+        message: "bad value".into(),
+    };
+    h.drv
+        .log
+        .fail_sql
+        .lock()
+        .unwrap()
+        .push(("UPDATE".into(), e));
+    failed_update(&mut h, 2).await;
+    failed_update(&mut h, 3).await;
+    assert_eq!(editors(&h), 1);
 }

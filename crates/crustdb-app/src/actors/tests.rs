@@ -75,7 +75,7 @@ pub(super) fn col(name: &str) -> ColumnMeta {
     }
 }
 
-pub(super) fn object() -> ObjectRef {
+fn object() -> ObjectRef {
     ObjectRef {
         database: "d".into(),
         schema: Some("public".into()),
