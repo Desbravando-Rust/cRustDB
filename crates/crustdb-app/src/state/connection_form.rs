@@ -42,6 +42,7 @@ pub fn default_port(driver: DriverKind) -> u16 {
     match driver {
         DriverKind::Postgres => 5432,
         DriverKind::Mysql => 3306,
+        DriverKind::Sqlite => 0,
     }
 }
 

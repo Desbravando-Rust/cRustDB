@@ -8,6 +8,7 @@ pub const GRID_DISPLAY_CHARS: usize = 256;
 pub enum DriverKind {
     Postgres,
     Mysql,
+    Sqlite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,6 +16,7 @@ pub enum Product {
     Postgres,
     Mysql,
     Mariadb,
+    Sqlite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

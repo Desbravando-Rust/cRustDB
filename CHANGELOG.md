@@ -4,6 +4,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
+## 2026-10-23
+
+- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 1 of 2: core support and new `crustdb-sqlite` crate (rusqlite). Not yet selectable in the UI; part 2 wires it into the app.
+
 ## 2026-10-22
 
 - [#61](https://github.com/Desbravando-Rust/cRustDB/issues/61) — Faster CI pipeline: coverage runs in parallel with test via nextest, deny without Docker, rust-cache saved only on main.

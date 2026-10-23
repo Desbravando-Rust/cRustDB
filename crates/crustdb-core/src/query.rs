@@ -128,7 +128,8 @@ pub fn operators_for(cat: TypeCategory, kind: DriverKind) -> &'static [Operator]
     match (cat, kind) {
         (Integer | Decimal | Float | Date | Time | Timestamp, _) => COMPARE,
         (Text | Uuid | Json | Other, DriverKind::Postgres) => TEXT_PG,
-        (Text | Uuid | Json | Other, DriverKind::Mysql) => TEXT_MYSQL,
+        // SQLite has no ILIKE either.
+        (Text | Uuid | Json | Other, DriverKind::Mysql | DriverKind::Sqlite) => TEXT_MYSQL,
         (Bool, _) => BOOL,
         (Binary, _) => BINARY,
     }
