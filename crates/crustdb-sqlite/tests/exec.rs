@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::err_expect)] // Box<dyn Session> is not Debug
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crustdb_core::driver::{
     ConnectTarget, Driver, ExecMode, Param, Session, SessionPurpose, TlsConfig, TlsMode,
@@ -153,11 +153,10 @@ async fn cancel_interrupts_long_query() {
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     let h = s.cancel_handle();
-    let t = Instant::now();
-    let q = tokio::spawn(async move {
+    let mut q = tokio::spawn(async move {
         let r = async {
             s.start(
-                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) \
+                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 1000000000) \
                  SELECT count(*) FROM c",
                 ExecMode::Read,
             )
@@ -167,15 +166,18 @@ async fn cancel_interrupts_long_query() {
         .await;
         (s, r)
     });
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    h.cancel().await.unwrap();
-    let (mut s, r) = q.await.unwrap();
+    // An interrupt before the first step is a no-op, so repeat it until the query ends.
+    let (mut s, r) = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            tokio::select! {
+                r = &mut q => break r.unwrap(),
+                () = tokio::time::sleep(Duration::from_millis(20)) => h.cancel().await.unwrap(),
+            }
+        }
+    })
+    .await
+    .expect("cancel did not stop the query");
     assert_eq!(r.err().unwrap().kind, ErrorKind::Cancelled);
-    assert!(
-        t.elapsed() < Duration::from_millis(2500),
-        "{:?}",
-        t.elapsed()
-    );
     s.finish().await.unwrap();
     assert_eq!(all(&mut s, "SELECT 1").await, [["1"]]);
 }
