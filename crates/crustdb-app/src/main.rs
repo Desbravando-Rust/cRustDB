@@ -9,6 +9,11 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
 const APP_NAME: &str = "cRustDB";
+/// Baked in at build time; unset means reporting is disabled.
+const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
+    Some(dsn) => dsn,
+    None => "",
+};
 
 fn init_logging() {
     let dir = paths::state_dir();
@@ -39,6 +44,14 @@ fn init_logging() {
 
 fn main() -> anyhow::Result<()> {
     let _ = crustdb_app::metrics::PROCESS_START.set(std::time::Instant::now());
+    // ponytail: panics only; `SENTRY_DSN=""` disables reporting.
+    let mut sentry_options = sentry::ClientOptions::default();
+    sentry_options.release = sentry::release_name!();
+    sentry_options.send_default_pii = false;
+    let _sentry = sentry::init((
+        std::env::var("SENTRY_DSN").unwrap_or_else(|_| SENTRY_DSN.to_owned()),
+        sentry_options,
+    ));
     init_logging();
     let store = ConfigStore {
         path: paths::config_dir().join("connections.json"),
