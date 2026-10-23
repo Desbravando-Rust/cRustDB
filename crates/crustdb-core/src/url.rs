@@ -95,8 +95,15 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
     })
 }
 
-/// `sqlite:///abs/path.db`: the decoded path is the database file; there is no host.
+/// `sqlite:///abs/path.db`: the decoded path is the database file; there is no host
+/// (only `localhost` is accepted, as in `file://`).
 fn sqlite(url: &::url::Url) -> Result<ParsedUrl, UrlError> {
+    if url
+        .host_str()
+        .is_some_and(|h| !h.is_empty() && h != "localhost")
+    {
+        return Err(UrlError::Malformed);
+    }
     let path = percent_decode_str(url.path())
         .decode_utf8()
         .map_err(|_| UrlError::Malformed)?;
