@@ -6,7 +6,8 @@ use crustdb_core::sql::{
     Expect, StatementSpan, TokenKind, completion_context, highlight, split, statement_at,
 };
 use eframe::egui::{
-    self, Color32, FontId, Key, Modifiers, TextFormat, cache::ComputerMut, text::LayoutJob,
+    self, Color32, FontId, Key, Modifiers, TextFormat, cache::ComputerMut, text::CCursor,
+    text::LayoutJob,
 };
 
 use super::Intent;
@@ -61,36 +62,44 @@ fn color(k: TokenKind) -> Color32 {
     }
 }
 
-/// Splits each token at the current-statement boundaries so that range gets a background.
+/// Splits each token at the current-statement and find-match boundaries (bytes) so those
+/// ranges get a background; the find match wins.
 fn job(
     text: &str,
     spans: Option<&Spans>,
     current: Option<Range<usize>>,
+    hit: Option<Range<usize>>,
     font: FontId,
 ) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = f32::INFINITY;
     let tint = Color32::from_rgb(40, 48, 62);
+    let found = Color32::from_rgb(98, 81, 30);
+    let (cur, hit) = (current.unwrap_or(0..0), hit.unwrap_or(0..0));
     let mut push = |range: Range<usize>, c: Color32| {
-        let cur = current.clone().unwrap_or(0..0);
-        let (a, b) = (range.start.max(cur.start), range.end.min(cur.end));
-        let mut piece = |r: Range<usize>, bg: Color32| {
-            if r.start < r.end {
-                let f = TextFormat {
-                    font_id: font.clone(),
-                    color: c,
-                    background: bg,
-                    ..Default::default()
-                };
-                job.append(&text[r], 0.0, f);
-            }
-        };
-        if a < b {
-            piece(range.start..a, Color32::TRANSPARENT);
-            piece(a..b, tint);
-            piece(b..range.end, Color32::TRANSPARENT);
-        } else {
-            piece(range, Color32::TRANSPARENT);
+        let mut cuts = vec![range.start, range.end];
+        cuts.extend(
+            [cur.start, cur.end, hit.start, hit.end]
+                .into_iter()
+                .filter(|x| range.contains(x)),
+        );
+        cuts.sort_unstable();
+        cuts.dedup();
+        for w in cuts.windows(2) {
+            let bg = if hit.contains(&w[0]) {
+                found
+            } else if cur.contains(&w[0]) {
+                tint
+            } else {
+                Color32::TRANSPARENT
+            };
+            let f = TextFormat {
+                font_id: font.clone(),
+                color: c,
+                background: bg,
+                ..Default::default()
+            };
+            job.append(&text[w[0]..w[1]], 0.0, f);
         }
     };
     match spans {
@@ -175,6 +184,7 @@ pub fn show(
     if let Some(c) = moved {
         popup::set_cursor(&ctx, id, c);
     }
+    let hit = super::find_bar::show(ui, tab, id);
     let font = FontId::monospace(14.0);
     let driver = tab.driver;
     let cursor = sel.end;
@@ -214,9 +224,12 @@ pub fn show(
                             .map(|s| s.range.clone());
                         (cur, m.caches.cache::<HighlightCache>().get(key).clone())
                     });
-                    job(text, Some(&spans), current, font.clone())
+                    let found = hit
+                        .as_ref()
+                        .map(|h| char_to_byte(text, h.start)..char_to_byte(text, h.end));
+                    job(text, Some(&spans), current, found, font.clone())
                 } else {
-                    job(text, None, None, font.clone())
+                    job(text, None, None, None, font.clone())
                 };
                 ui.fonts_mut(|f| f.layout_job(j))
             };
@@ -232,6 +245,12 @@ pub fn show(
             if r.changed() {
                 tab.dirty = true;
                 tab.error_marker = None;
+            }
+            if std::mem::take(&mut tab.find.scroll)
+                && let Some(h) = &hit
+            {
+                let at = edit.galley.pos_from_cursor(CCursor::new(h.start));
+                ui.scroll_to_rect(at.translate(edit.galley_pos.to_vec2()), None);
             }
             let Some(cur) = edit.cursor_range.map(|c| c.primary) else {
                 return;
@@ -314,6 +333,29 @@ mod tests {
         });
         h.run();
         h.run();
+    }
+
+    #[test]
+    fn job_paints_the_find_match_over_the_statement_tint() {
+        let j = job(
+            "ab cd",
+            None,
+            Some(0..5),
+            Some(3..5),
+            FontId::monospace(14.0),
+        );
+        let bg: Vec<_> = j
+            .sections
+            .iter()
+            .map(|s| {
+                (
+                    s.byte_range.start.0..s.byte_range.end.0,
+                    s.format.background,
+                )
+            })
+            .collect();
+        assert_eq!(bg[0], (0..3, Color32::from_rgb(40, 48, 62)));
+        assert_eq!(bg[1], (3..5, Color32::from_rgb(98, 81, 30)));
     }
 
     #[test]
