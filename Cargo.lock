@@ -3205,6 +3205,7 @@ version = "0.1.0"
 dependencies = [
  "ico-builder",
  "image",
+ "tempfile",
 ]
 
 [[package]]
