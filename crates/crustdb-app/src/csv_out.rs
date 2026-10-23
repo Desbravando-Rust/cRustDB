@@ -1,6 +1,6 @@
 use std::io::{self, BufWriter, Write};
 
-use crustdb_core::model::{Cell, ColumnMeta};
+use crustdb_core::model::{Cell, ColumnMeta, Row};
 
 pub struct CsvOut<W: Write> {
     inner: BufWriter<W>,
@@ -94,19 +94,46 @@ mod tests {
         assert_eq!(out(&[c]), "0xdead\n");
     }
 
-    #[test]
-    fn csv_header_uses_column_names() {
-        let col = |n: &str| ColumnMeta {
+    fn col(n: &str) -> ColumnMeta {
+        ColumnMeta {
             name: n.into(),
             type_name: "text".into(),
             category: crustdb_core::model::TypeCategory::Text,
             nullable: None,
             is_primary_key: false,
-        };
+        }
+    }
+
+    #[test]
+    fn csv_header_uses_column_names() {
         let mut buf = Vec::new();
         let mut w = CsvOut::new(&mut buf);
         w.header(&[col("id"), col("a,b")]).unwrap();
         w.finish().unwrap();
         assert_eq!(String::from_utf8(buf).unwrap(), "id,\"a,b\"\n");
+    }
+
+    #[test]
+    fn tsv_quotes_tab_newline_quote_and_optional_header() {
+        let bytes = Cell::Bytes {
+            value: vec![0xde, 0xad].into(),
+            total_len: 2,
+            truncated: false,
+        };
+        let rows: Vec<Row> = vec![
+            vec![Cell::Null, text(""), text("a,b")].into(),
+            vec![text("a\tb"), text("x\ny"), text("q\"")].into(),
+            vec![bytes, text("r\rs"), text("plain")].into(),
+        ];
+        let cols = [col("id"), col("a\tb"), col("c")];
+        assert_eq!(to_tsv(&cols, &rows[..1], false), "\t\"\"\ta,b");
+        assert_eq!(
+            to_tsv(&cols, &rows, true),
+            "id\t\"a\tb\"\tc\n\
+             \t\"\"\ta,b\n\
+             \"a\tb\"\t\"x\ny\"\t\"q\"\"\"\n\
+             0xdead\t\"r\rs\"\tplain"
+        );
+        assert_eq!(to_tsv(&cols, &[], true), "id\t\"a\tb\"\tc");
     }
 }
