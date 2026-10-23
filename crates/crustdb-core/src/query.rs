@@ -74,6 +74,10 @@ pub enum QueryError {
     Arity { op: Operator, got: usize },
     #[error("operator {0:?} not allowed for this column type")]
     OperatorNotAllowed(Operator),
+    #[error("table has no primary key")]
+    NoPrimaryKey,
+    #[error("column {0} is not editable")]
+    NotEditable(String),
 }
 
 use Operator::*;
