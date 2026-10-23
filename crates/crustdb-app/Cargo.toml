@@ -49,8 +49,8 @@ tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "test-uti
 name = "crustdb"
 maintainer = "zejuniortdr <zejuniortdr@gmail.com>"
 section = "database"
-# eframe dlopens xkbcommon and GL at runtime, so $auto cannot see them.
-depends = "$auto, libxkbcommon0, libgl1"
+# eframe (wgpu) dlopens xkbcommon and libvulkan.so.1 (fallback libEGL.so.1), so $auto cannot see them.
+depends = "$auto, libxkbcommon0, libvulkan1 | libegl1"
 assets = [
   ["target/release/crustdb", "usr/bin/", "755"],
   ["../../packaging/crustdb.desktop", "usr/share/applications/", "644"],
@@ -67,3 +67,4 @@ assets = [
 
 [package.metadata.generate-rpm.requires]
 libxkbcommon = "*"
+vulkan-loader = "*"
