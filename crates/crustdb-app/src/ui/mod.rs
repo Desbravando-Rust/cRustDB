@@ -6,6 +6,7 @@ pub mod editor;
 pub mod filter_bar;
 pub mod find_bar;
 pub mod grid;
+pub mod grid_copy;
 pub mod history_panel;
 pub mod home;
 pub mod picker;

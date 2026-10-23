@@ -130,7 +130,11 @@ pub fn show(
     if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Slash)) {
         tab.toggle_comment_at(sel.clone());
     }
-    ui.horizontal(|ui| {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::F)) {
+        tab.format_at(sel.clone());
+    }
+    // Wraps so a narrow window does not push the editor and results off-screen.
+    ui.horizontal_wrapped(|ui| {
         if ui
             .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
             .clicked()
@@ -153,6 +157,9 @@ pub fn show(
                 run: sel.clone(),
                 all: true,
             });
+        }
+        if ui.button("Format (Ctrl+Shift+F)").clicked() {
+            tab.format_at(sel.clone());
         }
         out.extend(files_bar(ui, tab));
         out.extend(super::results::toolbar(ui, tab));

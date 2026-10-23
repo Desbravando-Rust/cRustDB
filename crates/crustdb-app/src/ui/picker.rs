@@ -30,11 +30,15 @@ impl Picker {
     pub fn start(&self, pick: Pick, ctx: &egui::Context, name: &str) {
         let (tx, ctx, name) = (self.tx.clone(), ctx.clone(), name.to_owned());
         std::thread::spawn(move || {
-            let (label, ext) = match pick {
-                Pick::Export(_) => ("CSV", "csv"),
-                _ => ("SQL", "sql"),
+            let d = rfd::FileDialog::new();
+            // The export format follows the chosen extension (`export_fmt::Format::from_path`).
+            let d = match pick {
+                Pick::Export(_) => d
+                    .add_filter("CSV", &["csv"])
+                    .add_filter("JSON Lines", &["jsonl"])
+                    .add_filter("SQL", &["sql"]),
+                _ => d.add_filter("SQL", &["sql"]),
             };
-            let d = rfd::FileDialog::new().add_filter(label, &[ext]);
             let path = match pick {
                 Pick::Open => d.pick_file(),
                 _ => d.set_file_name(name).save_file(),

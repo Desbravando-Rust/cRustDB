@@ -52,7 +52,7 @@ pub fn row_detail_lines(columns: &[ColumnMeta], row: &Row) -> Vec<DetailLine> {
         .collect()
 }
 
-/// Nothing is selectable (D17: v1 has no cell copy).
+/// Nothing is selectable; copy from the grid (Ctrl+C or the cell context menu).
 pub fn show(ui: &mut egui::Ui, columns: &[ColumnMeta], row: &Row) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         for l in row_detail_lines(columns, row) {
