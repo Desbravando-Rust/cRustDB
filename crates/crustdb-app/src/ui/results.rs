@@ -200,6 +200,7 @@ mod tests {
             .into_iter()
             .map(|(i, n)| vec![text(i), text(n)].into())
             .collect();
+        tab.pane.refresh_view();
         tab
     }
 
@@ -224,6 +225,18 @@ mod tests {
         h.event(egui::Event::Copy);
         h.step();
         assert_eq!(copied(&h), ["2\tb"]);
+    }
+
+    #[test]
+    fn copy_follows_display_order_of_sorted_view() {
+        let mut tab = tab_with_rows();
+        tab.pane.view = vec![2, 1, 0];
+        tab.pane.select_anchor = Some(2);
+        tab.pane.selected = Some(1);
+        let mut h = run(&mut tab, show);
+        h.event(egui::Event::Copy);
+        h.step();
+        assert_eq!(copied(&h), ["3\tc\n2\tb"]);
     }
 
     #[test]
