@@ -7,9 +7,17 @@ Delivered work, grouped by date (newest first). One line per issue.
 ## 2026-10-23
 
 - [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
+- [#17](https://github.com/Desbravando-Rust/cRustDB/issues/17) — Find and replace bar in the SQL query editor (Ctrl+F on query tabs), with match case, previous/next, replace and replace all.
+- [#16](https://github.com/Desbravando-Rust/cRustDB/issues/16) — SQL beautify in the editor (Ctrl+Shift+F or Format button); formats whole buffer or the selected statements.
+- [#6](https://github.com/Desbravando-Rust/cRustDB/issues/6) — Copy grid cells and rows to the clipboard: row range selection with Shift+click, Ctrl+C copies rows as TSV, cell context menu.
+- [#19](https://github.com/Desbravando-Rust/cRustDB/issues/19) — Export results and tables to JSON Lines and SQL INSERT (by file extension), in addition to CSV.
+- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 2 of 2: wires `crustdb-sqlite` into the app (driver registration, file-only connection form, `sqlite://` URL import).
+- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 1 of 2: core support and new `crustdb-sqlite` crate (rusqlite). Not yet selectable in the UI; part 2 wires it into the app.
 
 ## 2026-10-22
 
+- [#23](https://github.com/Desbravando-Rust/cRustDB/issues/23) — Editor result grid: click headers to sort (shift for multi-column) and a "Filter rows" box over loaded rows.
+- [#61](https://github.com/Desbravando-Rust/cRustDB/issues/61) — Faster CI pipeline: coverage runs in parallel with test via nextest, deny without Docker, rust-cache saved only on main.
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
 - [#58](https://github.com/Desbravando-Rust/cRustDB/issues/58) — Unit tests for `tools/icons_generator`; generation extracted into `generate(input, out_root)`.
 - [#34](https://github.com/Desbravando-Rust/cRustDB/issues/34) — Home/connection screen footer promoting the *Desbravando Rust* book, opening the site in the system browser.

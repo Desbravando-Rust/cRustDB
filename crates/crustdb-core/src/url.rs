@@ -42,6 +42,7 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
     let driver = match url.scheme() {
         "postgres" | "postgresql" => DriverKind::Postgres,
         "mysql" | "mariadb" => DriverKind::Mysql,
+        "sqlite" => return sqlite(&url),
         other => return Err(UrlError::UnsupportedScheme(other.to_owned())),
     };
     let host = url
@@ -91,6 +92,30 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         database,
         tls_mode,
         warnings,
+    })
+}
+
+/// `sqlite:///abs/path.db`: the decoded path is the database file; there is no host
+/// (only `localhost` is accepted, as in `file://`).
+fn sqlite(url: &::url::Url) -> Result<ParsedUrl, UrlError> {
+    if url
+        .host_str()
+        .is_some_and(|h| !h.is_empty() && h != "localhost")
+    {
+        return Err(UrlError::Malformed);
+    }
+    let path = percent_decode_str(url.path())
+        .decode_utf8()
+        .map_err(|_| UrlError::Malformed)?;
+    Ok(ParsedUrl {
+        driver: DriverKind::Sqlite,
+        host: String::new(),
+        port: None,
+        user: None,
+        password: None,
+        database: Some(path.into_owned()).filter(|d| !d.is_empty()),
+        tls_mode: None,
+        warnings: Vec::new(),
     })
 }
 
@@ -150,6 +175,27 @@ mod tests {
         assert_eq!(
             p.warnings,
             vec![UrlWarning::DowngradedToRequire("PREFERRED".into())]
+        );
+    }
+
+    #[test]
+    fn parses_sqlite_url_as_file_path() {
+        let p = parse_connection_url("sqlite:///tmp/a%20b.db").unwrap();
+        assert_eq!(p.driver, DriverKind::Sqlite);
+        assert_eq!(p.database.as_deref(), Some("/tmp/a b.db"));
+        assert_eq!(p.host, "");
+        let p = parse_connection_url("sqlite:///tmp/a.db").unwrap();
+        assert_eq!(p.database.as_deref(), Some("/tmp/a.db"));
+        let p = parse_connection_url("sqlite://localhost/tmp/a.db").unwrap();
+        assert_eq!(p.database.as_deref(), Some("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_url_with_host_rejected() {
+        // `dados.db` would be the host, silently leaving no file.
+        assert_eq!(
+            parse_connection_url("sqlite://dados.db").unwrap_err(),
+            UrlError::Malformed
         );
     }
 

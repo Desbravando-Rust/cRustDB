@@ -1,4 +1,4 @@
-//! CSV export: the sink shared by table and result exports, and the table export task.
+//! Export: the sink shared by table and result exports, and the table export task.
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 use crustdb_core::dialect::build_table_query;
 use crustdb_core::driver::{Session, SessionPurpose};
 use crustdb_core::error::{DriverError, ErrorKind};
-use crustdb_core::model::{Cell, ColumnMeta, Row};
+use crustdb_core::model::{Cell, ColumnMeta, DriverKind, Row};
 use crustdb_core::query::{QueryError, TableQuery};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use super::SharedRx;
-use crate::csv_out::CsvOut;
+use crate::export_fmt::{Format, Out};
 use crate::runtime::{Command, Emitter, Event, RequestId, TabId};
 
 #[cfg(test)]
@@ -44,43 +44,53 @@ fn blocking<T>(f: impl FnOnce() -> T) -> T {
 /// Writes to `<path>.part`; `finish` renames it into place. Dropped any other way, the
 /// partial file is removed.
 pub(super) struct Sink {
-    csv: Option<CsvOut<File>>,
+    out: Option<Out<File>>,
     part: PathBuf,
     path: PathBuf,
     pub(super) rows: u64,
     truncated: u64,
+    /// The extension was not a known format, so the file is CSV.
+    fallback: bool,
 }
 
 impl Drop for Sink {
     fn drop(&mut self) {
-        if self.csv.take().is_some() {
+        if self.out.take().is_some() {
             let _ = fs::remove_file(&self.part);
         }
     }
 }
 
 impl Sink {
-    pub(super) fn create(path: &Path) -> io::Result<Self> {
+    /// The format follows `path`'s extension; `table` (quoted) is the SQL INSERT target.
+    pub(super) fn create(path: &Path, table: String, kind: DriverKind) -> io::Result<Self> {
         let mut part = path.as_os_str().to_owned();
         part.push(".part");
         let part = PathBuf::from(part);
+        let format = Format::from_path(path);
         Ok(Self {
-            csv: Some(CsvOut::new(File::create(&part)?)),
+            out: Some(Out::new(
+                File::create(&part)?,
+                format.unwrap_or(Format::Csv),
+                table,
+                kind,
+            )),
             part,
             path: path.to_path_buf(),
             rows: 0,
             truncated: 0,
+            fallback: format.is_none(),
         })
     }
 
-    fn csv(&mut self) -> io::Result<&mut CsvOut<File>> {
-        self.csv
+    fn out(&mut self) -> io::Result<&mut Out<File>> {
+        self.out
             .as_mut()
             .ok_or_else(|| io::Error::other("export already finished"))
     }
 
     pub(super) fn header(&mut self, cols: &[ColumnMeta]) -> io::Result<()> {
-        self.csv()?.header(cols)
+        self.out()?.header(cols)
     }
 
     pub(super) fn write(&mut self, rows: &[Row]) -> io::Result<()> {
@@ -102,14 +112,21 @@ impl Sink {
                 )
             };
             self.truncated += r.iter().filter(cut).count() as u64;
-            self.csv()?.row(r)?;
+            self.out()?.row(r)?;
         }
         self.rows += rows.len() as u64;
         Ok(())
     }
 
-    /// Reports the cells that were cut at the memory cap before they reached the exporter.
+    /// Reports the cells that were cut at the memory cap before they reached the exporter, and
+    /// an unknown extension that fell back to CSV.
     pub(super) fn warn_truncated(&self, out: &Emitter, tab: TabId) {
+        if self.fallback {
+            out.emit(Event::Notice {
+                tab,
+                text: "Unknown file extension. Exported as CSV.".into(),
+            });
+        }
         if self.truncated > 0 {
             out.emit(Event::Notice {
                 tab,
@@ -123,7 +140,7 @@ impl Sink {
 
     pub(super) fn finish(mut self) -> io::Result<u64> {
         blocking(|| {
-            self.csv.take().map_or(Ok(()), CsvOut::finish)?;
+            self.out.take().map_or(Ok(()), Out::finish)?;
             fs::rename(&self.part, &self.path)
         })
         .inspect_err(|_| {
@@ -175,8 +192,7 @@ async fn run(job: TableJob, rx: &mut UnboundedReceiver<Command>) -> Result<u64, 
         kind: ErrorKind::Connect,
         message: "workspace is not connected".into(),
     })?;
-    let mut target = shared.target.clone();
-    target.database = Some(job.query.object.database.clone());
+    let target = shared.target_for(&job.query.object.database);
     let mut s = shared
         .driver
         .connect(&target, SessionPurpose::Export)
@@ -218,7 +234,8 @@ async fn stream(
 ) -> Result<u64, Failure> {
     let built = build_table_query(shared.driver.dialect(), q)?;
     let header = s.start_params(&built.sql, &built.params).await?;
-    let mut sink = Sink::create(path)?;
+    let d = shared.driver.dialect();
+    let mut sink = Sink::create(path, d.qualified_name(&q.object), d.kind())?;
     sink.header(&header.columns)?;
     drain(s, &mut sink, job.req, &job.out).await?;
     sink.warn_truncated(&job.out, job.tab);

@@ -170,11 +170,18 @@ pub fn validate(c: &ConnectionConfig, others: &[ConnectionConfig]) -> Result<(),
     } else if others.iter().any(|o| o.id != c.id && o.name == c.name) {
         bad("name", "name already in use");
     }
-    if c.host.trim().is_empty() {
-        bad("host", "host is required");
-    }
-    if c.port == 0 {
-        bad("port", "port must be 1-65535");
+    if c.driver == DriverKind::Sqlite {
+        // A file, not a server: host and port are unused.
+        if c.database.as_deref().is_none_or(|d| d.trim().is_empty()) {
+            bad("database", "database file is required");
+        }
+    } else {
+        if c.host.trim().is_empty() {
+            bad("host", "host is required");
+        }
+        if c.port == 0 {
+            bad("port", "port must be 1-65535");
+        }
     }
     if !(10..=10_000).contains(&c.page_size) {
         bad("page_size", "page size must be 10-10000");
@@ -319,5 +326,19 @@ mod tests {
                 "safety_threshold"
             ]
         );
+    }
+
+    #[test]
+    fn sqlite_requires_file_not_host_or_port() {
+        let mut c = sample();
+        c.driver = DriverKind::Sqlite;
+        c.host = String::new();
+        c.port = 0;
+        c.database = Some("/tmp/a.db".into());
+        assert!(validate(&c, &[]).is_ok());
+        c.database = None;
+        let errs = validate(&c, &[]).unwrap_err();
+        let fields: Vec<_> = errs.iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["database"]);
     }
 }

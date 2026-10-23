@@ -9,6 +9,7 @@ use crustdb_core::model::DriverKind;
 use crustdb_core::sql::{split, statement_at};
 
 use super::autocomplete::Autocomplete;
+use super::find::Find;
 pub use super::result_pane::{MessageLine, ResultPane, ResultTab};
 use crate::actors::{LOST, STALE_EVALUATION};
 use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
@@ -39,6 +40,7 @@ pub struct QueryTab {
     /// SQL (from the history panel) the editor inserts at its cursor on the next frame.
     pub insert: Option<String>,
     pub db_draft: String,
+    pub find: Find,
 }
 
 impl QueryTab {
@@ -59,6 +61,7 @@ impl QueryTab {
             ac: Autocomplete::default(),
             insert: None,
             db_draft: String::new(),
+            find: Find::default(),
         }
     }
 
