@@ -141,16 +141,17 @@ impl ResultPane {
 /// Missing cell (row shorter than the header) sorts as null.
 static MISSING: Cell = Cell::Null;
 
-/// Splits `[+-]?\d+(\.\d*)?` into (negative, int digits, fraction digits), normalized; zero is positive.
+// ponytail: Infinity/NaN/exponent forms and numbers > 309 digits fall back to f64 and may not be
+// transitive against the exact path; add a full decimal parser if that ever shows up.
+/// Splits `[+-]?(\d+(\.\d*)?|\.\d+)` into (negative, int digits, fraction digits), normalized; zero is positive.
 fn split_decimal(s: &str) -> Option<(bool, &str, &str)> {
-    let s = s.trim();
     let (neg, s) = match s.as_bytes().first()? {
         b'-' => (true, &s[1..]),
         b'+' => (false, &s[1..]),
         _ => (false, s),
     };
     let (int, frac) = s.split_once('.').unwrap_or((s, ""));
-    if int.is_empty()
+    if (int.is_empty() && frac.is_empty())
         || !int.bytes().all(|b| b.is_ascii_digit())
         || !frac.bytes().all(|b| b.is_ascii_digit())
     {
