@@ -100,8 +100,14 @@ mod tests {
     #[test]
     fn home_shows_logo() {
         let s = state(&[]);
+        let mut fonts_ready = false;
         let mut h = Harness::new_ui(|ui| {
-            egui_extras::install_image_loaders(ui.ctx());
+            // Icons need the themed fonts, which apply on the next pass.
+            if !std::mem::replace(&mut fonts_ready, true) {
+                crate::ui::theme::install_theme(ui.ctx());
+                egui_extras::install_image_loaders(ui.ctx());
+                return;
+            }
             show(ui, &s);
         });
         // `run` waits for pending images, so the decode must be done by now.
