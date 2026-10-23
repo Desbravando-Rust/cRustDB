@@ -2,7 +2,7 @@
 REMOTE ?= origin
 BRANCHES := $(shell git for-each-ref --format='%(refname:short)' 'refs/heads/feat/*')
 
-.PHONY: push-branches list-branches lockfix
+.PHONY: push-branches list-branches lockfix icons test
 
 # Resolve conflito no Cargo.lock: parte de um lado (SIDE=ours|theirs) e o cargo
 # reconcilia com os Cargo.toml mesclados, sem atualizar as demais versões.
@@ -25,3 +25,10 @@ push-branches:
 
 icons: 
 	cargo run -p icons_generator --release
+
+
+ci:
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets -- -D warnings
+	cargo deny check
+	cargo nextest run --workspace --fail-fast
