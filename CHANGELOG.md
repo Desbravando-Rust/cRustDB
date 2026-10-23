@@ -6,6 +6,7 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ## 2026-10-23
 
+- [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
 - [#17](https://github.com/Desbravando-Rust/cRustDB/issues/17) — Find and replace bar in the SQL query editor (Ctrl+F on query tabs), with match case, previous/next, replace and replace all.
 - [#16](https://github.com/Desbravando-Rust/cRustDB/issues/16) — SQL beautify in the editor (Ctrl+Shift+F or Format button); formats whole buffer or the selected statements.
 - [#6](https://github.com/Desbravando-Rust/cRustDB/issues/6) — Copy grid cells and rows to the clipboard: row range selection with Shift+click, Ctrl+C copies rows as TSV, cell context menu.

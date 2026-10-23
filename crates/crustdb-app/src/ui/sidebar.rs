@@ -1,7 +1,9 @@
+use crustdb_core::model::DriverKind;
 use eframe::egui;
 
 use super::Intent;
 use crate::state::AppState;
+use crate::state::tree::NodePath;
 
 /// Workspace selector, filter box and the lazy object tree of the active workspace.
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
@@ -48,6 +50,21 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         if r.clicked() {
                             out.push(Intent::SelectNode(path.clone()));
                             out.push(Intent::ToggleNode(path.clone()));
+                        }
+                        let diagram = match path {
+                            NodePath::Schema(db, s) => Some((db.clone(), Some(s.clone()))),
+                            NodePath::Database(db) if active.config.driver == DriverKind::Mysql => {
+                                Some((db.clone(), None))
+                            }
+                            _ => None,
+                        };
+                        if let Some((database, schema)) = diagram {
+                            r.context_menu(|ui| {
+                                if ui.button("ER diagram").clicked() {
+                                    out.push(Intent::OpenDiagram { database, schema });
+                                    ui.close();
+                                }
+                            });
                         }
                     }
                     (None, Some(object))

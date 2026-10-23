@@ -19,6 +19,8 @@ use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId,
 use crate::storage::config::ConnectionConfig;
 use crate::storage::paths::config_dir;
 
+mod diagram;
+
 const PING_EVERY: Duration = Duration::from_secs(60);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
@@ -135,6 +137,12 @@ impl WorkspaceActor {
             WsMsg::Cmd(Command::LoadColumns { req, object, .. }) => {
                 self.load_columns(req, object).await
             }
+            WsMsg::Cmd(Command::LoadDiagram {
+                req,
+                database,
+                schema,
+                ..
+            }) => self.load_diagram(req, database, schema).await,
             WsMsg::Cmd(_) | WsMsg::Disconnect => {}
             WsMsg::AskHostKey(tx) => self.decision = Some(tx),
             WsMsg::Connected(Ok(ready)) => self.on_connected(ready),

@@ -107,6 +107,13 @@ impl CrustApp {
             }
         });
         intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));
+        if let Some(w) = self
+            .state
+            .active
+            .and_then(|ws| self.state.workspace_mut(ws))
+        {
+            ui::diagram::show(ui.ctx(), &mut w.diagram);
+        }
         for i in intents {
             self.handle(i);
         }

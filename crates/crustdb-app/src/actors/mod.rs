@@ -19,6 +19,8 @@ mod export;
 mod workspace;
 
 #[cfg(test)]
+mod diagram_tests;
+#[cfg(test)]
 mod tests;
 
 use data::DataActor;
@@ -131,7 +133,8 @@ impl Actors {
             }
             Command::HostKeyDecision { ws, .. }
             | Command::LoadChildren { ws, .. }
-            | Command::LoadColumns { ws, .. } => match self.ws.get(&ws) {
+            | Command::LoadColumns { ws, .. }
+            | Command::LoadDiagram { ws, .. } => match self.ws.get(&ws) {
                 Some(e) => {
                     let _ = e.tx.send(WsMsg::Cmd(cmd));
                     None

@@ -2,6 +2,7 @@
 pub mod autocomplete;
 pub mod confirm_dialog;
 pub mod connection_form;
+pub mod diagram;
 pub mod editor;
 pub mod filter_bar;
 pub mod find_bar;
@@ -92,4 +93,9 @@ pub enum Intent {
         sql: String,
     },
     LoadColumns(ObjectRef),
+    /// ER diagram of a schema (PG) or database (MySQL, `schema: None`).
+    OpenDiagram {
+        database: String,
+        schema: Option<String>,
+    },
 }

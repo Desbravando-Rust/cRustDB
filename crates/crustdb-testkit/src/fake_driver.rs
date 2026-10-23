@@ -65,6 +65,8 @@ pub struct FakeLog {
     pub fail_fetch: AtomicBool,
     /// Every `fetch` sleeps this many milliseconds (a cancel interrupts it).
     pub fetch_delay_ms: AtomicU64,
+    /// What `objects()` answers, whatever the kind asked.
+    pub tables: Mutex<Vec<ObjectRef>>,
 }
 
 impl FakeLog {
@@ -348,7 +350,12 @@ impl Introspector for FakeDriver {
         _: Option<&str>,
         _: ObjectKind,
     ) -> Result<Vec<ObjectRef>, DriverError> {
-        Ok(Vec::new())
+        Ok(self
+            .log
+            .tables
+            .lock()
+            .map(|t| t.clone())
+            .unwrap_or_default())
     }
     async fn columns(
         &self,

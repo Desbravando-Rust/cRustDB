@@ -6,7 +6,8 @@ use std::time::Duration;
 use crustdb_core::driver::ResultHeader;
 use crustdb_core::error::DriverError;
 use crustdb_core::model::{
-    ColumnDetail, Completion, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef, Row, ServerVersion,
+    ColumnDetail, ColumnMeta, Completion, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef, Row,
+    ServerVersion,
 };
 use crustdb_core::query::TableQuery;
 use crustdb_core::safety::Evaluation;
@@ -46,6 +47,14 @@ impl fmt::Debug for ResolvedSecrets {
     }
 }
 
+/// One table of the ER diagram with what its box and edges need.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagramTable {
+    pub object: ObjectRef,
+    pub columns: Vec<ColumnMeta>,
+    pub fks: Vec<ForeignKeyInfo>,
+}
+
 #[derive(Debug)]
 pub enum Command {
     Connect {
@@ -72,6 +81,13 @@ pub enum Command {
         ws: WorkspaceId,
         req: RequestId,
         object: ObjectRef,
+    },
+    /// Tables of one schema with columns and FKs, answered by `Event::Diagram`.
+    LoadDiagram {
+        ws: WorkspaceId,
+        req: RequestId,
+        database: String,
+        schema: Option<String>,
     },
     OpenTable {
         ws: WorkspaceId,
@@ -164,6 +180,11 @@ pub enum Event {
     Children {
         req: RequestId,
         items: Vec<ObjectRef>,
+    },
+    /// `None` when the lookup failed.
+    Diagram {
+        req: RequestId,
+        tables: Option<Vec<DiagramTable>>,
     },
     Page {
         req: RequestId,

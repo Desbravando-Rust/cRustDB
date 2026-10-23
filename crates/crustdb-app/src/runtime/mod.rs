@@ -169,6 +169,7 @@ fn no_actor(cmd: &Command) -> Event {
         | HostKeyDecision { .. }
         | LoadChildren { .. }
         | LoadColumns { .. }
+        | LoadDiagram { .. }
         | CancelExport { .. } => TabId(0),
     };
     Event::Notice {
