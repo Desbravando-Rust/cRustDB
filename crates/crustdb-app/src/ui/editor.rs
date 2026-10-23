@@ -168,6 +168,7 @@ pub fn show(
     if let Some(c) = moved {
         popup::set_cursor(&ctx, id, c);
     }
+    super::find_bar::show(ui, tab, id);
     let font = FontId::monospace(14.0);
     let driver = tab.driver;
     let cursor = sel.end;

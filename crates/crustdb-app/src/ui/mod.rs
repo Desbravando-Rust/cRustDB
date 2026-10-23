@@ -4,6 +4,7 @@ pub mod confirm_dialog;
 pub mod connection_form;
 pub mod editor;
 pub mod filter_bar;
+pub mod find_bar;
 pub mod grid;
 pub mod history_panel;
 pub mod home;
