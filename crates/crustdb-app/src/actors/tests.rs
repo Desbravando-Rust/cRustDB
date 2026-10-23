@@ -75,7 +75,7 @@ pub(super) fn col(name: &str) -> ColumnMeta {
     }
 }
 
-fn object() -> ObjectRef {
+pub(super) fn object() -> ObjectRef {
     ObjectRef {
         database: "d".into(),
         schema: Some("public".into()),
@@ -138,7 +138,7 @@ pub(super) async fn connect(h: &mut H, database: Option<&str>) {
     assert!(matches!(next(&h.rx).await, Event::Connected { .. }));
 }
 
-async fn open_table(h: &mut H) {
+pub(super) async fn open_table(h: &mut H) {
     assert!(
         h.actors
             .dispatch(Command::OpenTable {
@@ -150,7 +150,7 @@ async fn open_table(h: &mut H) {
     );
 }
 
-fn fetch(h: &mut H, req: u64, q: TableQuery) {
+pub(super) fn fetch(h: &mut H, req: u64, q: TableQuery) {
     assert!(
         h.actors
             .dispatch(Command::FetchPage {
@@ -162,7 +162,7 @@ fn fetch(h: &mut H, req: u64, q: TableQuery) {
     );
 }
 
-async fn page(h: &mut H) -> (RequestId, usize, bool, Option<u64>) {
+pub(super) async fn page(h: &mut H) -> (RequestId, usize, bool, Option<u64>) {
     match next(&h.rx).await {
         Event::Page {
             req,
@@ -175,7 +175,7 @@ async fn page(h: &mut H) -> (RequestId, usize, bool, Option<u64>) {
     }
 }
 
-fn connects(h: &H) -> Vec<(SessionPurpose, Option<String>)> {
+pub(super) fn connects(h: &H) -> Vec<(SessionPurpose, Option<String>)> {
     let c = h.drv.log.connects.lock().unwrap();
     c.iter().map(|(p, d, _)| (*p, d.clone())).collect()
 }

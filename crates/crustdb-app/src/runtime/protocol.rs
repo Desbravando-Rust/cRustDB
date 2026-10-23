@@ -3,6 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crustdb_core::dialect::BuiltQuery;
 use crustdb_core::driver::ResultHeader;
 use crustdb_core::error::DriverError;
 use crustdb_core::model::{
@@ -99,6 +100,12 @@ pub enum Command {
         req: RequestId,
         query: TableQuery,
     },
+    /// One-cell `UPDATE` from `edit::build_update`, run on the tab's own `Editor` session.
+    UpdateCell {
+        tab: TabId,
+        req: RequestId,
+        update: BuiltQuery,
+    },
     LoadStructure {
         tab: TabId,
         req: RequestId,
@@ -192,6 +199,10 @@ pub enum Event {
         rows: Vec<Row>,
         has_more: bool,
         estimate: Option<u64>,
+    },
+    /// The `UpdateCell` with this id changed a row; the page should be reloaded.
+    CellUpdated {
+        req: RequestId,
     },
     Structure {
         req: RequestId,
