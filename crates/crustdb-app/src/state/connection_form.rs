@@ -430,4 +430,27 @@ mod tests {
         assert_eq!(f.take_pending_test(), None);
         assert_eq!(f.test, TestResult::Ok("v".into()));
     }
+
+    #[test]
+    fn sqlite_form_drops_network_fields() {
+        let mut f = form();
+        f.set_ssh(true);
+        f.draft.tls.ca_path = Some("/nonexistent/ca.pem".into());
+        f.password = "pw".to_owned().into();
+        f.save_in_keyring = true;
+        f.set_driver(DriverKind::Sqlite);
+        f.draft.database = Some("/tmp/a.db".into());
+        let (cfg, secrets) = f.to_save(&[]).unwrap();
+        assert!(cfg.ssh.is_none() && cfg.tls.ca_path.is_none());
+        assert!(!cfg.save_password && secrets.is_empty());
+    }
+
+    #[test]
+    fn import_sqlite_url_names_from_file() {
+        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+        f.import_url("sqlite:///tmp/a.db").unwrap();
+        assert_eq!(f.draft.driver, DriverKind::Sqlite);
+        assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
+        assert_eq!(f.draft.name, "a.db");
+    }
 }
