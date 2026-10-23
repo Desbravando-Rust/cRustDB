@@ -69,7 +69,7 @@ The floors may move up if the driver fails integration tests on them; any change
 Requirements: Linux x86_64, the Rust toolchain pinned in `rust-toolchain.toml` (installed automatically by `rustup`), and the GUI system libraries:
 
 ```sh
-sudo apt-get install -y libxkbcommon-dev libwayland-dev libgtk-3-dev
+sudo apt-get install -y libxkbcommon-dev libwayland-dev
 ```
 
 Build and run:
