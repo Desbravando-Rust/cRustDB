@@ -97,6 +97,8 @@ jobs:
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
+      # bwrap (flatpak-builder) needs unprivileged user namespaces, blocked by AppArmor on ubuntu-24.04.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: packaging/build-linux.sh "${GITHUB_REF_NAME#v}"
       - uses: softprops/action-gh-release@v2
         with:
