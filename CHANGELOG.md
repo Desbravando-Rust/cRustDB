@@ -6,6 +6,7 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ## 2026-10-22
 
+- [#23](https://github.com/Desbravando-Rust/cRustDB/issues/23) — Editor result grid: click headers to sort (shift for multi-column) and a "Filter rows" box over loaded rows.
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
 - [#58](https://github.com/Desbravando-Rust/cRustDB/issues/58) — Unit tests for `tools/icons_generator`; generation extracted into `generate(input, out_root)`.
 - [#34](https://github.com/Desbravando-Rust/cRustDB/issues/34) — Home/connection screen footer promoting the *Desbravando Rust* book, opening the site in the system browser.
