@@ -1,86 +1,82 @@
 use ico_builder::IcoBuilder;
 use image::imageops::FilterType;
+use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Look for the original file in the crustdb Workspace root
-    let input_path = "./assets/icons/original.png";
+const LINUX_SIZES: [u32; 5] = [32, 64, 128, 256, 512];
+const WINDOWS_SIZES: [u32; 5] = [16, 24, 32, 48, 256];
+const MAC_ICONS: [(&str, u32); 10] = [
+    ("icon_16x16.png", 16),
+    ("icon_16x16@2x.png", 32),
+    ("icon_32x32.png", 32),
+    ("icon_32x32@2x.png", 64),
+    ("icon_128x128.png", 128),
+    ("icon_128x128@2x.png", 256),
+    ("icon_256x256.png", 256),
+    ("icon_256x256@2x.png", 512),
+    ("icon_512x512.png", 512),
+    ("icon_512x512@2x.png", 1024),
+];
 
-    if !Path::new(input_path).exists() {
+fn main() -> Result<(), Box<dyn Error>> {
+    // Look for the original file in the crustdb Workspace root
+    let input_path = Path::new("./assets/icons/original.png");
+
+    if !generate(input_path, Path::new("./assets/icons"))? {
         println!(
             "❌ Error: The file '{}' was not found in the project root.",
-            input_path
+            input_path.display()
         );
         println!("Please place a 1024x1024 PNG in the repository root with this name.");
         return Ok(());
     }
 
-    println!("⏳ Loading and processing original image...");
-    let img = image::open(input_path)?;
+    println!("\n🎉 Icons successfully generated in the './assets/' folder!");
+    Ok(())
+}
 
-    // Define output paths organized by platform
-    let linux_folder = "./assets/icons/linux";
-    let windows_folder = "./assets/icons/windows";
-    let mac_folder = "./assets/icons/mac/icon.iconset";
-
-    // -------------------------------------------------------------
-    // 1. LINUX
-    // -------------------------------------------------------------
-    println!("📦 Generating individual icons for Linux...");
-    fs::create_dir_all(linux_folder)?;
-    let linux_sizes = vec![32, 64, 128, 256, 512];
-    for size in linux_sizes {
-        let resized = img.resize_exact(size, size, FilterType::Lanczos3);
-        resized.save(format!("{}/{}x{}.png", linux_folder, size, size))?;
+/// Generates Linux, Windows and macOS icons under `out_root`.
+/// Returns `Ok(false)` when `input` does not exist.
+fn generate(input: &Path, out_root: &Path) -> Result<bool, Box<dyn Error>> {
+    if !input.exists() {
+        return Ok(false);
     }
 
-    // -------------------------------------------------------------
-    // 2. WINDOWS
-    // -------------------------------------------------------------
+    println!("⏳ Loading and processing original image...");
+    let img = image::open(input)?;
+
+    let linux_folder = out_root.join("linux");
+    let windows_folder = out_root.join("windows");
+    let mac_folder = out_root.join("mac/icon.iconset");
+
+    println!("📦 Generating individual icons for Linux...");
+    fs::create_dir_all(&linux_folder)?;
+    for size in LINUX_SIZES {
+        img.resize_exact(size, size, FilterType::Lanczos3)
+            .save(linux_folder.join(format!("{size}x{size}.png")))?;
+    }
+
     println!("📦 Generating 'icon.ico' file for Windows...");
-    fs::create_dir_all(windows_folder)?;
-
-    let windows_sizes = vec![16, 24, 32, 48, 256];
+    fs::create_dir_all(&windows_folder)?;
     let mut builder = IcoBuilder::default();
-
-    for size in &windows_sizes {
-        let temp_path = format!("{}/temp_{}.png", windows_folder, size);
-        img.resize_exact(*size, *size, FilterType::Lanczos3)
+    for size in WINDOWS_SIZES {
+        let temp_path = windows_folder.join(format!("temp_{size}.png"));
+        img.resize_exact(size, size, FilterType::Lanczos3)
             .save(&temp_path)?;
         builder.add_source_file(&temp_path);
     }
-
-    builder.build_file(format!("{}/icon.ico", windows_folder))?;
-
-    for size in windows_sizes {
-        fs::remove_file(format!("{}/temp_{}.png", windows_folder, size))?;
+    builder.build_file(windows_folder.join("icon.ico"))?;
+    for size in WINDOWS_SIZES {
+        fs::remove_file(windows_folder.join(format!("temp_{size}.png")))?;
     }
 
-    // -------------------------------------------------------------
-    // 3. MACOS
-    // -------------------------------------------------------------
     println!("📦 Generating 'icon.iconset' structure for macOS...");
-    fs::create_dir_all(mac_folder)?;
-
-    let mac_settings = vec![
-        ("icon_16x16.png", 16),
-        ("icon_16x16@2x.png", 32),
-        ("icon_32x32.png", 32),
-        ("icon_32x32@2x.png", 64),
-        ("icon_128x128.png", 128),
-        ("icon_128x128@2x.png", 256),
-        ("icon_256x256.png", 256),
-        ("icon_256x256@2x.png", 512),
-        ("icon_512x512.png", 512),
-        ("icon_512x512@2x.png", 1024),
-    ];
-
-    for (name, size) in mac_settings {
-        let resized = img.resize_exact(size, size, FilterType::Lanczos3);
-        resized.save(format!("{}/{}", mac_folder, name))?;
+    fs::create_dir_all(&mac_folder)?;
+    for (name, size) in MAC_ICONS {
+        img.resize_exact(size, size, FilterType::Lanczos3)
+            .save(mac_folder.join(name))?;
     }
 
-    println!("\n🎉 Icons successfully generated in the './assets/' folder!");
-    Ok(())
+    Ok(true)
 }
