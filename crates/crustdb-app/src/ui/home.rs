@@ -114,7 +114,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 ui.weak(
                     "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
                 );
-                ui.hyperlink_to("Read a free chapter →", BOOK_URL);
+                ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
             });
         });
         ui.separator();
@@ -181,15 +181,17 @@ mod tests {
     #[test]
     fn home_shows_book_promo() {
         let s = state(&[]);
+        let mut done = false;
         let mut h = Harness::new_ui(|ui| {
-            egui_extras::install_image_loaders(ui.ctx());
-            show(ui, &s);
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
         });
         h.run();
         h.get_by_label(
             "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
         );
-        h.get_by_label("Read a free chapter →");
+        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT));
         h.get_by_label("Desbravando Rust book cover");
         let poll = h.ctx.try_load_image(
             "bytes://../../../../assets/imgs/book-cover.png",
@@ -201,12 +203,15 @@ mod tests {
     #[test]
     fn book_promo_links_to_site() {
         let s = state(&[]);
+        let mut done = false;
         let mut h = Harness::new_ui(|ui| {
-            egui_extras::install_image_loaders(ui.ctx());
-            show(ui, &s);
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
         });
         h.run();
-        h.get_by_label("Read a free chapter →").click();
+        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
+            .click();
         h.step();
         let opened = h.output().platform_output.commands.iter().any(|c| {
             matches!(c, egui::OutputCommand::OpenUrl(u) if u.url == "https://desbravandorust.com.br/")
