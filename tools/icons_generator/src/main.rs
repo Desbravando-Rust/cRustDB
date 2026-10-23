@@ -80,3 +80,56 @@ fn generate(input: &Path, out_root: &Path) -> Result<bool, Box<dyn Error>> {
 
     Ok(true)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("original.png");
+        image::RgbaImage::new(64, 64).save(&input).unwrap();
+        (dir, input)
+    }
+
+    #[test]
+    fn generate_returns_false_when_input_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        let done = generate(&dir.path().join("nope.png"), &out).unwrap();
+        assert!(!done);
+        assert!(!out.exists());
+    }
+
+    #[test]
+    fn generate_writes_linux_pngs_with_exact_sizes() {
+        let (dir, input) = fixture();
+        assert!(generate(&input, dir.path()).unwrap());
+        for size in LINUX_SIZES {
+            let p = dir.path().join(format!("linux/{size}x{size}.png"));
+            assert_eq!(image::image_dimensions(p).unwrap(), (size, size));
+        }
+    }
+
+    #[test]
+    fn generate_writes_windows_ico_and_removes_temps() {
+        let (dir, input) = fixture();
+        assert!(generate(&input, dir.path()).unwrap());
+        let win = dir.path().join("windows");
+        assert!(fs::metadata(win.join("icon.ico")).unwrap().len() > 0);
+        for size in WINDOWS_SIZES {
+            assert!(!win.join(format!("temp_{size}.png")).exists());
+        }
+    }
+
+    #[test]
+    fn generate_writes_full_macos_iconset() {
+        let (dir, input) = fixture();
+        assert!(generate(&input, dir.path()).unwrap());
+        for (name, size) in MAC_ICONS {
+            let p = dir.path().join("mac/icon.iconset").join(name);
+            assert_eq!(image::image_dimensions(p).unwrap(), (size, size));
+        }
+    }
+}
