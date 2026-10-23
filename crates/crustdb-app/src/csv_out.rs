@@ -14,18 +14,11 @@ impl<W: Write> CsvOut<W> {
     }
 
     pub fn header(&mut self, cols: &[ColumnMeta]) -> io::Result<()> {
-        self.line(cols.iter().map(|c| field(&c.name, false)))
+        self.line(cols.iter().map(|c| field(&c.name, false, ',')))
     }
 
     pub fn row(&mut self, cells: &[Cell]) -> io::Result<()> {
-        self.line(cells.iter().map(|c| match c {
-            Cell::Null => String::new(),
-            Cell::Text { value, .. } => field(value, true),
-            Cell::Bytes { value, .. } => value.iter().fold(String::from("0x"), |mut s, b| {
-                s.push_str(&format!("{b:02x}"));
-                s
-            }),
-        }))
+        self.line(cells.iter().map(|c| quoted(c, ',')))
     }
 
     pub fn finish(mut self) -> io::Result<()> {
@@ -43,10 +36,43 @@ impl<W: Write> CsvOut<W> {
     }
 }
 
-/// Quotes on `,` `"` `\n` `\r`; an empty string is quoted only when `quote_empty`
+/// Raw cell value: NULL is empty, binary is `0x` + hex. No quoting.
+pub fn cell_text(c: &Cell) -> String {
+    match c {
+        Cell::Null => String::new(),
+        Cell::Text { value, .. } => value.to_string(),
+        Cell::Bytes { value, .. } => value.iter().fold(String::from("0x"), |mut s, b| {
+            s.push_str(&format!("{b:02x}"));
+            s
+        }),
+    }
+}
+
+/// Tab-separated rows (clipboard format), optional header line, no trailing newline.
+pub fn to_tsv<'a>(
+    cols: &[ColumnMeta],
+    rows: impl IntoIterator<Item = &'a Row>,
+    header: bool,
+) -> String {
+    let line = |fields: Vec<String>| fields.join("\t");
+    let head = header.then(|| line(cols.iter().map(|c| field(&c.name, false, '\t')).collect()));
+    let body = rows
+        .into_iter()
+        .map(|r| line(r.iter().map(|c| quoted(c, '\t')).collect()));
+    head.into_iter().chain(body).collect::<Vec<_>>().join("\n")
+}
+
+fn quoted(c: &Cell, sep: char) -> String {
+    match c {
+        Cell::Text { value, .. } => field(value, true, sep),
+        c => cell_text(c),
+    }
+}
+
+/// Quotes on `sep` `"` `\n` `\r`; an empty string is quoted only when `quote_empty`
 /// (cell values, so it differs from NULL; header names are never empty-quoted).
-fn field(s: &str, quote_empty: bool) -> String {
-    if s.contains([',', '"', '\n', '\r']) || (quote_empty && s.is_empty()) {
+fn field(s: &str, quote_empty: bool, sep: char) -> String {
+    if s.contains([sep, '"', '\n', '\r']) || (quote_empty && s.is_empty()) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
         s.to_owned()
