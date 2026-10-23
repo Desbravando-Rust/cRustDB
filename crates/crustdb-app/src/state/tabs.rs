@@ -49,6 +49,30 @@ impl QueryTab {
         self.text = toggle_comment(&self.text, a..b + 1);
         self.dirty = true;
     }
+
+    /// Ctrl+Shift+F: beautifies the statements touched by the selection (chars), or the whole
+    /// buffer when it is empty.
+    pub fn format_at(&mut self, sel: std::ops::Range<usize>) {
+        let r = if sel.is_empty() {
+            0..self.text.len()
+        } else {
+            // Whole statements only, so a cut never lands inside a comment or literal.
+            let b = char_to_byte(&self.text, sel.start)..char_to_byte(&self.text, sel.end);
+            let spans = crustdb_core::sql::split(&self.text, self.driver);
+            let hit = crustdb_core::sql::statements_in(&spans, b);
+            let (Some(first), Some(last)) = (hit.first(), hit.last()) else {
+                return;
+            };
+            first.range.start..last.range.end
+        };
+        let Some(out) = crustdb_core::sql::beautify(&self.text[r.clone()], self.driver) else {
+            return;
+        };
+        if out != self.text[r.clone()] {
+            self.text.replace_range(r, &out);
+            self.dirty = true;
+        }
+    }
 }
 
 impl AppState {
@@ -203,6 +227,40 @@ mod tests {
         assert_eq!(q.text, "a\n-- b\n-- c");
         q.toggle_comment_at(2..9);
         assert_eq!(q.text, "a\nb\nc");
+    }
+
+    #[test]
+    fn format_at_formats_selection_only() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "-- é\nselect a,b from t;\nselect  1".into();
+        // Only `a,b` is selected: the whole statement around it is formatted.
+        let start = "-- é\nselect ".chars().count();
+        q.format_at(start..start + 3);
+        assert_eq!(q.text, "-- é\nselect a, b\nfrom t;\nselect  1");
+        assert!(q.dirty);
+    }
+
+    #[test]
+    fn format_at_selection_ending_inside_a_comment_keeps_it() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "select 1 -- delete from t".into();
+        q.format_at(0.."select 1 -- ".chars().count());
+        assert_eq!(q.text, "select 1 -- delete from t");
+        assert!(!q.dirty);
+    }
+
+    #[test]
+    fn format_at_empty_selection_formats_buffer() {
+        let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
+        q.text = "select a from t where x=1".into();
+        q.format_at(3..3);
+        assert_eq!(q.text, "select a\nfrom t\nwhere x = 1");
+        assert!(q.dirty);
+        q.dirty = false;
+        q.text = "select 'open".into();
+        q.format_at(0..0);
+        assert_eq!(q.text, "select 'open");
+        assert!(!q.dirty, "untokenizable text is left alone");
     }
 
     #[test]

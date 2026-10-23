@@ -1,9 +1,11 @@
+mod beautify;
 mod classify;
 mod complete;
 mod highlight;
 mod keywords;
 mod split;
 
+pub use beautify::beautify;
 pub use classify::{
     Classified, DestructiveKind, DmlKind, StatementClass, TargetName, TxOp, classify,
 };
