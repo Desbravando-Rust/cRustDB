@@ -100,8 +100,20 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check tag matches crate version
+        id: ver
+        run: |
+          v="$(awk -F'"' '/^version/ {print $2; exit}' crates/crustdb-app/Cargo.toml)"
+          [ "$v" = "${GITHUB_REF_NAME#v}" ] || { echo "tag $GITHUB_REF_NAME != crate version $v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev flatpak flatpak-builder
       - uses: taiki-e/install-action@v2
         with:
@@ -113,6 +125,8 @@ jobs:
       # bwrap (flatpak-builder) needs unprivileged user namespaces, blocked by AppArmor on ubuntu-24.04.
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: packaging/build-linux.sh "${GITHUB_REF_NAME#v}"
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       - uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -121,3 +135,10 @@ jobs:
             target/dist/*.deb
             target/dist/*.rpm
             target/dist/*.flatpak
+      - name: Sentry release
+        if: env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != ''
+        continue-on-error: true
+        uses: getsentry/action-release@v3
+        with:
+          environment: production
+          release: crustdb-app@${{ steps.ver.outputs.version }}
