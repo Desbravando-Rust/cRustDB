@@ -1,18 +1,49 @@
 //! Read-only ER diagram of one schema: grid layout of table boxes and FK edges.
-use eframe::egui::Rect;
+use crustdb_core::model::ObjectRef;
+use eframe::egui::{Rect, pos2, vec2};
 
 use crate::runtime::DiagramTable;
 
+pub const BOX_WIDTH: f32 = 220.0;
+/// Height of the name row and of each column row.
+pub const ROW_HEIGHT: f32 = 20.0;
+const GAP: f32 = 60.0;
+
 /// Box position of each table, in `tables` order, relative to the diagram origin.
+// ponytail: grid layout, force-directed if users ask
 pub fn layout(tables: &[DiagramTable]) -> Vec<Rect> {
-    let _ = tables;
-    vec![]
+    let cols = (tables.len() as f32).sqrt().ceil().max(1.0) as usize;
+    let height = |t: &DiagramTable| ROW_HEIGHT * (t.columns.len() + 1) as f32;
+    let mut out = Vec::with_capacity(tables.len());
+    let mut y = 0.0;
+    for row in tables.chunks(cols) {
+        for (i, t) in row.iter().enumerate() {
+            let min = pos2(i as f32 * (BOX_WIDTH + GAP), y);
+            out.push(Rect::from_min_size(min, vec2(BOX_WIDTH, height(t))));
+        }
+        y += row.iter().map(height).fold(0.0, f32::max) + GAP;
+    }
+    out
 }
 
 /// `(from, to)` indices of each FK whose target table is in `tables`; others are skipped.
+// ponytail: linear scan per FK, a name index if schemas get large
 pub fn edges(tables: &[DiagramTable]) -> Vec<(usize, usize)> {
-    let _ = tables;
-    vec![]
+    fn same(a: &ObjectRef, b: &ObjectRef) -> bool {
+        a.database == b.database && a.schema == b.schema && a.name == b.name
+    }
+    tables
+        .iter()
+        .enumerate()
+        .flat_map(|(i, t)| {
+            t.fks.iter().filter_map(move |fk| {
+                tables
+                    .iter()
+                    .position(|o| same(&o.object, &fk.ref_table))
+                    .map(|j| (i, j))
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
