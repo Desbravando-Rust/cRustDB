@@ -50,12 +50,20 @@ impl QueryTab {
         self.dirty = true;
     }
 
-    /// Ctrl+Shift+F: beautifies the selection (chars), or the whole buffer when it is empty.
+    /// Ctrl+Shift+F: beautifies the statements touched by the selection (chars), or the whole
+    /// buffer when it is empty.
     pub fn format_at(&mut self, sel: std::ops::Range<usize>) {
         let r = if sel.is_empty() {
             0..self.text.len()
         } else {
-            char_to_byte(&self.text, sel.start)..char_to_byte(&self.text, sel.end)
+            // Whole statements only, so a cut never lands inside a comment or literal.
+            let b = char_to_byte(&self.text, sel.start)..char_to_byte(&self.text, sel.end);
+            let spans = crustdb_core::sql::split(&self.text, self.driver);
+            let hit = crustdb_core::sql::statements_in(&spans, b);
+            let (Some(first), Some(last)) = (hit.first(), hit.last()) else {
+                return;
+            };
+            first.range.start..last.range.end
         };
         let Some(out) = crustdb_core::sql::beautify(&self.text[r.clone()], self.driver) else {
             return;
