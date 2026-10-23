@@ -92,10 +92,6 @@ pub fn beautify(text: &str, kind: DriverKind) -> Option<String> {
             query.push(sub);
         }
     }
-    // A trailing `--` comment must not swallow whatever follows the formatted text.
-    if items.last().is_some_and(|it| is_line_comment(it.tok)) {
-        out.push('\n');
-    }
     Some(out)
 }
 
