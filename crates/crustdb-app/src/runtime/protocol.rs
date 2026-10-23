@@ -200,9 +200,11 @@ pub enum Event {
         has_more: bool,
         estimate: Option<u64>,
     },
-    /// The `UpdateCell` with this id changed a row; the page should be reloaded.
+    /// Outcome of the `UpdateCell` with this id: `None` changed a row (reload the page),
+    /// `Some` is why it did not. Unlike `Notice`, it leaves pending page/structure loads alone.
     CellUpdated {
         req: RequestId,
+        error: Option<String>,
     },
     Structure {
         req: RequestId,

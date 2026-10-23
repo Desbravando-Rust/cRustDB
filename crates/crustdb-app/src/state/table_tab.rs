@@ -310,10 +310,15 @@ impl TableTab {
         }
     }
 
-    pub fn cell_updated(&mut self, req: RequestId) {
-        if self.edit_req == Some(req) {
-            self.edit_req = None;
-            self.needs_fetch = true;
+    /// Success reloads the page; a failure only shows `error` (an in-flight load stays pending).
+    pub fn cell_updated(&mut self, req: RequestId, error: Option<String>) {
+        if self.edit_req != Some(req) {
+            return;
+        }
+        self.edit_req = None;
+        match error {
+            None => self.needs_fetch = true,
+            Some(e) => self.notice = Some(e),
         }
     }
 

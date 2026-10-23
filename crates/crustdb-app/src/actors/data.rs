@@ -160,9 +160,9 @@ impl DataActor {
             w.finish().await
         }
         .await;
-        match r {
-            Ok(c) if c.affected_rows == Some(0) => self.notice("row not found".into()),
-            Ok(_) => self.out.emit(Event::CellUpdated { req }),
+        let error = match r {
+            Ok(c) if c.affected_rows == Some(0) => Some("row not found".into()),
+            Ok(_) => None,
             Err(e) => {
                 if matches!(
                     e.kind,
@@ -170,9 +170,10 @@ impl DataActor {
                 ) {
                     self.writer = None;
                 }
-                self.notice(e.message);
+                Some(e.message)
             }
-        }
+        };
+        self.out.emit(Event::CellUpdated { req, error });
     }
 
     async fn structure(&mut self, req: RequestId) {

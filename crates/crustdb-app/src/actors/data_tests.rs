@@ -51,19 +51,25 @@ async fn update_cell_opens_editor_session_and_emits_updated() {
     update(&mut h, 2);
     assert!(matches!(
         next(&h.rx).await,
-        Event::CellUpdated { req: RequestId(2) }
+        Event::CellUpdated {
+            req: RequestId(2),
+            error: None
+        }
     ));
     update(&mut h, 3);
     assert!(matches!(
         next(&h.rx).await,
-        Event::CellUpdated { req: RequestId(3) }
+        Event::CellUpdated {
+            req: RequestId(3),
+            error: None
+        }
     ));
     assert_eq!(editors(&h), 1, "the Editor session is reused");
     assert!(h.drv.log.ops().contains(&format!("start:{SQL}")));
 }
 
 #[tokio::test]
-async fn update_cell_zero_rows_emits_notice() {
+async fn update_cell_zero_rows_reports_row_not_found() {
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
@@ -73,6 +79,6 @@ async fn update_cell_zero_rows_emits_notice() {
     update(&mut h, 2);
     assert!(matches!(
         next(&h.rx).await,
-        Event::Notice { text, .. } if text == "row not found"
+        Event::CellUpdated { req: RequestId(2), error: Some(e) } if e == "row not found"
     ));
 }

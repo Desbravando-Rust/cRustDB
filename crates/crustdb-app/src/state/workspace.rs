@@ -354,9 +354,9 @@ impl AppState {
                     t.estimate = estimate;
                 }
             }
-            Event::CellUpdated { req } => {
+            Event::CellUpdated { req, error } => {
                 for Tab::Table(t) in self.workspaces.iter_mut().flat_map(|w| w.tabs.iter_mut()) {
-                    t.cell_updated(req);
+                    t.cell_updated(req, error.clone());
                 }
             }
             Event::Structure {

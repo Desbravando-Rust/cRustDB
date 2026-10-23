@@ -326,10 +326,21 @@ fn edit_cell_builds_update_only_for_table_with_pk() {
 fn cell_updated_marks_needs_fetch() {
     let mut t = editable_tab(ObjectKind::Table, true);
     let _ = t.set_null(0, 1, RequestId(3));
-    t.cell_updated(RequestId(2));
+    t.cell_updated(RequestId(2), None);
     assert!(!t.needs_fetch, "stale id ignored");
-    t.cell_updated(RequestId(3));
+    t.cell_updated(RequestId(3), None);
     assert!(t.needs_fetch && t.edit_req.is_none());
+}
+
+#[test]
+fn update_error_keeps_fetch_in_flight() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    let _ = t.set_null(0, 1, RequestId(3));
+    t.fetch(RequestId(4));
+    t.cell_updated(RequestId(3), Some("boom".into()));
+    assert_eq!(t.loading, Some(RequestId(4)));
+    assert_eq!(t.notice.as_deref(), Some("boom"));
+    assert!(!t.needs_fetch && t.edit_req.is_none());
 }
 
 #[test]
