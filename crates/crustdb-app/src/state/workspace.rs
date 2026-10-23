@@ -31,6 +31,7 @@ pub struct WorkspaceState {
     /// Query editor tabs; ids come from the same counter as `tabs`.
     pub queries: Vec<QueryTab>,
     pub active_tab: Option<TabId>,
+    pub diagram: Option<super::diagram::Diagram>,
     /// The password this session connected with, for the safety prompt (never read from the keyring).
     pub session_password: Option<SecretString>,
 }
@@ -262,6 +263,7 @@ impl AppState {
             tabs: vec![],
             queries: vec![],
             active_tab: None,
+            diagram: None,
             session_password: None,
         });
         self.active = Some(id);
@@ -314,6 +316,15 @@ impl AppState {
             Event::Columns { req, columns } => {
                 for w in &mut self.workspaces {
                     w.columns.apply(req, columns.clone());
+                }
+            }
+            Event::Diagram { req, tables } => {
+                let mut open = self
+                    .workspaces
+                    .iter_mut()
+                    .filter_map(|w| w.diagram.as_mut());
+                if let Some(d) = open.find(|d| d.req == req) {
+                    d.apply(tables);
                 }
             }
             Event::Children { req, items } => {

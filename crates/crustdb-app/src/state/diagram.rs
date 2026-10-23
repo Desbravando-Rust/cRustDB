@@ -2,12 +2,61 @@
 use crustdb_core::model::ObjectRef;
 use eframe::egui::{Rect, pos2, vec2};
 
-use crate::runtime::DiagramTable;
+use super::WorkspaceState;
+use crate::runtime::{Command, DiagramTable, RequestId};
 
 pub const BOX_WIDTH: f32 = 220.0;
 /// Height of the name row and of each column row.
 pub const ROW_HEIGHT: f32 = 20.0;
 const GAP: f32 = 60.0;
+
+/// The diagram window of one workspace.
+#[derive(Debug)]
+pub struct Diagram {
+    pub req: RequestId,
+    pub title: String,
+    /// `None` while loading or after a failure.
+    pub tables: Option<Vec<DiagramTable>>,
+    pub failed: bool,
+}
+
+impl Diagram {
+    pub fn new(req: RequestId, title: String) -> Self {
+        Self {
+            req,
+            title,
+            tables: None,
+            failed: false,
+        }
+    }
+
+    pub fn apply(&mut self, tables: Option<Vec<DiagramTable>>) {
+        self.failed = tables.is_none();
+        self.tables = tables;
+    }
+}
+
+impl WorkspaceState {
+    /// Replaces any open diagram with a pending one for `database`/`schema`.
+    pub fn open_diagram(
+        &mut self,
+        req: RequestId,
+        database: String,
+        schema: Option<String>,
+    ) -> Command {
+        let title = match &schema {
+            Some(s) => format!("{database}.{s}"),
+            None => database.clone(),
+        };
+        self.diagram = Some(Diagram::new(req, title));
+        Command::LoadDiagram {
+            ws: self.id,
+            req,
+            database,
+            schema,
+        }
+    }
+}
 
 /// Box position of each table, in `tables` order, relative to the diagram origin.
 // ponytail: grid layout, force-directed if users ask

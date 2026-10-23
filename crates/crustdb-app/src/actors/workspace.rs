@@ -15,7 +15,9 @@ use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at, sleep_unti
 use super::Shared;
 use crate::net::known_hosts::KnownHosts;
 use crate::net::ssh::{HostKeyAsk, Tunnel, open_tunnel};
-use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId};
+use crate::runtime::{
+    Command, DiagramTable, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId,
+};
 use crate::storage::config::ConnectionConfig;
 use crate::storage::paths::config_dir;
 
@@ -135,6 +137,12 @@ impl WorkspaceActor {
             WsMsg::Cmd(Command::LoadColumns { req, object, .. }) => {
                 self.load_columns(req, object).await
             }
+            WsMsg::Cmd(Command::LoadDiagram {
+                req,
+                database,
+                schema,
+                ..
+            }) => self.load_diagram(req, database, schema).await,
             WsMsg::Cmd(_) | WsMsg::Disconnect => {}
             WsMsg::AskHostKey(tx) => self.decision = Some(tx),
             WsMsg::Connected(Ok(ready)) => self.on_connected(ready),
@@ -289,6 +297,46 @@ impl WorkspaceActor {
             .inspect_err(|e| tracing::warn!("column lookup failed: {}", e.message))
             .ok();
         self.out.emit(Event::Columns { req, columns });
+    }
+
+    /// Tables of a schema with their columns and FKs, for the ER diagram.
+    async fn load_diagram(&mut self, req: RequestId, database: String, schema: Option<String>) {
+        let r = async {
+            let sh = self.shared.clone().ok_or_else(not_connected)?;
+            let key = if sh.driver.kind() == DriverKind::Postgres {
+                database.clone()
+            } else {
+                self.home.clone()
+            };
+            self.ensure_metadata(&key).await?;
+            let s = self.sessions.get_mut(&key).ok_or_else(not_connected)?;
+            let intro = sh.driver.introspector();
+            let objects = intro
+                .objects(s.as_mut(), &database, schema.as_deref(), ObjectKind::Table)
+                .await?;
+            // ponytail: N+1 queries per table, single bulk catalog query if schemas get large
+            let mut tables = Vec::with_capacity(objects.len());
+            for object in objects {
+                let columns = intro.columns(s.as_mut(), &object).await?;
+                let fks = intro.foreign_keys(s.as_mut(), &object).await?;
+                tables.push(DiagramTable {
+                    object,
+                    columns: columns.into_iter().map(|c| c.meta).collect(),
+                    fks,
+                });
+            }
+            Ok::<_, DriverError>(tables)
+        }
+        .await;
+        let tables = r
+            .inspect_err(|e| {
+                self.out.emit(Event::Notice {
+                    tab: NO_TAB,
+                    text: e.message.clone(),
+                })
+            })
+            .ok();
+        self.out.emit(Event::Diagram { req, tables });
     }
 
     async fn load_children(

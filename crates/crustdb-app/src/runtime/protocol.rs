@@ -82,6 +82,13 @@ pub enum Command {
         req: RequestId,
         object: ObjectRef,
     },
+    /// Tables of one schema with columns and FKs, answered by `Event::Diagram`.
+    LoadDiagram {
+        ws: WorkspaceId,
+        req: RequestId,
+        database: String,
+        schema: Option<String>,
+    },
     OpenTable {
         ws: WorkspaceId,
         tab: TabId,
@@ -173,6 +180,11 @@ pub enum Event {
     Children {
         req: RequestId,
         items: Vec<ObjectRef>,
+    },
+    /// `None` when the lookup failed.
+    Diagram {
+        req: RequestId,
+        tables: Option<Vec<DiagramTable>>,
     },
     Page {
         req: RequestId,
