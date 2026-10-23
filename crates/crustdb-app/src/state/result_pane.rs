@@ -98,6 +98,7 @@ impl ResultPane {
 
     /// Rebuilds `view` from `rows`, `filter` and `sorts`.
     pub fn refresh_view(&mut self) {
+        // ponytail: lowercases every cell per keystroke, O(rows*cols); cache lowercase per row if it lags
         let needle = self.filter.to_lowercase();
         let rows = &self.rows;
         self.view = (0..rows.len())
@@ -134,13 +135,12 @@ impl ResultPane {
     }
 }
 
-/// Nulls last in both directions; numbers by value, the rest as text/bytes.
+/// Missing cell (row shorter than the header) sorts as null.
+static MISSING: Cell = Cell::Null;
+
+/// Nulls last in both directions; numbers by value before non-numeric text, the rest as text/bytes.
 fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) -> Ordering {
-    let (a, b) = match (a, b) {
-        (Some(a), Some(b)) => (a, b),
-        _ => return Ordering::Equal,
-    };
-    let o = match (a, b) {
+    let o = match (a.unwrap_or(&MISSING), b.unwrap_or(&MISSING)) {
         (Cell::Null, Cell::Null) => return Ordering::Equal,
         (Cell::Null, _) => return Ordering::Greater,
         (_, Cell::Null) => return Ordering::Less,
@@ -150,9 +150,15 @@ fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) 
                 cat,
                 TypeCategory::Integer | TypeCategory::Decimal | TypeCategory::Float
             );
-            match (numeric, x.parse::<f64>(), y.parse::<f64>()) {
-                (true, Ok(x), Ok(y)) => x.total_cmp(&y),
-                _ => x.cmp(y),
+            if numeric {
+                match (x.parse::<f64>(), y.parse::<f64>()) {
+                    (Ok(x), Ok(y)) => x.total_cmp(&y),
+                    (Ok(_), Err(_)) => Ordering::Less,
+                    (Err(_), Ok(_)) => Ordering::Greater,
+                    (Err(_), Err(_)) => x.cmp(y),
+                }
+            } else {
+                x.cmp(y)
             }
         }
         (Cell::Bytes { value: x, .. }, Cell::Bytes { value: y, .. }) => x.cmp(y),
@@ -372,5 +378,29 @@ pub(crate) mod tests {
         });
         assert!(p.sorts.is_empty());
         assert!(p.view.is_empty());
+    }
+
+    #[test]
+    fn numeric_column_puts_non_numbers_after_numbers() {
+        let mut p = loaded(vec![
+            row2(text("abc"), "a"),
+            row2(text("10"), "b"),
+            row2(text("9"), "c"),
+            row2(text("Z"), "d"),
+        ]);
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![2, 1, 3, 0]);
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![0, 3, 1, 2]);
+    }
+
+    #[test]
+    fn short_row_sorts_as_null_last() {
+        let short: Row = vec![text("1")].into();
+        let mut p = loaded(vec![short, row2(text("2"), "b"), row2(text("3"), "a")]);
+        p.click_header("s", false);
+        assert_eq!(p.view, vec![2, 1, 0]);
+        p.click_header("s", false);
+        assert_eq!(p.view, vec![1, 2, 0]);
     }
 }
