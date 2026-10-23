@@ -1,13 +1,16 @@
 //! Find/replace bar above the query editor (Ctrl+F).
+use std::ops::Range;
+
 use eframe::egui::{self, Key, Modifiers, text::CCursor, text::CCursorRange};
 
 use crate::state::QueryTab;
+use crate::state::query_tab::highlight_enabled;
 
-/// Draws the bar while `tab.find` is open; `editor` is the editor's `TextEdit` id.
+/// Draws the bar while `tab.find` is open and returns the match (chars) the editor highlights.
 /// Enter = next, Shift+Enter = previous (focus stays here), Esc closes.
-pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) {
+pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<Range<usize>> {
     if !tab.find.open {
-        return;
+        return None;
     }
     let ctx = ui.ctx().clone();
     let state = egui::TextEdit::load_state(&ctx, editor);
@@ -15,6 +18,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) {
         let [a, b] = r.sorted_cursors();
         usize::from(a.index)..usize::from(b.index)
     });
+    // Same limit as highlighting: past it, matches are only scanned on demand.
+    let big = !highlight_enabled(&tab.text);
     let fid = editor.with("find");
     let had = ui.memory(|m| m.has_focus(fid));
     let shift = ui.input(|i| i.modifiers.shift);
@@ -46,7 +51,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) {
                 tab.find.step(&tab.text, next)
             };
         }
-        ui.label(tab.find.count_label(&tab.text));
+        if !big {
+            ui.label(tab.find.count_label(&tab.text));
+        }
         let replace = ui.add(
             egui::TextEdit::singleline(&mut tab.find.replacement)
                 .hint_text("Replace with")
@@ -66,16 +73,27 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) {
             tab.find.open = false;
         }
     });
-    if let (Some(r), Some(mut st)) = (select, state) {
+    if let (Some(r), Some(mut st)) = (select.clone(), state) {
         st.cursor.set_char_range(Some(CCursorRange::two(
             CCursor::new(r.start),
             CCursor::new(r.end),
         )));
         st.store(&ctx, editor);
+        tab.find.scroll = true;
         if click {
             ctx.memory_mut(|m| m.request_focus(editor));
         }
     }
+    if !tab.find.open {
+        return None;
+    }
+    select.or_else(|| {
+        if big {
+            None
+        } else {
+            tab.find.current_match(&tab.text)
+        }
+    })
 }
 
 #[cfg(test)]

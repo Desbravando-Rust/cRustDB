@@ -14,6 +14,8 @@ pub struct Find {
     pub current: usize,
     /// The find field takes keyboard focus on the next frame.
     pub focus: bool,
+    /// The editor scrolls to the current match on the next frame.
+    pub scroll: bool,
 }
 
 /// Non-overlapping occurrences of `needle` in `text`.
