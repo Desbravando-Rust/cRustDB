@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #33
+Spec de melhorias de UI/UX do crustdb-app (`docs/specs/2026-10-22-crustdb-uiux-spec.md`): 46 melhorias (P1 15, P2 21, P3 10) com problema, evidência, proposta, prioridade e aceite por tela; itens conflitantes com a spec v1 movidos para backlog v2. Apenas documentação.
+
 ## 2026-10-22 — #35
 Tela de conexão: duplo clique conecta na conexão salva, ícone colorido por engine (PostgreSQL/MySQL) e conexão online mostra "Active" com botão "Open" que reusa o workspace vivo em vez de abrir outro.
 
