@@ -320,4 +320,18 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn sqlite_requires_file_not_host_or_port() {
+        let mut c = sample();
+        c.driver = DriverKind::Sqlite;
+        c.host = String::new();
+        c.port = 0;
+        c.database = Some("/tmp/a.db".into());
+        assert!(validate(&c, &[]).is_ok());
+        c.database = None;
+        let errs = validate(&c, &[]).unwrap_err();
+        let fields: Vec<_> = errs.iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["database"]);
+    }
 }
