@@ -242,6 +242,7 @@ impl TableTab {
         self.has_more = rows.len() > self.page_size as usize;
         rows.truncate(self.page_size as usize);
         self.rows = rows;
+        self.editing = None;
         self.selected_row = None;
         self.select_anchor = None;
         self.loading = None;
