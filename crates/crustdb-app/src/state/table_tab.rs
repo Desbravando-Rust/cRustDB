@@ -51,6 +51,10 @@ pub struct TableTab {
     pub drafts: Vec<FilterDraft>,
     pub filter_error: Option<String>,
     pub detail_open: bool,
+    /// Inline editor of the Data grid: row, column, text being typed.
+    pub editing: Option<(usize, usize, String)>,
+    /// Pending `UpdateCell`; its `CellUpdated` reloads the page.
+    pub edit_req: Option<RequestId>,
 }
 
 impl TableTab {
@@ -81,6 +85,8 @@ impl TableTab {
             drafts: vec![],
             filter_error: None,
             detail_open: false,
+            editing: None,
+            edit_req: None,
         }
     }
 
@@ -239,6 +245,18 @@ impl TableTab {
         self.loading = None;
         self.notice = None;
     }
+
+    pub fn begin_edit(&mut self, _row: usize, _col: usize) {}
+
+    pub fn commit_edit(&mut self, _req: RequestId) -> Option<Command> {
+        None
+    }
+
+    pub fn set_null(&mut self, _row: usize, _col: usize, _req: RequestId) -> Option<Command> {
+        None
+    }
+
+    pub fn cell_updated(&mut self, _req: RequestId) {}
 
     pub fn click_header(&mut self, column: &str, shift: bool) {
         toggle_sort(&mut self.sorts, column, shift);
