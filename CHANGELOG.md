@@ -4,6 +4,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
+## 2026-10-23
+
+- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 1 of 2: core support and new `crustdb-sqlite` crate (rusqlite). Not yet selectable in the UI; part 2 wires it into the app.
+
 ## 2026-10-22
 
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
