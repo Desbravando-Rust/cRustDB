@@ -10,16 +10,6 @@ use crate::state::{TableTab, TableView};
 
 const ROW_H: f32 = 20.0;
 
-/// Virtualized grid; returns the clicked header as `(column, shift)`.
-pub fn grid(
-    ui: &mut egui::Ui,
-    columns: &[ColumnMeta],
-    rows: &[Row],
-    selected: &mut Option<usize>,
-) -> Option<(String, bool)> {
-    grid_sorted(ui, columns, rows, selected, &[])
-}
-
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
         Some(i) => {
@@ -34,10 +24,13 @@ fn sort_mark(sorts: &[Sort], column: &str) -> String {
     }
 }
 
-fn grid_sorted(
+/// Virtualized grid over `rows` (or the `view` indexes into it); `selected` is a `rows` index.
+/// Returns the clicked header as `(column, shift)`.
+pub fn grid(
     ui: &mut egui::Ui,
     columns: &[ColumnMeta],
     rows: &[Row],
+    view: Option<&[usize]>,
     selected: &mut Option<usize>,
     sorts: &[Sort],
 ) -> Option<(String, bool)> {
@@ -66,10 +59,13 @@ fn grid_sorted(
             }
         })
         .body(|body| {
-            body.rows(ROW_H, rows.len(), |mut row| {
-                let i = row.index();
+            let n = view.map_or(rows.len(), <[_]>::len);
+            body.rows(ROW_H, n, |mut row| {
+                let k = row.index();
+                let i = view.and_then(|v| v.get(k).copied()).unwrap_or(k);
                 row.set_selected(*selected == Some(i));
-                for (cell, meta) in rows[i].iter().zip(columns) {
+                let Some(cells) = rows.get(i) else { return };
+                for (cell, meta) in cells.iter().zip(columns) {
                     row.col(|ui| {
                         let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
                         if matches!(cell, Cell::Null) {
@@ -133,10 +129,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         });
     }
     egui::CentralPanel::default().show(ui, |ui| {
-        let clicked = grid_sorted(
+        let clicked = grid(
             ui,
             &tab.columns,
             &tab.rows,
+            None,
             &mut tab.selected_row,
             &tab.sorts,
         );

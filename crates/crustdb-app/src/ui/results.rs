@@ -58,7 +58,22 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
         ui.selectable_value(&mut tab.pane.tab, ResultTab::Result, "Result");
         ui.selectable_value(&mut tab.pane.tab, ResultTab::Messages, "Messages");
         if tab.pane.header.is_some() {
-            ui.weak(format!("{} rows", tab.pane.rows.len()));
+            let p = &mut tab.pane;
+            if ui
+                .add(
+                    egui::TextEdit::singleline(&mut p.filter)
+                        .hint_text("Filter rows")
+                        .desired_width(160.0),
+                )
+                .changed()
+            {
+                p.refresh_view();
+            }
+            if p.filter.is_empty() {
+                ui.weak(format!("{} rows", p.rows.len()));
+            } else {
+                ui.weak(format!("{} of {} rows", p.view.len(), p.rows.len()));
+            }
         }
         if tab.pane.load_more_visible()
             && ui
@@ -77,14 +92,26 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
     });
     ui.separator();
     match tab.pane.tab {
-        ResultTab::Result => match &tab.pane.header {
-            Some(h) => {
-                grid::grid(ui, &h.columns, &tab.pane.rows, &mut tab.pane.selected);
+        ResultTab::Result => {
+            let p = &mut tab.pane;
+            let clicked = match &p.header {
+                Some(h) => grid::grid(
+                    ui,
+                    &h.columns,
+                    &p.rows,
+                    Some(p.view.as_slice()),
+                    &mut p.selected,
+                    &p.sorts,
+                ),
+                None => {
+                    ui.weak("No result");
+                    None
+                }
+            };
+            if let Some((column, shift)) = clicked {
+                p.click_header(&column, shift);
             }
-            None => {
-                ui.weak("No result");
-            }
-        },
+        }
         ResultTab::Messages => {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for m in &tab.pane.messages {
