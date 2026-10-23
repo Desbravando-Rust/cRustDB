@@ -31,7 +31,7 @@ push-branches:
 
 
 icons: 
-	cargo run -p icons_generator --release
+	cargo run --manifest-path ../icons_generator/Cargo.toml --release
 
 
 # Ativa os hooks versionados em .githooks/ (fmt + clippy + testes no pre-commit).
