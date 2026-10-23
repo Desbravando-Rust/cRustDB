@@ -226,6 +226,23 @@ async fn sink_writes_jsonl_by_extension() {
 }
 
 #[tokio::test]
+async fn unknown_extension_exports_csv_with_notice() {
+    let mut h = harness(script(1));
+    open(&mut h).await;
+    run(&mut h, 1, &["SELECT 1"]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("out.txt");
+    export_result(&mut h, 2, &path);
+    let (res, seen) = done(&h).await;
+    assert_eq!(res, Ok(1));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "id\n0\n");
+    assert!(
+        notices(&seen).iter().any(|n| n.contains("Exported as CSV")),
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
 async fn export_result_without_result_fails() {
     let mut h = harness(script(1));
     connect(&mut h, Some("d")).await;

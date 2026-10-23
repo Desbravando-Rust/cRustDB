@@ -44,11 +44,14 @@ fn write(format: Format, kind: DriverKind, cols: &[ColumnMeta], rows: &[Vec<Cell
 #[test]
 fn format_from_extension() {
     let f = |p: &str| Format::from_path(Path::new(p));
-    assert_eq!(f("a.jsonl"), Format::Json);
-    assert_eq!(f("a.SQL"), Format::Sql);
-    assert_eq!(f("a.csv"), Format::Csv);
-    assert_eq!(f("a"), Format::Csv);
-    assert_eq!(f("a.txt"), Format::Csv);
+    assert_eq!(f("a.jsonl"), Some(Format::Json));
+    assert_eq!(f("a.json"), Some(Format::Json));
+    assert_eq!(f("a.NDJSON"), Some(Format::Json));
+    assert_eq!(f("a.SQL"), Some(Format::Sql));
+    assert_eq!(f("a.csv"), Some(Format::Csv));
+    // Unknown or missing extension: the caller falls back to CSV and says so.
+    assert_eq!(f("a"), None);
+    assert_eq!(f("a.txt"), None);
 }
 
 #[test]
@@ -106,8 +109,8 @@ fn sql_literal_pg_doubles_quote_and_bytea_hex() {
 #[test]
 fn sql_literal_mysql_backslash_goes_hex() {
     let my = DriverKind::Mysql;
-    assert_eq!(sql_literal(my, &text("a\\b")), "X'615c62'");
-    assert_eq!(sql_literal(my, &text("a\0")), "X'6100'");
+    assert_eq!(sql_literal(my, &text("a\\b")), "_utf8mb4 X'615c62'");
+    assert_eq!(sql_literal(my, &text("a\0")), "_utf8mb4 X'6100'");
     assert_eq!(sql_literal(my, &text("it's")), "'it''s'");
     assert_eq!(sql_literal(my, &bytes(&[0xab])), "X'ab'");
 }
@@ -127,7 +130,8 @@ fn sql_insert_quotes_idents_and_table() {
     let rows = [vec![text("1"), Cell::Null], vec![text("2"), text("x")]];
     assert_eq!(
         write(Format::Sql, DriverKind::Postgres, &cols, &rows),
-        "INSERT INTO \"t\" (\"id\", \"we\"\"ird\") VALUES ('1', NULL);\n\
+        "SET standard_conforming_strings = on;\n\
+         INSERT INTO \"t\" (\"id\", \"we\"\"ird\") VALUES ('1', NULL);\n\
          INSERT INTO \"t\" (\"id\", \"we\"\"ird\") VALUES ('2', 'x');\n"
     );
     let cols = [col("a`b", TypeCategory::Text)];
@@ -135,4 +139,24 @@ fn sql_insert_quotes_idents_and_table() {
         write(Format::Sql, DriverKind::Mysql, &cols, &[vec![text("v")]]),
         "INSERT INTO \"t\" (`a``b`) VALUES ('v');\n"
     );
+}
+
+/// With `standard_conforming_strings = off` a PG server reads `\'` as an escaped quote, so the
+/// doubled-quote literal below would close early and run `DROP TABLE`. The dump pins it on.
+#[test]
+fn sql_insert_pg_pins_standard_conforming_strings() {
+    let cols = [col("s", TypeCategory::Text)];
+    let out = write(
+        Format::Sql,
+        DriverKind::Postgres,
+        &cols,
+        &[vec![text("\\'; DROP TABLE t; --")]],
+    );
+    assert_eq!(
+        out,
+        "SET standard_conforming_strings = on;\n\
+         INSERT INTO \"t\" (\"s\") VALUES ('\\''; DROP TABLE t; --');\n"
+    );
+    let my = write(Format::Sql, DriverKind::Mysql, &cols, &[vec![text("v")]]);
+    assert!(!my.contains("SET "), "{my}");
 }
