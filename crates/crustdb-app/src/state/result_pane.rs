@@ -486,4 +486,29 @@ pub(crate) mod tests {
         p.click_header("n", false);
         assert_eq!(p.view, vec![4, 2, 0, 5, 1, 3]);
     }
+
+    #[test]
+    fn untrimmed_non_numbers_keep_total_order() {
+        let mut p = loaded(vec![
+            row2(text(""), "a"),
+            row2(text(" 7"), "b"),
+            row2(text("8"), "c"),
+        ]);
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![2, 0, 1]);
+    }
+
+    #[test]
+    fn decimal_accepts_leading_dot() {
+        let mut p = loaded_with(
+            TypeCategory::Decimal,
+            vec![
+                row2(text("0.5"), "a"),
+                row2(text(".5"), "b"),
+                row2(text(".25"), "c"),
+            ],
+        );
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![2, 0, 1]);
+    }
 }
