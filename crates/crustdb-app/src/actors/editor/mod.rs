@@ -200,10 +200,10 @@ impl EditorActor {
             message: "workspace is not connected".into(),
         })?;
         if self.session.is_none() {
-            let mut target = shared.target.clone();
-            if self.database.is_some() {
-                target.database.clone_from(&self.database);
-            }
+            let target = match &self.database {
+                Some(db) => shared.target_for(db),
+                None => shared.target.clone(),
+            };
             self.session = Some(
                 shared
                     .driver

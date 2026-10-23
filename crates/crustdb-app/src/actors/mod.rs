@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crustdb_core::driver::{ConnectTarget, Driver};
-use crustdb_core::model::ObjectRef;
+use crustdb_core::model::{DriverKind, ObjectRef};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
 
@@ -30,6 +30,18 @@ pub(crate) struct Shared {
     pub(crate) driver: Arc<dyn Driver>,
     pub(crate) target: ConnectTarget,
     pub(crate) config: ConnectionConfig,
+}
+
+impl Shared {
+    /// Target for a session on `db`. SQLite keeps the configured file: `db` is a schema
+    /// (`main`) there, not something to connect to.
+    pub(crate) fn target_for(&self, db: &str) -> ConnectTarget {
+        let mut t = self.target.clone();
+        if self.driver.kind() != DriverKind::Sqlite {
+            t.database = Some(db.to_string());
+        }
+        t
+    }
 }
 
 /// `None` until the workspace is connected.
