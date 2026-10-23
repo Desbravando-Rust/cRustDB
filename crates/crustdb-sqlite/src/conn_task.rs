@@ -155,6 +155,13 @@ fn start(
     };
     let ncols = stmt.column_count();
     if ncols == 0 {
+        // Empty or comment-only SQL prepares to a NULL statement (no expanded SQL); stepping it
+        // would be SQLITE_MISUSE.
+        if stmt.expanded_sql().is_none() {
+            *done = Ok(Some(0));
+            let _ = reply.send(Ok(ResultHeader { columns: vec![] }));
+            return None;
+        }
         // `changes()` keeps the last DML count across DDL; an unchanged total means 0 rows.
         let before = conn.total_changes();
         match stmt.raw_execute() {
