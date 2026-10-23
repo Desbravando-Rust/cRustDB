@@ -117,4 +117,40 @@ mod tests {
         assert_eq!(edges(&tables), [(1, 0)]);
         assert!(edges(&[]).is_empty());
     }
+
+    #[test]
+    fn diagram_event_fills_only_the_pending_request() {
+        use crate::runtime::{Command, Event, RequestId};
+        let mut s = crate::state::workspace::tests::state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let w = s.workspace_mut(ws).unwrap();
+        let cmd = w.open_diagram(RequestId(3), "d".into(), Some("public".into()));
+        assert!(matches!(
+            cmd,
+            Command::LoadDiagram {
+                req: RequestId(3),
+                ..
+            }
+        ));
+        s.apply(Event::Diagram {
+            req: RequestId(2),
+            tables: Some(vec![]),
+        });
+        let d = |s: &mut crate::state::AppState| s.workspace_mut(ws).unwrap().diagram.take();
+        let pending = d(&mut s).unwrap();
+        assert!(pending.tables.is_none() && !pending.failed);
+        s.workspace_mut(ws).unwrap().diagram = Some(pending);
+        s.apply(Event::Diagram {
+            req: RequestId(3),
+            tables: Some(vec![table("t", 1, &[])]),
+        });
+        let loaded = d(&mut s).unwrap();
+        assert_eq!(loaded.tables.map(|t| t.len()), Some(1));
+        s.workspace_mut(ws).unwrap().diagram = Some(Diagram::new(RequestId(4), "x".into()));
+        s.apply(Event::Diagram {
+            req: RequestId(4),
+            tables: None,
+        });
+        assert!(d(&mut s).unwrap().failed);
+    }
 }

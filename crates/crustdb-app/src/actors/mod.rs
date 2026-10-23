@@ -19,6 +19,8 @@ mod export;
 mod workspace;
 
 #[cfg(test)]
+mod diagram_tests;
+#[cfg(test)]
 mod tests;
 
 use data::DataActor;
