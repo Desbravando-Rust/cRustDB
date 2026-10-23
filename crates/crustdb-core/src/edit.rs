@@ -66,7 +66,7 @@ fn is_opaque(c: &Cell) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::model::{DriverKind, TypeCategory};
+    use crate::model::{CELL_MEMORY_CAP, DriverKind, TypeCategory};
 
     struct TestDialect;
     impl Dialect for TestDialect {
@@ -213,6 +213,24 @@ mod tests {
         assert_eq!(
             build(&r, 1, Some("v")).unwrap_err(),
             QueryError::NotEditable("k".into())
+        );
+    }
+
+    /// The server caps text at `CELL_MEMORY_CAP` without flagging it; a full-cap value may be cut.
+    #[test]
+    fn rejects_cells_at_memory_cap() {
+        let full = text(&"a".repeat(CELL_MEMORY_CAP));
+        let mut r = row();
+        r[1] = full.clone();
+        assert_eq!(
+            build(&r, 1, Some("v")).unwrap_err(),
+            QueryError::NotEditable("c".into())
+        );
+        let mut r = row();
+        r[0] = full;
+        assert_eq!(
+            build(&r, 1, Some("v")).unwrap_err(),
+            QueryError::NotEditable("id".into())
         );
     }
 
