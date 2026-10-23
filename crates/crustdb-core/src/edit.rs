@@ -1,27 +1,72 @@
 //! Single-cell `UPDATE` keyed by every primary-key column (ADR 0003).
 
 use crate::dialect::{BuiltQuery, Dialect};
-use crate::model::{Cell, ColumnMeta, ObjectRef};
+use crate::driver::Param;
+use crate::model::{Cell, ColumnMeta, ObjectKind, ObjectRef};
 use crate::query::QueryError;
 
 /// `row` holds the page cells in the order of `columns`. `value = None` writes `NULL`.
 pub fn build_update(
-    _d: &dyn Dialect,
-    _object: &ObjectRef,
-    _columns: &[ColumnMeta],
-    _row: &[Cell],
-    _column: usize,
-    _value: Option<String>,
+    d: &dyn Dialect,
+    object: &ObjectRef,
+    columns: &[ColumnMeta],
+    row: &[Cell],
+    column: usize,
+    value: Option<String>,
 ) -> Result<BuiltQuery, QueryError> {
-    Err(QueryError::NoPrimaryKey)
+    let unknown = || QueryError::UnknownColumn(format!("#{column}"));
+    let target = columns.get(column).ok_or_else(unknown)?;
+    let target_cell = row.get(column).ok_or_else(unknown)?;
+    if object.kind != ObjectKind::Table || !columns.iter().any(|c| c.is_primary_key) {
+        return Err(QueryError::NoPrimaryKey);
+    }
+    if is_opaque(target_cell) {
+        return Err(QueryError::NotEditable(target.name.clone()));
+    }
+
+    let mut params = vec![Param(value)];
+    let mut sql = format!(
+        "UPDATE {} SET {} = {} WHERE ",
+        d.qualified_name(object),
+        d.quote_ident(&target.name),
+        d.param(1, target)
+    );
+    let mut conds = Vec::new();
+    for (i, c) in columns.iter().enumerate().filter(|(_, c)| c.is_primary_key) {
+        let key = match row.get(i) {
+            Some(Cell::Text {
+                value,
+                truncated: false,
+            }) => value.to_string(),
+            _ => return Err(QueryError::NotEditable(c.name.clone())),
+        };
+        params.push(Param(Some(key)));
+        conds.push(format!(
+            "{} = {}",
+            d.quote_ident(&c.name),
+            d.param(params.len(), c)
+        ));
+    }
+    sql.push_str(&conds.join(" AND "));
+    Ok(BuiltQuery { sql, params })
+}
+
+fn is_opaque(c: &Cell) -> bool {
+    matches!(
+        c,
+        Cell::Bytes { .. }
+            | Cell::Text {
+                truncated: true,
+                ..
+            }
+    )
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::driver::Param;
-    use crate::model::{DriverKind, ObjectKind, TypeCategory};
+    use crate::model::{DriverKind, TypeCategory};
 
     struct TestDialect;
     impl Dialect for TestDialect {
