@@ -4,6 +4,9 @@ Histórico de entregas concluídas via workflow autônomo.
 
 ---
 
+## 2026-10-22 — #54
+Pacotes Linux x86_64 para distribuição: `.deb` (cargo-deb), `.rpm` (cargo-generate-rpm), bundle `.flatpak` (manifest em `packaging/flatpak/`) além de AppImage e tarball, todos gerados por `packaging/build-linux.sh` (antigo `build-appimage.sh`) e publicados pelo job de release em tags `v*`. Windows e macOS ficam para a #25.
+
 ## 2026-10-22 — #34
 Rodapé discreto fixado no fim da tela inicial/conexão com a capa e um link para o livro *Desbravando Rust* (abre o site no navegador do sistema).
 
