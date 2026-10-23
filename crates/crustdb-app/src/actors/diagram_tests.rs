@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 
+use crustdb_core::model::{ObjectKind, ObjectRef};
 use crustdb_testkit::fake_driver::FakeScript;
 
-use super::tests::{WS, connect, drain, harness, next};
+use super::tests::{WS, col, connect, harness, next};
 use crate::runtime::{Command, Event, RequestId};
 
 fn load(h: &mut super::tests::H, req: u64, database: &str) {
@@ -28,19 +28,46 @@ async fn load_diagram_answers_with_the_schema_tables() {
 }
 
 #[tokio::test]
+async fn load_diagram_fetches_columns_of_each_table() {
+    let mut h = harness(FakeScript {
+        columns: vec![col("id")],
+        ..Default::default()
+    });
+    h.drv.log.tables.lock().unwrap().push(ObjectRef {
+        database: "a".into(),
+        schema: Some("public".into()),
+        name: "t".into(),
+        kind: ObjectKind::Table,
+    });
+    connect(&mut h, Some("a")).await;
+    load(&mut h, 11, "a");
+    let Event::Diagram {
+        tables: Some(t), ..
+    } = next(&h.rx).await
+    else {
+        panic!("expected a loaded diagram");
+    };
+    assert_eq!(t.len(), 1);
+    assert_eq!(t[0].object.name, "t");
+    assert_eq!(t[0].columns[0].name, "id");
+}
+
+#[tokio::test]
 async fn load_diagram_failure_answers_none_with_notice() {
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
     load(&mut h, 10, "b");
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    let ev = drain(&h.rx);
-    assert!(ev.iter().any(|e| matches!(e, Event::Notice { .. })));
-    assert!(ev.iter().any(|e| matches!(
-        e,
-        Event::Diagram {
-            req: RequestId(10),
-            tables: None
+    let mut seen = vec![];
+    let tables = loop {
+        match next(&h.rx).await {
+            Event::Diagram { req, tables } => {
+                assert_eq!(req, RequestId(10));
+                break tables;
+            }
+            e => seen.push(e),
         }
-    )));
+    };
+    assert!(tables.is_none());
+    assert!(seen.iter().any(|e| matches!(e, Event::Notice { .. })));
 }
