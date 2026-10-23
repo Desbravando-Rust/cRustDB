@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use crustdb_core::driver::SessionPurpose;
-use crustdb_core::model::Cell;
+use crustdb_core::model::{Cell, DriverKind};
 use crustdb_core::query::{Filter, Operator, Sort, TableQuery};
 use crustdb_testkit::fake_driver::FakeScript;
 
@@ -197,6 +197,52 @@ async fn export_result_warns_on_truncated_cells() {
 }
 
 #[tokio::test]
+async fn sink_writes_jsonl_by_extension() {
+    let mut s = script(2);
+    s.rows.push(
+        vec![Cell::Text {
+            value: "x".into(),
+            truncated: true,
+        }]
+        .into(),
+    );
+    let mut h = harness(s);
+    open(&mut h).await;
+    run(&mut h, 1, &["SELECT 1"]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("out.jsonl");
+    export_result(&mut h, 2, &path);
+    let (res, seen) = done(&h).await;
+    assert_eq!(res, Ok(3));
+    assert!(!part(&path).exists());
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "{\"id\":0}\n{\"id\":1}\n{\"id\":\"x\"}\n"
+    );
+    assert!(
+        notices(&seen).iter().any(|n| n.contains("truncated")),
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
+async fn unknown_extension_exports_csv_with_notice() {
+    let mut h = harness(script(1));
+    open(&mut h).await;
+    run(&mut h, 1, &["SELECT 1"]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("out.txt");
+    export_result(&mut h, 2, &path);
+    let (res, seen) = done(&h).await;
+    assert_eq!(res, Ok(1));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "id\n0\n");
+    assert!(
+        notices(&seen).iter().any(|n| n.contains("Exported as CSV")),
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
 async fn export_result_without_result_fails() {
     let mut h = harness(script(1));
     connect(&mut h, Some("d")).await;
@@ -324,7 +370,7 @@ fn failed_finish_removes_partial_file() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("out.csv");
     std::fs::create_dir(&target).unwrap(); // the rename onto a directory fails
-    let mut sink = super::Sink::create(&target).unwrap();
+    let mut sink = super::Sink::create(&target, "t".into(), DriverKind::Postgres).unwrap();
     sink.write(&rows(2)).unwrap();
     assert!(sink.finish().is_err());
     assert!(!part(&target).exists());
@@ -334,7 +380,7 @@ fn failed_finish_removes_partial_file() {
 fn dropped_sink_removes_partial_file() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("out.csv");
-    let sink = super::Sink::create(&target).unwrap();
+    let sink = super::Sink::create(&target, "t".into(), DriverKind::Postgres).unwrap();
     assert!(part(&target).exists());
     drop(sink);
     assert!(!part(&target).exists());
