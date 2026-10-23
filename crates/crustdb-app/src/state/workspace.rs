@@ -268,6 +268,15 @@ impl AppState {
         id
     }
 
+    /// Newest workspace of `conn` that is connecting or online (a failed one may be retried).
+    pub fn live_workspace(&self, conn: ConnectionId) -> Option<WorkspaceId> {
+        self.workspaces
+            .iter()
+            .rev()
+            .find(|w| w.config.id == conn && !matches!(w.status, Status::Failed(_)))
+            .map(|w| w.id)
+    }
+
     pub fn active_online(&self) -> Option<&WorkspaceState> {
         let id = self.active?;
         self.workspaces

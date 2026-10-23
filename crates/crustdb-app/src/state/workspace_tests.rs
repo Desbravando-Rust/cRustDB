@@ -440,3 +440,17 @@ fn evaluated_routes_by_registered_request() {
     });
     assert!(s.take_commands().is_empty());
 }
+
+#[test]
+fn live_workspace_ignores_failed_and_returns_latest() {
+    let mut s = state(&["a", "b"]);
+    let (a, b) = (s.config.connections[0].id, s.config.connections[1].id);
+    assert_eq!(s.live_workspace(a), None);
+    let ws = s.open_workspace(s.config.connections[0].clone());
+    assert_eq!(s.live_workspace(a), Some(WorkspaceId(1)));
+    s.workspaces[0].status = Status::Failed("refused".into());
+    assert_eq!(s.live_workspace(a), None);
+    s.workspaces[0].status = Status::Connecting;
+    assert_eq!(s.live_workspace(a), Some(ws));
+    assert_eq!(s.live_workspace(b), None);
+}

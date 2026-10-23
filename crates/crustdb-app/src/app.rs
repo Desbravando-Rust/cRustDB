@@ -105,6 +105,10 @@ impl CrustApp {
     pub fn handle(&mut self, intent: Intent) {
         match intent {
             Intent::Connect(id) => {
+                if let Some(ws) = self.state.live_workspace(id) {
+                    self.state.active = Some(ws);
+                    return;
+                }
                 let Some(config) = self
                     .state
                     .config
