@@ -279,15 +279,16 @@ pub(crate) mod tests {
 
     /// Pane with columns `n` (Integer) and `s` (Text) loaded with `rows`.
     fn loaded(rows: Vec<Row>) -> ResultPane {
+        loaded_with(TypeCategory::Integer, rows)
+    }
+
+    fn loaded_with(cat: TypeCategory, rows: Vec<Row>) -> ResultPane {
         let mut p = ResultPane::default();
         let r = RequestId(1);
         p.apply(&Event::ResultStarted {
             req: r,
             header: ResultHeader {
-                columns: vec![
-                    col("n", TypeCategory::Integer),
-                    col("s", TypeCategory::Text),
-                ],
+                columns: vec![col("n", cat), col("s", TypeCategory::Text)],
             },
         });
         p.apply(&Event::Rows {
@@ -405,5 +406,42 @@ pub(crate) mod tests {
         assert_eq!(p.view, vec![2, 1, 0]);
         p.click_header("s", false);
         assert_eq!(p.view, vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn integer_sort_is_exact_above_2_pow_53() {
+        let mut p = loaded(vec![
+            row2(text("9007199254740993"), "a"),
+            row2(text("9007199254740992"), "b"),
+        ]);
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![1, 0]);
+    }
+
+    #[test]
+    fn decimal_sort_is_exact_beyond_f64() {
+        let mut p = loaded_with(
+            TypeCategory::Decimal,
+            vec![
+                row2(text("1.00000000000000001"), "a"),
+                row2(text("1.0"), "b"),
+            ],
+        );
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![1, 0]);
+
+        let mut p = loaded_with(
+            TypeCategory::Decimal,
+            vec![
+                row2(text("0"), "a"),
+                row2(text("1.5"), "b"),
+                row2(text("-1.5"), "c"),
+                row2(text("1.50"), "d"),
+                row2(text("-2"), "e"),
+                row2(text("-0"), "f"),
+            ],
+        );
+        p.click_header("n", false);
+        assert_eq!(p.view, vec![4, 2, 0, 5, 1, 3]);
     }
 }
