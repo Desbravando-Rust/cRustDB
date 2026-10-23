@@ -6,6 +6,7 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ## 2026-10-22
 
+- [#61](https://github.com/Desbravando-Rust/cRustDB/issues/61) — Faster CI pipeline: coverage runs in parallel with test via nextest, deny without Docker, rust-cache saved only on main.
 - [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
 - [#58](https://github.com/Desbravando-Rust/cRustDB/issues/58) — Unit tests for `tools/icons_generator`; generation extracted into `generate(input, out_root)`.
 - [#34](https://github.com/Desbravando-Rust/cRustDB/issues/34) — Home/connection screen footer promoting the *Desbravando Rust* book, opening the site in the system browser.
