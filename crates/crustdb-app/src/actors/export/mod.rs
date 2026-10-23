@@ -49,6 +49,8 @@ pub(super) struct Sink {
     path: PathBuf,
     pub(super) rows: u64,
     truncated: u64,
+    /// The extension was not a known format, so the file is CSV.
+    fallback: bool,
 }
 
 impl Drop for Sink {
@@ -65,10 +67,11 @@ impl Sink {
         let mut part = path.as_os_str().to_owned();
         part.push(".part");
         let part = PathBuf::from(part);
+        let format = Format::from_path(path);
         Ok(Self {
             out: Some(Out::new(
                 File::create(&part)?,
-                Format::from_path(path),
+                format.unwrap_or(Format::Csv),
                 table,
                 kind,
             )),
@@ -76,6 +79,7 @@ impl Sink {
             path: path.to_path_buf(),
             rows: 0,
             truncated: 0,
+            fallback: format.is_none(),
         })
     }
 
@@ -114,8 +118,15 @@ impl Sink {
         Ok(())
     }
 
-    /// Reports the cells that were cut at the memory cap before they reached the exporter.
+    /// Reports the cells that were cut at the memory cap before they reached the exporter, and
+    /// an unknown extension that fell back to CSV.
     pub(super) fn warn_truncated(&self, out: &Emitter, tab: TabId) {
+        if self.fallback {
+            out.emit(Event::Notice {
+                tab,
+                text: "Unknown file extension. Exported as CSV.".into(),
+            });
+        }
         if self.truncated > 0 {
             out.emit(Event::Notice {
                 tab,

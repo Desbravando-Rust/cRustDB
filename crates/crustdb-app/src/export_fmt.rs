@@ -3,6 +3,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use crustdb_core::dialect::Dialect;
+use crustdb_core::format::hex_preview;
 use crustdb_core::model::{Cell, ColumnMeta, DriverKind, TypeCategory};
 use crustdb_mysql::MysqlDialect;
 use crustdb_postgres::PgDialect;
@@ -20,15 +21,15 @@ pub enum Format {
 }
 
 impl Format {
-    /// `.jsonl` is JSON Lines, `.sql` is INSERT statements, anything else is CSV.
-    pub fn from_path(p: &Path) -> Self {
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or_default();
-        if ext.eq_ignore_ascii_case("jsonl") {
-            Self::Json
-        } else if ext.eq_ignore_ascii_case("sql") {
-            Self::Sql
-        } else {
-            Self::Csv
+    /// `.jsonl`/`.json`/`.ndjson` is JSON Lines, `.sql` is INSERT statements, `.csv` is CSV;
+    /// `None` for any other extension (callers fall back to CSV).
+    pub fn from_path(p: &Path) -> Option<Self> {
+        let ext = p.extension()?.to_str()?.to_ascii_lowercase();
+        match ext.as_str() {
+            "csv" => Some(Self::Csv),
+            "jsonl" | "json" | "ndjson" => Some(Self::Json),
+            "sql" => Some(Self::Sql),
+            _ => None,
         }
     }
 }
@@ -64,7 +65,11 @@ impl<W: Write> Out<W> {
                 *keep = cols.to_vec();
                 Ok(())
             }
-            Self::Sql(_, table, kind, prefix) => {
+            Self::Sql(w, table, kind, prefix) => {
+                // Literals double `'` only; with the setting off, `\'` would end the string.
+                if *kind == DriverKind::Postgres {
+                    writeln!(w, "SET standard_conforming_strings = on;")?;
+                }
                 let d = dialect(*kind);
                 let names: Vec<String> = cols.iter().map(|c| d.quote_ident(&c.name)).collect();
                 *prefix = format!("INSERT INTO {table} ({}) VALUES (", names.join(", "));
@@ -105,20 +110,13 @@ impl<W: Write> Out<W> {
     }
 }
 
-fn hex(b: &[u8]) -> String {
-    b.iter().fold(String::new(), |mut s, b| {
-        s.push_str(&format!("{b:02x}"));
-        s
-    })
-}
-
 /// Numbers stay numbers only when the text is a valid JSON number (not NaN/Infinity); the
 /// original text is written so big decimals keep their precision.
 fn json_value(cat: TypeCategory, c: &Cell) -> io::Result<String> {
     use TypeCategory::{Bool, Decimal, Float, Integer};
     Ok(match c {
         Cell::Null => "null".into(),
-        Cell::Bytes { value, .. } => format!("\"0x{}\"", hex(value)),
+        Cell::Bytes { value, .. } => format!("\"0x{}\"", hex_preview(value, usize::MAX)),
         Cell::Text { value, .. } => match (cat, &**value) {
             (Integer | Decimal | Float, v) if v.parse::<serde_json::Number>().is_ok() => v.into(),
             (Bool, "t" | "true") => "true".into(),
@@ -128,16 +126,21 @@ fn json_value(cat: TypeCategory, c: &Cell) -> io::Result<String> {
     })
 }
 
-/// A value as a SQL literal. Postgres assumes `standard_conforming_strings = on`; on MySQL,
-/// text with `\` or NUL goes as hex so the server's backslash escapes cannot apply.
+/// A value as a SQL literal. Postgres assumes `standard_conforming_strings = on` (the dump
+/// sets it); on MySQL, text with `\` or NUL goes as utf8mb4 hex so backslash escapes cannot
+/// apply and JSON columns still accept it.
 pub fn sql_literal(kind: DriverKind, c: &Cell) -> String {
     match (c, kind) {
         (Cell::Null, _) => "NULL".into(),
         (Cell::Text { value, .. }, DriverKind::Mysql) if value.contains(['\\', '\0']) => {
-            format!("X'{}'", hex(value.as_bytes()))
+            format!("_utf8mb4 X'{}'", hex_preview(value.as_bytes(), usize::MAX))
         }
         (Cell::Text { value, .. }, _) => format!("'{}'", value.replace('\'', "''")),
-        (Cell::Bytes { value, .. }, DriverKind::Postgres) => format!("'\\x{}'::bytea", hex(value)),
-        (Cell::Bytes { value, .. }, DriverKind::Mysql) => format!("X'{}'", hex(value)),
+        (Cell::Bytes { value, .. }, DriverKind::Postgres) => {
+            format!("'\\x{}'::bytea", hex_preview(value, usize::MAX))
+        }
+        (Cell::Bytes { value, .. }, DriverKind::Mysql) => {
+            format!("X'{}'", hex_preview(value, usize::MAX))
+        }
     }
 }
