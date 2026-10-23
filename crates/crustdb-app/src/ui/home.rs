@@ -23,6 +23,8 @@ fn engine_name(kind: DriverKind) -> &'static str {
     }
 }
 
+const BOOK_URL: &str = "https://desbravandorust.com.br/";
+
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
     ui.add(
@@ -99,6 +101,24 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }
     }
+    ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::Image::new(egui::include_image!(
+                    "../../../../assets/imgs/book-cover.png"
+                ))
+                .max_height(48.0)
+                .alt_text("Desbravando Rust book cover"),
+            );
+            ui.vertical(|ui| {
+                ui.weak(
+                    "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+                );
+                ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
+            });
+        });
+        ui.separator();
+    });
     out
 }
 
@@ -156,6 +176,47 @@ mod tests {
             egui::SizeHint::default(),
         );
         assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
+    }
+
+    #[test]
+    fn home_shows_book_promo() {
+        let s = state(&[]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+        h.run();
+        h.get_by_label(
+            "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+        );
+        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT));
+        h.get_by_label("Desbravando Rust book cover");
+        let poll = h.ctx.try_load_image(
+            "bytes://../../../../assets/imgs/book-cover.png",
+            egui::SizeHint::default(),
+        );
+        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
+    }
+
+    #[test]
+    fn book_promo_links_to_site() {
+        let s = state(&[]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+        h.run();
+        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
+            .click();
+        h.step();
+        let opened = h.output().platform_output.commands.iter().any(|c| {
+            matches!(c, egui::OutputCommand::OpenUrl(u) if u.url == "https://desbravandorust.com.br/")
+        });
+        assert!(opened);
     }
 
     #[test]
