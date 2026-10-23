@@ -177,6 +177,15 @@ mod tests {
     }
 
     #[test]
+    fn beautify_never_drops_chars_of_mysql_comment_hints() {
+        let t = "/*!40101 SET NAMES utf8 */; select 1";
+        if let Some(out) = beautify(t, MY) {
+            let squash = |s: &str| s.split_whitespace().collect::<String>();
+            assert_eq!(squash(&out), squash(t));
+        }
+    }
+
+    #[test]
     fn beautify_keeps_statement_separation() {
         assert_eq!(
             beautify("select 1;select 2;", PG).unwrap(),
