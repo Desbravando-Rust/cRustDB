@@ -159,7 +159,7 @@ mod tests {
         let pg = beautify("select 'a  ;  b', $$ x  y $$ -- c  c\nfrom /* c  */ t", PG).unwrap();
         assert_eq!(pg, "select 'a  ;  b', $$ x  y $$ -- c  c\nfrom /* c  */ t");
         let my = beautify("select `col  x` from t -- c", MY).unwrap();
-        assert_eq!(my, "select `col  x`\nfrom t -- c\n");
+        assert_eq!(my, "select `col  x`\nfrom t -- c");
     }
 
     #[test]
