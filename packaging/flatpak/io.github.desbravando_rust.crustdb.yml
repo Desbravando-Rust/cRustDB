@@ -1,0 +1,28 @@
+# Bundles the prebuilt release binary (packaging/build-linux.sh builds it first).
+app-id: io.github.desbravando_rust.crustdb
+runtime: org.freedesktop.Platform
+runtime-version: "26.08"
+sdk: org.freedesktop.Sdk
+command: crustdb
+rename-desktop-file: crustdb.desktop
+rename-icon: crustdb
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: crustdb
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 crustdb /app/bin/crustdb
+      - install -Dm644 crustdb.desktop /app/share/applications/crustdb.desktop
+      - install -Dm644 crustdb.png /app/share/icons/hicolor/256x256/apps/crustdb.png
+    sources:
+      - type: file
+        path: ../../target/release/crustdb
+      - type: file
+        path: ../crustdb.desktop
+      - type: file
+        path: ../crustdb.png
