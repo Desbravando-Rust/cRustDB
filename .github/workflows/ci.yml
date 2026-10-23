@@ -89,10 +89,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
-      - run: packaging/build-appimage.sh "${GITHUB_REF_NAME#v}"
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev flatpak flatpak-builder
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+      - name: Install Flatpak runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
+      - run: packaging/build-linux.sh "${GITHUB_REF_NAME#v}"
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             target/dist/*.AppImage
             target/dist/*.tar.gz
+            target/dist/*.deb
+            target/dist/*.rpm
+            target/dist/*.flatpak
