@@ -128,6 +128,7 @@ impl Dialect for FakeDialect {
 
 static PG: FakeDialect = FakeDialect(DriverKind::Postgres);
 static MYSQL: FakeDialect = FakeDialect(DriverKind::Mysql);
+static SQLITE: FakeDialect = FakeDialect(DriverKind::Sqlite);
 
 #[async_trait]
 impl Driver for FakeDriver {
@@ -138,6 +139,7 @@ impl Driver for FakeDriver {
         match self.kind {
             DriverKind::Postgres => &PG,
             DriverKind::Mysql => &MYSQL,
+            DriverKind::Sqlite => &SQLITE,
         }
     }
     fn introspector(&self) -> &dyn Introspector {

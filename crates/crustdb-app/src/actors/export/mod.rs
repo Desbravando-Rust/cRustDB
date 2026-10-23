@@ -192,8 +192,7 @@ async fn run(job: TableJob, rx: &mut UnboundedReceiver<Command>) -> Result<u64, 
         kind: ErrorKind::Connect,
         message: "workspace is not connected".into(),
     })?;
-    let mut target = shared.target.clone();
-    target.database = Some(job.query.object.database.clone());
+    let target = shared.target_for(&job.query.object.database);
     let mut s = shared
         .driver
         .connect(&target, SessionPurpose::Export)

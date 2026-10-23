@@ -11,6 +11,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   fmt:
@@ -24,6 +25,8 @@ jobs:
       - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
   test:
     needs: [fmt, clippy, deny]
@@ -33,6 +36,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           shared-key: test
       - uses: taiki-e/install-action@v2
         with:
@@ -42,25 +46,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+      - run: cargo deny check
   coverage:
-    needs: test
+    needs: [fmt, clippy, deny]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov,cargo-nextest
       - name: Pre-pull test images (retry transient registry errors)
         run: |
           for img in "${CRUSTDB_PG_IMAGE:-postgres:latest}" "${CRUSTDB_MYSQL_IMAGE:-mysql:8.4}" linuxserver/openssh-server:latest; do
             for i in 1 2 3 4 5; do docker pull -q "$img" && break; [ "$i" = 5 ] && exit 1; sleep $((i * 10)); done
           done
       - run: >-
-          cargo llvm-cov --workspace --lcov --output-path lcov.info
-          --ignore-filename-regex 'crustdb-app/src/ui/' -- --include-ignored --skip keyring_roundtrip
+          cargo llvm-cov nextest --workspace --lcov --output-path lcov.info
+          --ignore-filename-regex 'crustdb-app/src/ui/' --run-ignored all -E 'not test(keyring_roundtrip)'
       - name: Enforce line-coverage floors (spec section 9)
         run: |
           awk -v floors='crates/crustdb-core/=90,crates/crustdb-postgres/=70,crates/crustdb-mysql/=70,crates/crustdb-app/src/state/=70' '

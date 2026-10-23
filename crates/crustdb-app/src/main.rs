@@ -66,7 +66,8 @@ fn main() -> anyhow::Result<()> {
     });
     let drivers = DriverRegistry::default()
         .with(Arc::new(crustdb_postgres::PostgresDriver))
-        .with(Arc::new(crustdb_mysql::MysqlDriver));
+        .with(Arc::new(crustdb_mysql::MysqlDriver))
+        .with(Arc::new(crustdb_sqlite::SqliteDriver));
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default().with_title(APP_NAME),
         ..Default::default()
