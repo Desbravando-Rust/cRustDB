@@ -113,7 +113,7 @@ impl Session for SqliteSession {
         let r = self
             .call(|reply| ConnCmd::Fetch { n: max_rows, reply })
             .await;
-        if r.as_ref().map_or(true, |f| f.exhausted) {
+        if !matches!(&r, Ok(f) if !f.exhausted) {
             self.active = false;
         }
         r
