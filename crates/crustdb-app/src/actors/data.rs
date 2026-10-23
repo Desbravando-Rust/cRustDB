@@ -109,10 +109,7 @@ impl DataActor {
 
     /// A connection-level failure invalidates the session; the next request reconnects.
     fn failed(&mut self, e: &DriverError) {
-        if matches!(
-            e.kind,
-            ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
-        ) {
+        if lost(e) {
             self.session = None;
         }
         self.notice(e.message.clone());
@@ -164,10 +161,7 @@ impl DataActor {
             Ok(c) if c.affected_rows == Some(0) => Some("row not found".into()),
             Ok(_) => None,
             Err(e) => {
-                if matches!(
-                    e.kind,
-                    ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
-                ) {
+                if lost(&e) {
                     self.writer = None;
                 }
                 Some(e.message)
@@ -211,6 +205,14 @@ impl DataActor {
             Err(e) => self.failed(&e),
         }
     }
+}
+
+/// The session is unusable after this error; the next request reconnects.
+fn lost(e: &DriverError) -> bool {
+    matches!(
+        e.kind,
+        ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
+    )
 }
 
 fn closed() -> DriverError {
