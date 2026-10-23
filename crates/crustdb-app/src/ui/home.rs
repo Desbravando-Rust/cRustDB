@@ -6,6 +6,11 @@ use crate::state::{AppState, Status};
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
+    ui.add(
+        egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
+            .max_height(96.0)
+            .alt_text("cRustDB logo"),
+    );
     ui.horizontal(|ui| {
         ui.heading("cRustDB");
         if ui.button(format!("{} New", icon::PLUS)).clicked() {
@@ -80,6 +85,9 @@ mod tests {
             // Fonts apply on the pass after `set_fonts`; skip drawing until then.
             if !std::mem::replace(&mut fonts_ready, true) {
                 crate::ui::theme::install_theme(ui.ctx());
+                // Without loaders the logo renders egui's "⚠️" error glyph,
+                // which the themed fonts cannot draw.
+                egui_extras::install_image_loaders(ui.ctx());
                 return;
             }
             show(ui, &s);
@@ -87,5 +95,28 @@ mod tests {
         h.run();
         h.get_by_label("alpha");
         h.get_by_label("beta");
+    }
+
+    #[test]
+    fn home_shows_logo() {
+        let s = state(&[]);
+        let mut fonts_ready = false;
+        let mut h = Harness::new_ui(|ui| {
+            // Icons need the themed fonts, which apply on the next pass.
+            if !std::mem::replace(&mut fonts_ready, true) {
+                crate::ui::theme::install_theme(ui.ctx());
+                egui_extras::install_image_loaders(ui.ctx());
+                return;
+            }
+            show(ui, &s);
+        });
+        // `run` waits for pending images, so the decode must be done by now.
+        h.run();
+        h.get_by_label("cRustDB logo");
+        let poll = h.ctx.try_load_image(
+            "bytes://../../../../assets/imgs/logo2.png",
+            egui::SizeHint::default(),
+        );
+        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
     }
 }
