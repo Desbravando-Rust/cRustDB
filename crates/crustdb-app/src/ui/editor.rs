@@ -347,7 +347,12 @@ mod tests {
         let bg: Vec<_> = j
             .sections
             .iter()
-            .map(|s| (s.byte_range.clone(), s.format.background))
+            .map(|s| {
+                (
+                    s.byte_range.start.0..s.byte_range.end.0,
+                    s.format.background,
+                )
+            })
             .collect();
         assert_eq!(bg[0], (0..3, Color32::from_rgb(40, 48, 62)));
         assert_eq!(bg[1], (3..5, Color32::from_rgb(98, 81, 30)));

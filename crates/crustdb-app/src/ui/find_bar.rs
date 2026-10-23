@@ -114,7 +114,7 @@ mod tests {
         tab.find.focus = true;
         tab.find.replacement = "x".into();
         let mut h = Harness::new_ui(|ui| {
-            show(ui, &mut tab, egui::Id::new("editor"));
+            show(ui, &mut tab, egui::Id::unique("editor"));
         });
         h.run();
         h.event(egui::Event::Text("select".into()));
@@ -133,7 +133,7 @@ mod tests {
         tab.text = "select 1; select 2".into();
         tab.find.open = true;
         tab.find.focus = true;
-        let id = egui::Id::new("editor");
+        let id = egui::Id::unique("editor");
         let mut h = Harness::new_ui(|ui| {
             show(ui, &mut tab, id);
             ui.add(egui::TextEdit::multiline(&mut tab.text).id(id));
