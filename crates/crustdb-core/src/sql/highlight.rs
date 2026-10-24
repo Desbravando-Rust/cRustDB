@@ -106,8 +106,13 @@ mod tests {
 
     #[test]
     fn highlight_covers_all_bytes() {
+        // Arrange
         let t = "SELECT 'ação🦀', \"Q\" -- c\n/* x */ FROM t WHERE a >= 1.5;";
+
+        // Act
         let h = highlight(t, PG);
+
+        // Assert
         let mut pos = 0;
         for (r, _) in &h {
             assert_eq!(r.start, pos);
@@ -119,8 +124,13 @@ mod tests {
 
     #[test]
     fn highlight_marks_keyword_string_comment() {
+        // Arrange
         let t = "SELECT 'x' -- hi\n, \"Q\", foo, 1, =";
+
+        // Act
         let h = highlight(t, PG);
+
+        // Assert
         let of = |s: &str| {
             let i = t.find(s).unwrap();
             h.iter().find(|(r, _)| r.contains(&i)).unwrap().1
@@ -137,6 +147,7 @@ mod tests {
 
     #[test]
     fn highlight_unterminated_string_does_not_panic() {
+        // Act & Assert
         for k in [PG, DriverKind::Mysql] {
             let t = "SELECT 'abc\nFROM t";
             let h = highlight(t, k);

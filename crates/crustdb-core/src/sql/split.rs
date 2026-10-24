@@ -131,28 +131,40 @@ mod tests {
 
     #[test]
     fn splits_on_semicolons() {
+        // Act
         let s = split("SELECT 1; SELECT 2;", DriverKind::Postgres);
+
+        // Assert
         assert_eq!(texts(&s), ["SELECT 1", "SELECT 2"]);
     }
     #[test]
     fn ignores_semicolons_in_strings_and_comments() {
+        // Act
         let s = split("SELECT ';' -- ;\n; /* ; */ SELECT 2", DriverKind::Mysql);
+
+        // Assert
         assert_eq!(s.len(), 2);
     }
     #[test]
     fn handles_pg_dollar_quotes() {
+        // Act
         let s = split(
             "CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END $$ LANGUAGE plpgsql; SELECT 1",
             DriverKind::Postgres,
         );
+
+        // Assert
         assert_eq!(s.len(), 2);
     }
     #[test]
     fn handles_mysql_delimiter() {
+        // Act
         let s = split(
             "DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; END$$\nDELIMITER ;\nSELECT 2;",
             DriverKind::Mysql,
         );
+
+        // Assert
         assert_eq!(
             texts(&s),
             ["CREATE PROCEDURE p() BEGIN SELECT 1; END", "SELECT 2"]
@@ -160,66 +172,102 @@ mod tests {
     }
     #[test]
     fn statement_at_cursor_after_semicolon_picks_previous() {
+        // Arrange
         let t = "SELECT 1;   \nSELECT 2";
         let s = split(t, DriverKind::Postgres);
+
+        // Act & Assert
         assert_eq!(statement_at(&s, 10).unwrap().text, "SELECT 1");
     }
     #[test]
     fn statement_at_with_multibyte_text() {
+        // Arrange
         let t = "SELECT 'ação';\nSELECT '🦀'";
         let s = split(t, DriverKind::Postgres);
         let off = t.find("🦀").unwrap();
+
+        // Act & Assert
         assert_eq!(statement_at(&s, off).unwrap().text, "SELECT '🦀'");
     }
     #[test]
     fn tokenizer_error_returns_whole_text() {
+        // Act
         let s = split("SELECT 'unterminated; SELECT 2", DriverKind::Postgres);
+
+        // Assert
         assert_eq!(s.len(), 1);
     }
     #[test]
     fn range_maps_back_to_source() {
+        // Arrange
         let t = "  SELECT 1 ;";
+
+        // Act
         let s = split(t, DriverKind::Mysql);
+
+        // Assert
         assert_eq!(&t[s[0].range.clone()], "SELECT 1");
     }
     #[test]
     fn statements_in_selection() {
+        // Arrange
         let t = "SELECT 1; SELECT 2; SELECT 3";
         let s = split(t, DriverKind::Postgres);
+
+        // Act
         let got: Vec<_> = statements_in(&s, 5..12)
             .iter()
             .map(|x| x.text.as_str())
             .collect();
+
+        // Assert
         assert_eq!(got, ["SELECT 1", "SELECT 2"]);
     }
 
     #[test]
     fn mysql_multibyte_near_start_does_not_panic() {
+        // Act
         let s = split("SELECT 'çx'", DriverKind::Mysql);
+
+        // Assert
         assert_eq!(texts(&s), ["SELECT 'çx'"]);
     }
     #[test]
     fn pg_escaped_string_with_semicolon() {
+        // Act
         let s = split("SELECT E'a;b'; SELECT 2", DriverKind::Postgres);
+
+        // Assert
         assert_eq!(texts(&s), ["SELECT E'a;b'", "SELECT 2"]);
     }
     #[test]
     fn mysql_national_string_with_semicolon() {
+        // Act
         let s = split("SELECT N'a;b'; SELECT 2", DriverKind::Mysql);
+
+        // Assert
         assert_eq!(texts(&s), ["SELECT N'a;b'", "SELECT 2"]);
     }
     #[test]
     fn delimiter_line_ignores_trailing_comment() {
+        // Act
         let s = split(
             "DELIMITER $$ -- c\nSELECT 1$$\nSELECT 2$$",
             DriverKind::Mysql,
         );
+
+        // Assert
         assert_eq!(texts(&s), ["SELECT 1", "SELECT 2"]);
     }
     #[test]
     fn long_single_line_many_statements() {
+        // Arrange
         let t = "SELECT 1, 2, 3, 4; ".repeat(20000);
+
+        // Act
         let s = split(&t, DriverKind::Postgres);
+
+        // Assert
         assert_eq!(s.len(), 20000);
         assert_eq!(s[19999].text, "SELECT 1, 2, 3, 4");
     }

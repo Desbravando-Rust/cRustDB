@@ -132,6 +132,7 @@ mod tests {
 
     #[test]
     fn beautify_breaks_major_clauses() {
+        // Act & Assert
         assert_eq!(
             beautify("select a,b from t where x=1", PG).unwrap(),
             "select a, b\nfrom t\nwhere x = 1"
@@ -152,6 +153,7 @@ mod tests {
 
     #[test]
     fn beautify_preserves_literals_and_comments() {
+        // Act & Assert
         let pg = beautify("select 'a  ;  b', $$ x  y $$ -- c  c\nfrom /* c  */ t", PG).unwrap();
         assert_eq!(pg, "select 'a  ;  b', $$ x  y $$ -- c  c\nfrom /* c  */ t");
         let my = beautify("select `col  x` from t -- c", MY).unwrap();
@@ -160,6 +162,7 @@ mod tests {
 
     #[test]
     fn beautify_is_idempotent() {
+        // Act & Assert
         for (t, k) in [
             ("select a,b from t where x=1", PG),
             (
@@ -179,18 +182,23 @@ mod tests {
 
     #[test]
     fn beautify_returns_none_on_tokenize_error() {
+        // Act & Assert
         assert_eq!(beautify("select 'abc from t", PG), None);
         assert_eq!(beautify("select 'abc from t", MY), None);
     }
 
     #[test]
     fn beautify_never_drops_chars_of_mysql_comment_hints() {
+        // Arrange
         let t = "/*!40101 SET NAMES utf8 */; select 1";
+
+        // Act & Assert
         assert_eq!(beautify(t, MY), None);
     }
 
     #[test]
     fn beautify_keeps_statement_separation() {
+        // Act & Assert
         assert_eq!(
             beautify("select 1;select 2;", PG).unwrap(),
             "select 1;\n\nselect 2;"

@@ -100,6 +100,7 @@ mod tests {
 
     #[test]
     fn null_displays_as_null() {
+        // Act & Assert
         assert_eq!(
             display_cell(&Cell::Null, &col(TypeCategory::Text), 256),
             "NULL"
@@ -108,7 +109,10 @@ mod tests {
 
     #[test]
     fn text_truncated_at_max_chars() {
+        // Arrange
         let c = Cell::text_capped(&"é".repeat(300));
+
+        // Act & Assert
         assert_eq!(
             display_cell(&c, &col(TypeCategory::Text), 256)
                 .chars()
@@ -119,13 +123,19 @@ mod tests {
 
     #[test]
     fn memory_truncated_text_gets_ellipsis() {
+        // Arrange
         let c = Cell::text_capped(&"a".repeat(CELL_MEMORY_CAP + 10));
+
+        // Act & Assert
         assert!(display_cell(&c, &col(TypeCategory::Text), usize::MAX).ends_with('…'));
     }
 
     #[test]
     fn binary_shows_size_and_preview() {
+        // Arrange
         let c = Cell::bytes_capped(&[0xde, 0xad, 0xbe, 0xef]);
+
+        // Act & Assert
         assert_eq!(
             display_cell(&c, &col(TypeCategory::Binary), 256),
             "(binary 4 B) deadbeef"
@@ -134,7 +144,10 @@ mod tests {
 
     #[test]
     fn cell_memory_capped_at_1mib() {
+        // Act
         let c = Cell::text_capped(&"a".repeat(CELL_MEMORY_CAP + 10));
+
+        // Assert
         assert!(
             matches!(c, Cell::Text { truncated: true, ref value } if value.len() == CELL_MEMORY_CAP)
         );
@@ -142,7 +155,10 @@ mod tests {
 
     #[test]
     fn invalid_utf8_text_displays_lossy() {
+        // Arrange
         let c = Cell::text_lossy_capped(&[b'a', 0xff, b'b']);
+
+        // Act & Assert
         assert_eq!(
             display_cell(&c, &col(TypeCategory::Text), 256),
             "a\u{FFFD}b"
@@ -151,12 +167,14 @@ mod tests {
 
     #[test]
     fn human_size_formats() {
+        // Act & Assert
         assert_eq!(human_size(2_355), "2.3 KB");
         assert_eq!(human_size(4), "4 B");
     }
 
     #[test]
     fn pretty_json_formats_objects() {
+        // Act & Assert
         assert_eq!(
             pretty_json(r#"{"k":1}"#).as_deref(),
             Some("{\n  \"k\": 1\n}")
@@ -165,6 +183,7 @@ mod tests {
 
     #[test]
     fn hex_dump_formats_line() {
+        // Act & Assert
         assert!(hex_dump(b"AB", 16).starts_with("00000000  41 42 "));
     }
 }
