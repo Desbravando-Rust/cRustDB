@@ -252,6 +252,9 @@ impl AppState {
     }
 
     pub fn open_workspace(&mut self, config: ConnectionConfig) -> WorkspaceId {
+        // A retry supersedes the failed attempt of the same connection.
+        self.workspaces
+            .retain(|w| !(w.config.id == config.id && matches!(w.status, Status::Failed(_))));
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
         self.workspaces.push(WorkspaceState {
@@ -487,3 +490,7 @@ impl AppState {
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "workspace_open_tests.rs"]
+mod open_tests;
