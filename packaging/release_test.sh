@@ -63,4 +63,12 @@ echo "- x" >"$CHANGELOG_DIR/13.added.md"
 [ "$(grep -c '^## \[0.2.0\]$' "$CHANGELOG_FILE")" = 1 ] || fail "seção [0.2.0] duplicada"
 [ -f "$CHANGELOG_DIR/13.added.md" ] || fail "seção duplicada não deve consumir fragmentos"
 
+# Act & Assert: nomes inválidos rejeitados sem consumir fragmentos
+for bad in 3.feature.md 2.added.txt; do
+  echo "- y" >"$CHANGELOG_DIR/$bad"
+  "$script" changelog 0.3.0 >/dev/null 2>&1 && fail "$bad deveria ser rejeitado"
+  [ -f "$CHANGELOG_DIR/$bad" ] && [ -f "$CHANGELOG_DIR/13.added.md" ] || fail "$bad: fragmentos consumidos"
+  rm "$CHANGELOG_DIR/$bad"
+done
+
 [ "$fails" -eq 0 ] && echo "ok" || exit 1

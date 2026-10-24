@@ -31,10 +31,10 @@ confirm() {
 # Fragmentos: changelog.d/<ID>.<added|changed|fixed>.md. Falha se não houver nenhum ou se algum tiver tipo desconhecido.
 check_fragments() {
   local f
+  while read -r f; do
+    [[ "$f" =~ ^[0-9]+\.(added|changed|fixed)\.md$ ]] || { echo "❌ Fragmento inválido: $changelog_dir/$f"; exit 1; }
+  done < <(find "$changelog_dir" -mindepth 1 -maxdepth 1 ! -name .gitkeep -printf '%f\n')
   compgen -G "$changelog_dir/*.md" >/dev/null || { echo "❌ Nenhum fragmento em $changelog_dir/."; exit 1; }
-  for f in "$changelog_dir"/*.md; do
-    [[ "$f" =~ /[0-9]+\.(added|changed|fixed)\.md$ ]] || { echo "❌ Fragmento inválido: $f"; exit 1; }
-  done
 }
 
 check_section() {
