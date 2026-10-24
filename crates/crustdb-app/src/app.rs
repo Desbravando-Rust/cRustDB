@@ -214,10 +214,7 @@ impl CrustApp {
             }
             Intent::SwitchWorkspace(id) => self.state.active = Some(id),
             Intent::Disconnect(ws) => {
-                self.state.workspaces.retain(|w| w.id != ws);
-                if self.state.active == Some(ws) {
-                    self.state.active = None;
-                }
+                self.state.close_workspace(ws);
                 self.send(Command::Disconnect { ws });
             }
             Intent::ToggleNode(n) => {

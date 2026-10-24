@@ -4,7 +4,19 @@ use crate::runtime::WorkspaceId;
 impl AppState {
     /// Forgets a workspace and everything that still points at it.
     pub fn close_workspace(&mut self, ws: WorkspaceId) {
-        let _ = ws;
+        // Tabs must be read before the workspace goes away.
+        let tabs = self
+            .workspaces
+            .iter()
+            .find(|w| w.id == ws)
+            .map(|w| w.tab_ids())
+            .unwrap_or_default();
+        self.dialogs.retain_ws(ws, &tabs);
+        self.workspaces.retain(|w| w.id != ws);
+        if self.active == Some(ws) {
+            self.active = None;
+        }
+        self.evaluating.retain(|_, (w, _)| *w != ws);
     }
 }
 
