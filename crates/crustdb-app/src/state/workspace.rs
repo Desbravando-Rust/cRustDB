@@ -99,7 +99,7 @@ pub struct AppState {
     pub dialogs: DialogStack,
     next_ws: u64,
     next_tab: u64,
-    evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
+    pub(super) evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
     next_exec: u64,
     outbox: Vec<Command>,
 }
