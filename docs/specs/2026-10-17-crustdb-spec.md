@@ -94,7 +94,7 @@ Fonte: **U** = decidido pelo usuário · **P** = proposto e aprovado · **A** = 
 ## 4. Requirements
 
 ### 4.1 Conexões
-- **Home** (nenhum workspace aberto): lista de conexões salvas com Connect / Edit / Delete (com confirmação) / New / Import URL.
+- **Home** (nenhum workspace aberto): lista de conexões salvas com Connect / Edit / Delete (com confirmação) / New (o formulário de conexão nova traz no topo uma caixa para importar URL).
 - **Formulário**: `name`, `driver` (`PostgreSQL` | `MySQL/MariaDB`), `host`, `port` (padrão 5432/3306), `user`, `password` + checkbox "Save in keyring", `database` (opcional), `tls.mode`, `tls.ca_path` (opcional; vazio = raízes do sistema via `rustls-native-certs`), `ssh` (toggle; `host`, `port` 22, `user`, `auth`: Password | Key file (+ passphrase) | Agent), `page_size` (300), `editor_row_limit` (1000), `safety_threshold` (1000). Botões Test / Save / Connect.
 - **Validação** (fronteira de confiança): `name` não vazio e único; `port` 1–65535; `page_size` 10–10.000; `editor_row_limit` 10–100.000; `safety_threshold` ≥ 1; arquivo de chave/CA existe e é legível.
 - **URL**: parse preenche o formulário; `sslmode`/`ssl-mode` mapeados para os modos de D10 (`prefer`/`allow` → `require` com aviso); senha da URL só vai ao keyring se o checkbox estiver marcado.
