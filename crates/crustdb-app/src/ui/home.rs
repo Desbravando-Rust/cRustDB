@@ -40,16 +40,13 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if ui.button(format!("{} New", icon::PLUS)).clicked() {
             out.push(Intent::NewConnection);
         }
-        if ui.button(format!("{} Import URL", icon::LINK)).clicked() {
-            out.push(Intent::ImportUrl);
-        }
     });
     if let Some(w) = &state.config.warning {
         ui.colored_label(ui.visuals().warn_fg_color, w);
     }
     ui.separator();
     if state.config.connections.is_empty() {
-        ui.weak("No saved connections. Create one with New or Import URL.");
+        ui.weak("No saved connections. Create one with New.");
     }
     for c in &state.config.connections {
         let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
@@ -165,6 +162,25 @@ mod tests {
         // Assert
         h.get_by_label("alpha");
         h.get_by_label("beta");
+    }
+
+    #[test]
+    fn home_has_single_new_button() {
+        // Arrange
+        let s = state(&[]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label(&format!("{} New", icon::PLUS));
+        assert!(h.query_by_label_contains("Import URL").is_none());
     }
 
     #[test]

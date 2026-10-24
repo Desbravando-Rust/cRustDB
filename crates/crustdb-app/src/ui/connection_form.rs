@@ -118,6 +118,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
                 out.push(Intent::FormImportUrl);
             }
         });
+        ui.weak("e.g. postgres://user@localhost:5432/mydb");
         if let Some(e) = &f.url_error {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }
@@ -311,6 +312,24 @@ mod tests {
         h.get_by_label("Save");
         h.get_by_label("Test");
         h.get_by_label("OS keyring unavailable: passwords cannot be saved");
+    }
+
+    #[test]
+    fn url_box_shows_example_hint() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("Import");
+        h.get_by_label_contains("postgres://");
     }
 
     #[test]
