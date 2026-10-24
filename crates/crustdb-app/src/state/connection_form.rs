@@ -32,7 +32,7 @@ pub struct ConnectionForm {
     pub warnings: Vec<String>,
     pub keyring_available: bool,
     pub test: TestResult,
-    /// Import-by-URL box; only shown when opened through "Import URL".
+    /// Import-by-URL box; shown on new connections, hidden when editing.
     pub show_url: bool,
     pub url_input: Zeroizing<String>,
     pub url_error: Option<String>,

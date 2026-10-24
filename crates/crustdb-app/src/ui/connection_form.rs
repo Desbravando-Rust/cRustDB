@@ -118,6 +118,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
                 out.push(Intent::FormImportUrl);
             }
         });
+        ui.weak("e.g. postgres://user@localhost:5432/mydb");
         if let Some(e) = &f.url_error {
             ui.colored_label(ui.visuals().error_fg_color, e);
         }

@@ -29,7 +29,6 @@ pub enum Intent {
     Connect(ConnectionId),
     NewConnection,
     EditConnection(ConnectionId),
-    ImportUrl,
     DeleteConnection(ConnectionId),
     ConfirmDelete,
     CancelDialog,
