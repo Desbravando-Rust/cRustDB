@@ -1,42 +1,5 @@
 # Changelog
 
-Delivered work, grouped by date (newest first). One line per issue.
-
----
-
-## 2026-10-24
-
-- [#76](https://github.com/Desbravando-Rust/cRustDB/issues/76) — Standardize all tests on the Arrange/Act/Assert layout, documented in CONTRIBUTING.md and CLAUDE.md.
-
-## 2026-10-23
-
-- [#5](https://github.com/Desbravando-Rust/cRustDB/issues/5) — Inline editing of a single cell in the Data tab for tables with a primary key.
-- [#78](https://github.com/Desbravando-Rust/cRustDB/issues/78) — Exact sort for integer and decimal result columns (no f64 precision loss).
-- [#77](https://github.com/Desbravando-Rust/cRustDB/issues/77) — Clarify the status bar process CPU tooltip: 100% equals one core, summed over threads.
-- [#75](https://github.com/Desbravando-Rust/cRustDB/issues/75) — Icons generator moved out of the repository (standalone crate outside the workspace); `icons` make target removed.
-- [#74](https://github.com/Desbravando-Rust/cRustDB/issues/74) — Register Sentry releases on tag builds in the release workflow (crustdb-app@version, production env, commit association).
-- [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
-- [#17](https://github.com/Desbravando-Rust/cRustDB/issues/17) — Find and replace bar in the SQL query editor (Ctrl+F on query tabs), with match case, previous/next, replace and replace all.
-- [#16](https://github.com/Desbravando-Rust/cRustDB/issues/16) — SQL beautify in the editor (Ctrl+Shift+F or Format button); formats whole buffer or the selected statements.
-- [#6](https://github.com/Desbravando-Rust/cRustDB/issues/6) — Copy grid cells and rows to the clipboard: row range selection with Shift+click, Ctrl+C copies rows as TSV, cell context menu.
-- [#19](https://github.com/Desbravando-Rust/cRustDB/issues/19) — Export results and tables to JSON Lines and SQL INSERT (by file extension), in addition to CSV.
-- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 2 of 2: wires `crustdb-sqlite` into the app (driver registration, file-only connection form, `sqlite://` URL import).
-- [#26](https://github.com/Desbravando-Rust/cRustDB/issues/26) — SQLite driver, part 1 of 2: core support and new `crustdb-sqlite` crate (rusqlite). Not yet selectable in the UI; part 2 wires it into the app.
-
-## 2026-10-22
-
-- [#23](https://github.com/Desbravando-Rust/cRustDB/issues/23) — Editor result grid: click headers to sort (shift for multi-column) and a "Filter rows" box over loaded rows.
-- [#61](https://github.com/Desbravando-Rust/cRustDB/issues/61) — Faster CI pipeline: coverage runs in parallel with test via nextest, deny without Docker, rust-cache saved only on main.
-- [#54](https://github.com/Desbravando-Rust/cRustDB/issues/54) — Linux packages: `.deb`, `.rpm` and `.flatpak` alongside AppImage and tarball, built by `packaging/build-linux.sh` and published on `v*` tags. Windows/macOS moved to [#25](https://github.com/Desbravando-Rust/cRustDB/issues/25).
-- [#58](https://github.com/Desbravando-Rust/cRustDB/issues/58) — Unit tests for `tools/icons_generator`; generation extracted into `generate(input, out_root)`.
-- [#34](https://github.com/Desbravando-Rust/cRustDB/issues/34) — Home/connection screen footer promoting the *Desbravando Rust* book, opening the site in the system browser.
-- [#33](https://github.com/Desbravando-Rust/cRustDB/issues/33) — UI/UX improvement spec for crustdb-app (`docs/specs/2026-10-22-crustdb-uiux-spec.md`), 46 items by priority. Docs only.
-- [#35](https://github.com/Desbravando-Rust/cRustDB/issues/35) — Connection screen: double-click connects, engine-colored icons, and live connections show "Active" with an "Open" button that reuses the workspace.
-- [#32](https://github.com/Desbravando-Rust/cRustDB/issues/32) — cRustDB logo at the top of the connection screen.
-- [#3](https://github.com/Desbravando-Rust/cRustDB/issues/3) — Drop `libgtk-3-dev` from CI apt-get steps and the README; it is not needed to build.
-- [#45](https://github.com/Desbravando-Rust/cRustDB/issues/45) — CI runs fmt, clippy and deny in parallel; tests use `cargo nextest` with fail-fast; coverage uploaded to Codecov with a README badge.
-- [#43](https://github.com/Desbravando-Rust/cRustDB/issues/43) — License changed from Apache-2.0 to BSL 1.1 (`BUSL-1.1`), with evaluation in `docs/license-evaluation.md` and ADR 0001.
-- [#41](https://github.com/Desbravando-Rust/cRustDB/issues/41) — CI runs once per commit with cargo caching, a fail-fast job chain and a trimmed integration matrix; `ci` badge in the README.
-- [#2](https://github.com/Desbravando-Rust/cRustDB/issues/2) — Document the dependency chain and review trigger for each ignored RUSTSEC advisory in `deny.toml`. Comments only.
-- [#37](https://github.com/Desbravando-Rust/cRustDB/issues/37) — Fix CI failures: `deny` (icons_generator `image` features, `rustls-webpki`/`webpki-roots` bumps), skip `keyring_roundtrip` in CI, and `perf` tests return early in debug.
-- [#36](https://github.com/Desbravando-Rust/cRustDB/issues/36) — Apply `cargo fmt` to `tools/icons_generator/src/main.rs`. Formatting only.
+All notable changes to this project are documented here.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning: [SemVer](https://semver.org/).
+Unreleased entries live in `changelog.d/` (one file per PR: `<ID>.<added|changed|fixed>.md`).
