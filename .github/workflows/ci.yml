@@ -79,7 +79,7 @@ jobs:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --fail-fast
   deny:
-    needs: [check-files, fmt, clippy]
+    needs: [check-files]
     if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
