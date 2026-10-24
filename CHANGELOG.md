@@ -6,6 +6,7 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ## 2026-10-23
 
+- [#77](https://github.com/Desbravando-Rust/cRustDB/issues/77) — Clarify the status bar process CPU tooltip: 100% equals one core, summed over threads.
 - [#75](https://github.com/Desbravando-Rust/cRustDB/issues/75) — Icons generator moved out of the repository (standalone crate outside the workspace); `icons` make target removed.
 - [#74](https://github.com/Desbravando-Rust/cRustDB/issues/74) — Register Sentry releases on tag builds in the release workflow (crustdb-app@version, production env, commit association).
 - [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
