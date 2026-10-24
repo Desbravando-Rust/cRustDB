@@ -23,6 +23,8 @@ mod data_tests;
 #[cfg(test)]
 mod diagram_tests;
 #[cfg(test)]
+mod disconnect_tests;
+#[cfg(test)]
 mod tests;
 
 use data::DataActor;
@@ -102,6 +104,15 @@ impl Actors {
         }
     }
 
+    /// Drops a workspace's tabs and the export senders cloned from them,
+    /// so no editor actor outlives its workspace.
+    fn forget_tabs(&mut self, ws: WorkspaceId) {
+        let tabs = &self.tabs;
+        self.exports
+            .retain(|_, tx| !tabs.values().any(|t| t.ws == ws && t.tx.same_channel(tx)));
+        self.tabs.retain(|_, t| t.ws != ws);
+    }
+
     /// Returns the command back when no actor handles it.
     pub(crate) fn dispatch(&mut self, cmd: Command) -> Option<Command> {
         // Editor actors end themselves on a successful close; forget them.
@@ -124,7 +135,7 @@ impl Actors {
                 None
             }
             Command::Disconnect { ws } => {
-                self.tabs.retain(|_, t| t.ws != ws);
+                self.forget_tabs(ws);
                 match self.ws.remove(&ws) {
                     Some(e) => {
                         let _ = e.tx.send(WsMsg::Disconnect);
@@ -245,7 +256,7 @@ impl Actors {
         if let Some(old) = self.ws.remove(&ws) {
             let _ = old.tx.send(WsMsg::Disconnect);
         }
-        self.tabs.retain(|_, t| t.ws != ws);
+        self.forget_tabs(ws);
         let (tx, rx) = unbounded_channel();
         let (shared_tx, shared) = watch::channel(None);
         let shared_tx = Arc::new(shared_tx);
