@@ -3,6 +3,7 @@ use crustdb_core::model::{ObjectKind, Product};
 
 use super::tests::state;
 use super::*;
+use crate::runtime::TxState;
 
 #[test]
 fn open_workspace_reuses_failed_workspace_of_same_connection() {
@@ -69,6 +70,9 @@ fn reconnect_after_online_failure_keeps_tabs_and_reopens_their_actors() {
     let q = s.query_mut(query).unwrap();
     q.text = "select 1".into();
     q.dirty = true;
+    q.tx = TxState::Open;
+    q.running = Some(RequestId(2));
+    q.bg = true;
     s.apply(Event::ConnectFailed {
         ws,
         error: "ssh tunnel closed".into(),
@@ -86,6 +90,8 @@ fn reconnect_after_online_failure_keeps_tabs_and_reopens_their_actors() {
     assert_eq!(w.active_tab, Some(query));
     let q = &w.queries[0];
     assert_eq!((q.text.as_str(), q.dirty), ("select 1", true));
+    assert_eq!((q.tx, q.running, q.bg), (TxState::Idle, None, false));
+    assert!(q.can_run());
     let cmds = s.take_commands();
     assert!(cmds.iter().any(
         |c| matches!(c, Command::OpenTable { ws: w, object: o, .. } if *w == ws && *o == object)
