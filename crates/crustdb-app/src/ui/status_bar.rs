@@ -107,7 +107,7 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
                 ui,
                 format!("{} {:.0}%", icon::CPU, p.cpu_percent),
                 GRAY,
-                "Process CPU",
+                "Process CPU (100% = one core, summed over threads)",
             );
             let mb = p.rss_bytes / (1024 * 1024);
             item(
