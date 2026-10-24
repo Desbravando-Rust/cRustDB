@@ -71,4 +71,15 @@ for bad in 3.feature.md 2.added.txt; do
   rm "$CHANGELOG_DIR/$bad"
 done
 
+# Act & Assert: kind <tag> <cargo_version> -> rc|real|mismatch
+check_kind() {
+  local got
+  got="$("$script" kind "$1" "$2" 2>/dev/null)"
+  [ "$got" = "$3" ] || fail "kind $1 $2: esperado '$3', obtido '$got'"
+}
+check_kind v0.2.0-rc1 0.1.0 rc
+check_kind v0.1.0 0.1.0 real
+check_kind v0.2.0 0.1.0 mismatch
+"$script" kind v0.2.0-rcX 0.1.0 >/dev/null 2>&1 && fail "v0.2.0-rcX deveria falhar"
+
 [ "$fails" -eq 0 ] && echo "ok" || exit 1
