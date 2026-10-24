@@ -331,4 +331,25 @@ mod tests {
             assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
         }
     }
+
+    #[test]
+    fn sqlite_form_browse_emits_intent() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
+        let mut intents = vec![];
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                intents.extend(show(ui, &mut f));
+            });
+        h.run();
+
+        // Act
+        h.get_by_label("Browse…").click();
+        h.run();
+        drop(h);
+
+        // Assert
+        assert!(intents.contains(&Intent::FormBrowseSqlite));
+    }
 }
