@@ -204,3 +204,63 @@ fn note(q: &mut crate::state::QueryTab, text: String) {
     let n = q.pane.messages.len();
     q.pane.push(n, false, text, Duration::ZERO);
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn sqlite_form() -> ConnectionForm {
+        ConnectionForm::new(DriverKind::Sqlite, false)
+    }
+
+    #[test]
+    fn sqlite_pick_fills_matching_form() {
+        // Arrange
+        let mut f = sqlite_form();
+        let id = f.draft.id;
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), id, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_pick_without_form_is_dropped() {
+        // Arrange
+        let id = sqlite_form().draft.id;
+
+        // Act & Assert
+        apply_sqlite_pick(None, id, std::path::Path::new("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_pick_ignored_after_driver_change() {
+        // Arrange
+        let mut f = sqlite_form();
+        let id = f.draft.id;
+        f.set_driver(DriverKind::Postgres);
+        let before = f.draft.database.clone();
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), id, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database, before);
+    }
+
+    #[test]
+    fn sqlite_pick_ignored_for_other_form() {
+        // Arrange
+        let mut f = sqlite_form();
+        let other = sqlite_form().draft.id;
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), other, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database, None);
+    }
+}
