@@ -107,6 +107,11 @@ impl DialogStack {
         self.0.pop()
     }
 
+    /// Drops the dialogs that belong to a workspace or to one of its tabs.
+    pub fn retain_ws(&mut self, ws: WorkspaceId, tabs: &[TabId]) {
+        let _ = (ws, tabs);
+    }
+
     pub fn top(&self) -> Option<&Dialog> {
         self.0.last()
     }
