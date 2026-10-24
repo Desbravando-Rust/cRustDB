@@ -272,8 +272,7 @@ async fn update_cell_via_build_update_affects_one_row() {
         &object,
         &cols,
         &row,
-        2,
-        Some("z".into()),
+        &[(2, Some("z".into()))],
     )
     .unwrap();
 

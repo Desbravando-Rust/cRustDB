@@ -1,36 +1,45 @@
-//! Single-cell `UPDATE` keyed by every primary-key column (ADR 0003).
+//! Row `UPDATE` keyed by every primary-key column (ADR 0003, ADR 0004).
 
 use crate::dialect::{BuiltQuery, Dialect};
 use crate::driver::Param;
 use crate::model::{CELL_MEMORY_CAP, Cell, ColumnMeta, ObjectKind, ObjectRef};
 use crate::query::QueryError;
 
-/// `row` holds the page cells in the order of `columns`. `value = None` writes `NULL`.
+/// `row` holds the page cells in the order of `columns`; `changes` are `(column, value)` pairs
+/// for that row, and `value = None` writes `NULL`. The `WHERE` uses the original key cells.
+///
+/// Errors: `UnknownColumn` for an empty `changes` or an out-of-range column, `NoPrimaryKey`
+/// for a view or a table without a key, `NotEditable` for an opaque target or key cell.
 pub fn build_update(
     d: &dyn Dialect,
     object: &ObjectRef,
     columns: &[ColumnMeta],
     row: &[Cell],
-    column: usize,
-    value: Option<String>,
+    changes: &[(usize, Option<String>)],
 ) -> Result<BuiltQuery, QueryError> {
-    let unknown = || QueryError::UnknownColumn(format!("#{column}"));
-    let target = columns.get(column).ok_or_else(unknown)?;
-    let target_cell = row.get(column).ok_or_else(unknown)?;
-    if object.kind != ObjectKind::Table || !columns.iter().any(|c| c.is_primary_key) {
-        return Err(QueryError::NoPrimaryKey);
+    if changes.is_empty() {
+        return Err(QueryError::UnknownColumn("(no changes)".into()));
     }
-    if is_opaque(target_cell) {
-        return Err(QueryError::NotEditable(target.name.clone()));
+    let mut params = Vec::new();
+    let mut sets = Vec::new();
+    for (column, value) in changes {
+        let unknown = || QueryError::UnknownColumn(format!("#{column}"));
+        let target = columns.get(*column).ok_or_else(unknown)?;
+        let target_cell = row.get(*column).ok_or_else(unknown)?;
+        if object.kind != ObjectKind::Table || !columns.iter().any(|c| c.is_primary_key) {
+            return Err(QueryError::NoPrimaryKey);
+        }
+        if is_opaque(target_cell) {
+            return Err(QueryError::NotEditable(target.name.clone()));
+        }
+        params.push(Param(value.clone()));
+        sets.push(format!(
+            "{} = {}",
+            d.quote_ident(&target.name),
+            d.param(params.len(), target)
+        ));
     }
 
-    let mut params = vec![Param(value)];
-    let mut sql = format!(
-        "UPDATE {} SET {} = {} WHERE ",
-        d.qualified_name(object),
-        d.quote_ident(&target.name),
-        d.param(1, target)
-    );
     let mut conds = Vec::new();
     for (i, c) in columns.iter().enumerate().filter(|(_, c)| c.is_primary_key) {
         let key = match row.get(i) {
@@ -44,7 +53,12 @@ pub fn build_update(
             d.param(params.len(), c)
         ));
     }
-    sql.push_str(&conds.join(" AND "));
+    let sql = format!(
+        "UPDATE {} SET {} WHERE {}",
+        d.qualified_name(object),
+        sets.join(", "),
+        conds.join(" AND ")
+    );
     Ok(BuiltQuery { sql, params })
 }
 
@@ -132,8 +146,7 @@ mod tests {
             &obj(ObjectKind::Table),
             &cols(),
             row,
-            column,
-            v.map(String::from),
+            &[(column, v.map(String::from))],
         )
     }
 
@@ -173,15 +186,14 @@ mod tests {
         let r = vec![text("1"), text("x")];
 
         // Act & Assert
-        let t = build_update(&TestDialect, &obj(ObjectKind::Table), &cs, &r, 1, None);
+        let t = build_update(&TestDialect, &obj(ObjectKind::Table), &cs, &r, &[(1, None)]);
         assert_eq!(t.unwrap_err(), QueryError::NoPrimaryKey);
         let v = build_update(
             &TestDialect,
             &obj(ObjectKind::View),
             &cols(),
             &row(),
-            1,
-            None,
+            &[(1, None)],
         );
         assert_eq!(v.unwrap_err(), QueryError::NoPrimaryKey);
     }
@@ -269,5 +281,80 @@ mod tests {
             build(&row()[..1], 1, Some("v")).unwrap_err(),
             QueryError::UnknownColumn(_)
         ));
+    }
+
+    fn build_many(
+        row: &[Cell],
+        changes: &[(usize, Option<String>)],
+    ) -> Result<BuiltQuery, QueryError> {
+        build_update(
+            &TestDialect,
+            &obj(ObjectKind::Table),
+            &cols4(),
+            row,
+            changes,
+        )
+    }
+
+    fn cols4() -> Vec<ColumnMeta> {
+        vec![
+            col("id", true),
+            col("c", false),
+            col("x", false),
+            col("k", true),
+        ]
+    }
+
+    fn row4() -> Vec<Cell> {
+        vec![text("1"), text("old"), text("y"), text("b")]
+    }
+
+    #[test]
+    fn multi_column_update_sets_all_changes_keyed_by_pk() {
+        // Arrange
+        let changes = [(1, Some("a".to_string())), (2, None)];
+
+        // Act
+        let b = build_many(&row4(), &changes).unwrap();
+
+        // Assert
+        assert_eq!(
+            b.sql,
+            r#"UPDATE "public"."t" SET "c" = $1, "x" = $2 WHERE "id" = $3 AND "k" = $4"#
+        );
+        assert_eq!(
+            b.params,
+            vec![
+                Param(Some("a".into())),
+                Param(None),
+                Param(Some("1".into())),
+                Param(Some("b".into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_empty_changes() {
+        // Act & Assert
+        assert!(matches!(
+            build_many(&row4(), &[]).unwrap_err(),
+            QueryError::UnknownColumn(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_opaque_cell_in_any_target() {
+        // Arrange
+        let mut r = row4();
+        r[2] = Cell::Text {
+            value: "x".into(),
+            truncated: true,
+        };
+
+        // Act
+        let e = build_many(&r, &[(1, Some("a".into())), (2, Some("z".into()))]);
+
+        // Assert
+        assert_eq!(e.unwrap_err(), QueryError::NotEditable("x".into()));
     }
 }

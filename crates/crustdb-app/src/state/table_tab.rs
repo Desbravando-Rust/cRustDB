@@ -294,7 +294,7 @@ impl TableTab {
             return None;
         }
         let d = crate::export_fmt::dialect(self.driver);
-        match build_update(d, &self.object, &self.columns, cells, col, value) {
+        match build_update(d, &self.object, &self.columns, cells, &[(col, value)]) {
             Ok(update) => {
                 self.edit_req = Some(req);
                 Some(Command::UpdateCell {
