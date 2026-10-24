@@ -42,7 +42,7 @@ Colunas: ID | Problema | Evidência | Proposta | Prio | Aceite.
 |---|---|---|---|---|---|
 | U-H1 | Nome duplicado: logo (alt "cRustDB logo") e heading "cRustDB" | `ui/home.rs:28-32`, `:34` | Manter só o logo; título da janela já traz o nome | P3 | kittest: `query_by_label("cRustDB")` não encontra heading |
 | U-H2 | Lista sem busca nem navegação por teclado | `ui/home.rs:49` (loop simples) | Campo "filter" acima da lista; setas move seleção, Enter conecta | P2 | kittest: digitar "pg" deixa só conexões com "pg"; Enter dispara `Intent::Connect` |
-| U-H3 | Estado vazio é só texto fraco | `ui/home.rs:47` | Bloco centralizado com botões "New" e "Import URL" | P2 | kittest: sem conexões, clicar "New" emite `Intent::NewConnection` |
+| U-H3 | Estado vazio é só texto fraco | `ui/home.rs:47` | Bloco centralizado com um único botão "New" (a caixa de URL fica no topo do formulário de conexão nova) | P2 | kittest: sem conexões, clicar "New" emite `Intent::NewConnection` |
 | U-H4 | Erro de conexão numa linha solta, sem retry | `ui/home.rs:98-99` | Ícone de aviso + mensagem junto ao item; botão "Retry" reaproveita `Intent::Connect` | P2 | kittest: workspace `Failed` mostra "Retry"; clique emite `Connect` |
 | U-H5 | Delete ao lado de Edit sem destaque destrutivo | `ui/home.rs:65`, `:72` | Separar Delete (cor de erro no hover) | P3 | Unidade: função pura `delete_color(hovered, visuals)` devolve `error_fg_color` só em hover; revisão manual: ordem Edit, Delete (já é a atual, `right_to_left`) preservada |
 | U-H6 | Espaço para a propaganda do #34 | `ui/home.rs:47-49` (fim da lista) | Reservar rodapé discreto fixo (altura ≤ 48 px), sem conteúdo nesta issue | P3 | Revisão manual: rodapé não empurra a lista |

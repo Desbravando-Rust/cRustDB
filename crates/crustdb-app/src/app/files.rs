@@ -3,9 +3,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crustdb_core::model::{ConnectionId, DriverKind};
+
 use super::CrustApp;
 use crate::runtime::{Command, Event, TabId};
 use crate::state::Dialog;
+use crate::state::connection_form::ConnectionForm;
 use crate::storage::secrets::{SecretKind, account};
 use crate::ui::Intent;
 use crate::ui::history_panel::HistoryPanel;
@@ -15,6 +18,11 @@ impl CrustApp {
     pub(super) fn handle_files(&mut self, intent: Intent) {
         match intent {
             Intent::OpenFile => self.picker.start(Pick::Open, &self.ctx, ""),
+            Intent::FormBrowseSqlite => {
+                if let Some(f) = &self.form {
+                    self.picker.start(Pick::SqliteDb(f.draft.id), &self.ctx, "");
+                }
+            }
             Intent::ExportResult(tab) => {
                 self.picker
                     .start(Pick::Export(tab), &self.ctx, "result.csv")
@@ -106,6 +114,7 @@ impl CrustApp {
                     let cmd = self.state.query_mut(tab).and_then(|q| q.export(path));
                     self.send(cmd);
                 }
+                Pick::SqliteDb(id) => apply_sqlite_pick(self.form.as_mut(), id, &path),
                 Pick::Open => {
                     let Some(ws) = self.state.active else {
                         continue;
@@ -182,7 +191,76 @@ impl CrustApp {
     }
 }
 
+/// The dialog does not block: a form closed, swapped or switched off SQLite meanwhile drops the pick.
+// ponytail: keyed by the draft's connection id, so reopening the same connection's edit
+// form before the dialog closes still takes the pick; add a form generation if that matters.
+fn apply_sqlite_pick(form: Option<&mut ConnectionForm>, id: ConnectionId, path: &std::path::Path) {
+    if let Some(f) = form.filter(|f| f.draft.id == id && f.draft.driver == DriverKind::Sqlite) {
+        f.draft.database = Some(path.to_string_lossy().into_owned());
+    }
+}
+
 fn note(q: &mut crate::state::QueryTab, text: String) {
     let n = q.pane.messages.len();
     q.pane.push(n, false, text, Duration::ZERO);
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn sqlite_form() -> ConnectionForm {
+        ConnectionForm::new(DriverKind::Sqlite, false)
+    }
+
+    #[test]
+    fn sqlite_pick_fills_matching_form() {
+        // Arrange
+        let mut f = sqlite_form();
+        let id = f.draft.id;
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), id, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_pick_without_form_is_dropped() {
+        // Arrange
+        let id = sqlite_form().draft.id;
+
+        // Act & Assert
+        apply_sqlite_pick(None, id, std::path::Path::new("/tmp/a.db"));
+    }
+
+    #[test]
+    fn sqlite_pick_ignored_after_driver_change() {
+        // Arrange
+        let mut f = sqlite_form();
+        let id = f.draft.id;
+        f.set_driver(DriverKind::Postgres);
+        let before = f.draft.database.clone();
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), id, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database, before);
+    }
+
+    #[test]
+    fn sqlite_pick_ignored_for_other_form() {
+        // Arrange
+        let mut f = sqlite_form();
+        let other = sqlite_form().draft.id;
+
+        // Act
+        apply_sqlite_pick(Some(&mut f), other, std::path::Path::new("/tmp/a.db"));
+
+        // Assert
+        assert_eq!(f.draft.database, None);
+    }
 }
