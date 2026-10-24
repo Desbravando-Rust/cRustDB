@@ -310,6 +310,25 @@ mod tests {
     }
 
     #[test]
+    fn url_box_shows_example_hint() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+        f.show_url = true;
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("Import");
+        h.get_by_label_contains("postgres://");
+    }
+
+    #[test]
     fn sqlite_form_shows_only_file_fields() {
         // Arrange
         let mut f = ConnectionForm::new(DriverKind::Sqlite, true);

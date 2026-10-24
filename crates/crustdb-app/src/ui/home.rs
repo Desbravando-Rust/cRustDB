@@ -165,6 +165,25 @@ mod tests {
     }
 
     #[test]
+    fn home_has_single_new_button() {
+        // Arrange
+        let s = state(&[]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label(&format!("{} New", icon::PLUS));
+        assert!(h.query_by_label_contains("Import URL").is_none());
+    }
+
+    #[test]
     fn home_shows_logo() {
         // Arrange
         let s = state(&[]);
