@@ -73,10 +73,10 @@ async fn update_cell_via_build_update_affects_one_row() {
     let dialect = PostgresDriver.dialect();
 
     // Act & Assert
-    let b = build_update(dialect, &object, &cols, &row, 2, Some("42".into())).unwrap();
+    let b = build_update(dialect, &object, &cols, &row, &[(2, Some("42".into()))]).unwrap();
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
-    let b = build_update(dialect, &object, &cols, &row, 2, None).unwrap();
+    let b = build_update(dialect, &object, &cols, &row, &[(2, None)]).unwrap();
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
     s.start(

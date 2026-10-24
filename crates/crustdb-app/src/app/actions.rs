@@ -81,7 +81,7 @@ impl CrustApp {
             }
             (Action::Cancel, Some(t)) => vec![Intent::StopTab(t)],
             (Action::Refresh, Some(t)) if focus == Focus::Grid => {
-                self.table_op(t, |_| true);
+                self.table_op(t, |t| !t.pending_blocks());
                 vec![]
             }
             (Action::Refresh, _) => vec![match sel {

@@ -1,7 +1,5 @@
-use crustdb_core::edit::{build_update, is_opaque};
 use crustdb_core::model::{
-    Cell, ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
-    Row,
+    ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectRef, Row,
 };
 use crustdb_core::query::{Filter, Sort, TableQuery};
 
@@ -55,8 +53,11 @@ pub struct TableTab {
     pub detail_open: bool,
     /// Inline editor of the Data grid: row, column, text being typed.
     pub editing: Option<(usize, usize, String)>,
-    /// Pending `UpdateCell`; its `CellUpdated` reloads the page.
+    /// In-flight `UpdateCell`; its `CellUpdated` reloads the page.
     pub edit_req: Option<RequestId>,
+    /// Staged `(column, value)` changes of `pending_row`, sent as one `UPDATE` on Save (ADR 0004).
+    pub pending: Vec<(usize, Option<String>)>,
+    pub pending_row: Option<usize>,
 }
 
 impl TableTab {
@@ -89,6 +90,8 @@ impl TableTab {
             detail_open: false,
             editing: None,
             edit_req: None,
+            pending: vec![],
+            pending_row: None,
         }
     }
 
@@ -115,14 +118,15 @@ impl TableTab {
     }
 
     /// Re-sends what failed: the structure if no columns arrived yet, else the current page.
-    pub fn retry(&mut self, req: RequestId) -> Command {
+    /// Blocked (`None`) while changes are pending.
+    pub fn retry(&mut self, req: RequestId) -> Option<Command> {
         self.notice = None;
         if self.view == TableView::Ddl {
-            self.load_ddl(req)
+            Some(self.load_ddl(req))
         } else if self.columns.is_empty() {
-            self.load_structure(req)
+            Some(self.load_structure(req))
         } else {
-            self.fetch(req)
+            (!self.pending_blocks()).then(|| self.fetch(req))
         }
     }
 
@@ -159,6 +163,9 @@ impl TableTab {
     }
 
     pub fn apply_filters(&mut self, req: RequestId) -> Option<Command> {
+        if self.pending_blocks() {
+            return None;
+        }
         let filters: Result<Vec<_>, _> = self
             .drafts
             .iter()
@@ -218,13 +225,16 @@ impl TableTab {
         }
     }
 
-    /// Empties the drafts and reapplies, back to page 0.
-    pub fn clear_filters(&mut self, req: RequestId) -> Command {
+    /// Empties the drafts and reapplies, back to page 0. Blocked while changes are pending.
+    pub fn clear_filters(&mut self, req: RequestId) -> Option<Command> {
+        if self.pending_blocks() {
+            return None;
+        }
         self.drafts.clear();
         self.filters.clear();
         self.filter_error = None;
         self.page = 0;
-        self.fetch(req)
+        Some(self.fetch(req))
     }
 
     /// Marks the tab as loading and builds the command for the current page.
@@ -243,100 +253,34 @@ impl TableTab {
         rows.truncate(self.page_size as usize);
         self.rows = rows;
         self.editing = None;
+        // Staged changes point at row indexes of the old page.
+        self.discard_pending();
         self.selected_row = None;
         self.select_anchor = None;
         self.loading = None;
         self.notice = None;
     }
 
-    /// Opens the inline editor on a text or NULL cell of a table with a primary key.
-    pub fn begin_edit(&mut self, row: usize, col: usize) {
-        let keyed =
-            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
-        let text = match self.rows.get(row).and_then(|r| r.get(col)) {
-            Some(c) if is_opaque(c) => return,
-            Some(Cell::Text { value, .. }) => value.to_string(),
-            Some(Cell::Null) => String::new(),
-            _ => return,
-        };
-        if keyed {
-            self.editing = Some((row, col, text));
+    /// Returns whether the sort changed (not while changes are pending).
+    pub fn click_header(&mut self, column: &str, shift: bool) -> bool {
+        if self.pending_blocks() {
+            return false;
         }
-    }
-
-    /// Closes the inline editor; the typed text becomes an `UpdateCell` if it changed anything.
-    pub fn commit_edit(&mut self, req: RequestId) -> Option<Command> {
-        let (row, col, text) = self.editing.take()?;
-        self.update_cell(row, col, Some(text), req)
-    }
-
-    pub fn set_null(&mut self, row: usize, col: usize, req: RequestId) -> Option<Command> {
-        self.editing = None;
-        self.update_cell(row, col, None, req)
-    }
-
-    /// Rejections (no key, binary or truncated cells) land in `notice`. An unchanged value sends
-    /// nothing (MySQL would also report 0 affected rows for it).
-    fn update_cell(
-        &mut self,
-        row: usize,
-        col: usize,
-        value: Option<String>,
-        req: RequestId,
-    ) -> Option<Command> {
-        let cells = self.rows.get(row)?;
-        let unchanged = match (cells.get(col), &value) {
-            (Some(Cell::Null), None) => true,
-            (Some(Cell::Text { value: old, .. }), Some(new)) => **old == **new,
-            _ => false,
-        };
-        if unchanged {
-            return None;
-        }
-        let d = crate::export_fmt::dialect(self.driver);
-        match build_update(d, &self.object, &self.columns, cells, col, value) {
-            Ok(update) => {
-                self.edit_req = Some(req);
-                Some(Command::UpdateCell {
-                    tab: self.id,
-                    req,
-                    update,
-                })
-            }
-            Err(e) => {
-                self.notice = Some(e.to_string());
-                None
-            }
-        }
-    }
-
-    /// Success reloads the page; a failure only shows `error` (an in-flight load stays pending).
-    pub fn cell_updated(&mut self, req: RequestId, error: Option<String>) {
-        if self.edit_req != Some(req) {
-            return;
-        }
-        self.edit_req = None;
-        match error {
-            None => self.needs_fetch = true,
-            Some(e) => self.notice = Some(e),
-        }
-    }
-
-    pub fn click_header(&mut self, column: &str, shift: bool) {
         toggle_sort(&mut self.sorts, column, shift);
         self.page = 0;
+        true
     }
 
     /// Returns whether the page changed.
     pub fn next_page(&mut self) -> bool {
-        self.has_more && {
+        !self.pending_blocks() && self.has_more && {
             self.page += 1;
             true
         }
     }
 
     pub fn prev_page(&mut self) -> bool {
-        self.page > 0 && {
+        !self.pending_blocks() && self.page > 0 && {
             self.page -= 1;
             true
         }

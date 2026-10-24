@@ -104,6 +104,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
                     &mut p.select_anchor,
                     &p.sorts,
                     None,
+                    &[],
+                    None,
                 ),
                 None => {
                     ui.weak("No result");
