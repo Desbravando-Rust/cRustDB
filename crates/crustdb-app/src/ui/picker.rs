@@ -34,8 +34,10 @@ impl Default for Picker {
 
 impl Picker {
     /// Claims the single dialog slot; false while another dialog is still open.
+    // ponytail: one dialog app-wide; per-Pick Vec if users need parallel dialogs.
+    // Known gap: a panic in the rfd thread leaves `pending` stuck.
     fn begin(&mut self) -> bool {
-        !self.pending || true
+        !std::mem::replace(&mut self.pending, true)
     }
 
     /// Opens the dialog unless one is already open. `name` pre-fills the save name.
@@ -68,10 +70,12 @@ impl Picker {
     }
 
     pub fn poll(&mut self) -> Vec<(Pick, PathBuf)> {
-        self.rx
-            .try_iter()
-            .filter_map(|(p, path)| Some((p, path?)))
-            .collect()
+        let mut out = Vec::new();
+        for (pick, path) in self.rx.try_iter() {
+            self.pending = false;
+            out.extend(path.map(|p| (pick, p)));
+        }
+        out
     }
 }
 
