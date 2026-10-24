@@ -81,7 +81,10 @@ fn readable(path: &Path) -> bool {
 
 impl ConnectionForm {
     pub fn new(driver: DriverKind, keyring_available: bool) -> Self {
-        Self::from_config(&default_config(driver), keyring_available)
+        Self {
+            show_url: true,
+            ..Self::from_config(&default_config(driver), keyring_available)
+        }
     }
 
     pub fn from_config(c: &ConnectionConfig, keyring_available: bool) -> Self {

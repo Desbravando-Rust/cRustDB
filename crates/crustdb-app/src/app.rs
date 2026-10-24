@@ -169,7 +169,9 @@ impl CrustApp {
             Intent::NewConnection => self.open_form(None),
             Intent::EditConnection(id) => {
                 let c = self.state.config.connections.iter().find(|c| c.id == id);
-                self.open_form(c.cloned());
+                if let Some(c) = c.cloned() {
+                    self.open_form(Some(c));
+                }
             }
             Intent::FormCancel => self.close_form(),
             Intent::FormImportUrl => {
@@ -333,12 +335,10 @@ impl CrustApp {
     fn open_form(&mut self, config: Option<ConnectionConfig>) {
         // One keyring probe per open, never per frame.
         let available = self.secrets.available();
-        let show_url = config.is_none();
-        let mut f = match config {
+        let f = match config {
             Some(c) => ConnectionForm::from_config(&c, available),
             None => ConnectionForm::new(DriverKind::Postgres, available),
         };
-        f.show_url = show_url;
         self.close_form();
         self.form = Some(f);
     }
