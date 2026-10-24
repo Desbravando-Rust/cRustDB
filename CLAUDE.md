@@ -38,3 +38,12 @@ cargo deny check
 ## Don't read
 
 `target/`, `benchmarks/` (~560 MB competitor installers), `ruvector.db`, `agentdb.rvf*`, `.swarm/`, `.claude-flow/`, `.superpowers/`.
+
+
+## Tests
+- Always write tests with AAA's pattern
+
+
+## Open an Issue to Avoid Forgetting
+- When you come across an outstanding issue—whether small or large—and the rounds of review and correction have already been exhausted, open an issue so it doesn't get forgotten.
+- If you spot something out of scope for this implementation, log an issue as well
