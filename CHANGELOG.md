@@ -4,6 +4,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 
 ---
 
+## 2026-10-24
+
+- [#76](https://github.com/Desbravando-Rust/cRustDB/issues/76) — Standardize all tests on the Arrange/Act/Assert layout, documented in CONTRIBUTING.md and CLAUDE.md.
+
 ## 2026-10-23
 
 - [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
