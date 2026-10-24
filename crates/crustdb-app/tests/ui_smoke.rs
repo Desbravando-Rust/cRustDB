@@ -167,3 +167,20 @@ fn run_query_shows_result_and_messages() {
         h.step();
     }
 }
+
+#[test]
+fn disconnect_returns_to_saved_connections() {
+    // Arrange
+    let (mut h, _app, _dir) = start();
+    h.run();
+    h.get_by_label("Connect").click();
+    wait_for(&mut h, "New query");
+
+    // Act
+    h.get_by_label("Disconnect").click();
+    h.run();
+
+    // Assert
+    wait_for(&mut h, "Connect");
+    assert!(h.query_by_label("New query").is_none());
+}
