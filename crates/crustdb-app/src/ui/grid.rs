@@ -140,6 +140,9 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
     );
     if r.lost_focus() {
         *op = Some(if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            // egui 0.37 reports `lost_focus` for two frames; refocus now so
+            // the next frame does not read it as a click-away cancel.
+            r.request_focus();
             CellOp::Commit
         } else {
             CellOp::Cancel
