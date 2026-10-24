@@ -1,5 +1,7 @@
+use crustdb_core::edit::{build_update, is_opaque};
 use crustdb_core::model::{
-    ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectRef, Row,
+    Cell, ColumnDetail, ColumnMeta, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
+    Row,
 };
 use crustdb_core::query::{Filter, Sort, TableQuery};
 
@@ -51,6 +53,10 @@ pub struct TableTab {
     pub drafts: Vec<FilterDraft>,
     pub filter_error: Option<String>,
     pub detail_open: bool,
+    /// Inline editor of the Data grid: row, column, text being typed.
+    pub editing: Option<(usize, usize, String)>,
+    /// Pending `UpdateCell`; its `CellUpdated` reloads the page.
+    pub edit_req: Option<RequestId>,
 }
 
 impl TableTab {
@@ -81,6 +87,8 @@ impl TableTab {
             drafts: vec![],
             filter_error: None,
             detail_open: false,
+            editing: None,
+            edit_req: None,
         }
     }
 
@@ -234,10 +242,84 @@ impl TableTab {
         self.has_more = rows.len() > self.page_size as usize;
         rows.truncate(self.page_size as usize);
         self.rows = rows;
+        self.editing = None;
         self.selected_row = None;
         self.select_anchor = None;
         self.loading = None;
         self.notice = None;
+    }
+
+    /// Opens the inline editor on a text or NULL cell of a table with a primary key.
+    pub fn begin_edit(&mut self, row: usize, col: usize) {
+        let keyed =
+            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
+        let text = match self.rows.get(row).and_then(|r| r.get(col)) {
+            Some(c) if is_opaque(c) => return,
+            Some(Cell::Text { value, .. }) => value.to_string(),
+            Some(Cell::Null) => String::new(),
+            _ => return,
+        };
+        if keyed {
+            self.editing = Some((row, col, text));
+        }
+    }
+
+    /// Closes the inline editor; the typed text becomes an `UpdateCell` if it changed anything.
+    pub fn commit_edit(&mut self, req: RequestId) -> Option<Command> {
+        let (row, col, text) = self.editing.take()?;
+        self.update_cell(row, col, Some(text), req)
+    }
+
+    pub fn set_null(&mut self, row: usize, col: usize, req: RequestId) -> Option<Command> {
+        self.editing = None;
+        self.update_cell(row, col, None, req)
+    }
+
+    /// Rejections (no key, binary or truncated cells) land in `notice`. An unchanged value sends
+    /// nothing (MySQL would also report 0 affected rows for it).
+    fn update_cell(
+        &mut self,
+        row: usize,
+        col: usize,
+        value: Option<String>,
+        req: RequestId,
+    ) -> Option<Command> {
+        let cells = self.rows.get(row)?;
+        let unchanged = match (cells.get(col), &value) {
+            (Some(Cell::Null), None) => true,
+            (Some(Cell::Text { value: old, .. }), Some(new)) => **old == **new,
+            _ => false,
+        };
+        if unchanged {
+            return None;
+        }
+        let d = crate::export_fmt::dialect(self.driver);
+        match build_update(d, &self.object, &self.columns, cells, col, value) {
+            Ok(update) => {
+                self.edit_req = Some(req);
+                Some(Command::UpdateCell {
+                    tab: self.id,
+                    req,
+                    update,
+                })
+            }
+            Err(e) => {
+                self.notice = Some(e.to_string());
+                None
+            }
+        }
+    }
+
+    /// Success reloads the page; a failure only shows `error` (an in-flight load stays pending).
+    pub fn cell_updated(&mut self, req: RequestId, error: Option<String>) {
+        if self.edit_req != Some(req) {
+            return;
+        }
+        self.edit_req = None;
+        match error {
+            None => self.needs_fetch = true,
+            Some(e) => self.notice = Some(e),
+        }
     }
 
     pub fn click_header(&mut self, column: &str, shift: bool) {

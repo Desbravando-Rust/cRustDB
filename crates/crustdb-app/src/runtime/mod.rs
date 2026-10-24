@@ -146,6 +146,7 @@ fn no_actor(cmd: &Command) -> Event {
     let tab = match cmd {
         OpenTable { tab, .. }
         | FetchPage { tab, .. }
+        | UpdateCell { tab, .. }
         | LoadStructure { tab, .. }
         | LoadDdl { tab, .. }
         | OpenEditor { tab, .. }

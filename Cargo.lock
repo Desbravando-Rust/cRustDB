@@ -3215,24 +3215,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ico-builder"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e96d2a8af7dab92396bac5fe778a3668a347e1c9e7864cad478a93c484664712"
-dependencies = [
- "image",
-]
-
-[[package]]
-name = "icons_generator"
-version = "0.1.0"
-dependencies = [
- "ico-builder",
- "image",
- "tempfile",
-]
-
-[[package]]
 name = "icu_collections"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

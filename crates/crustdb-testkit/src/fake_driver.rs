@@ -67,6 +67,8 @@ pub struct FakeLog {
     pub fetch_delay_ms: AtomicU64,
     /// What `objects()` answers, whatever the kind asked.
     pub tables: Mutex<Vec<ObjectRef>>,
+    /// What every `finish` reports as `affected_rows`.
+    pub affected: Mutex<Option<u64>>,
 }
 
 impl FakeLog {
@@ -312,7 +314,7 @@ impl Session for FakeSession {
         self.log.op("finish".into());
         self.pos = None;
         Ok(Completion {
-            affected_rows: None,
+            affected_rows: self.log.affected.lock().ok().and_then(|a| *a),
         })
     }
     async fn explain_rows(&mut self, sql: &str) -> Result<Option<u64>, DriverError> {

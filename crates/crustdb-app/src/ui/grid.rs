@@ -24,9 +24,26 @@ fn sort_mark(sorts: &[Sort], column: &str) -> String {
     }
 }
 
+/// What the inline cell editor asks the caller to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellOp {
+    Begin { row: usize, col: usize },
+    Commit,
+    Cancel,
+    SetNull { row: usize, col: usize },
+}
+
+/// The cell being edited (`rows` index, column, text) and the op raised this frame.
+pub type CellEdit<'a> = (
+    &'a mut Option<(usize, usize, String)>,
+    &'a mut Option<CellOp>,
+);
+
 /// Virtualized grid over `rows` (or the `view` indexes into it); `selected` (cursor) and
 /// `anchor` (other end of a Shift+click range) are `rows` indexes. The range spans display
-/// positions. Returns the clicked header as `(column, shift)`.
+/// positions. `edit` enables inline editing (double click, Enter commits, Esc cancels).
+/// Returns the clicked header as `(column, shift)`.
+#[allow(clippy::too_many_arguments)]
 pub fn grid(
     ui: &mut egui::Ui,
     columns: &[ColumnMeta],
@@ -35,6 +52,7 @@ pub fn grid(
     selected: &mut Option<usize>,
     anchor: &mut Option<usize>,
     sorts: &[Sort],
+    mut edit: Option<CellEdit<'_>>,
 ) -> Option<(String, bool)> {
     let mut clicked = None;
     // ponytail: O(n) scan of `view` per frame; keep positions in state if big views lag.
@@ -71,9 +89,14 @@ pub fn grid(
                 let i = view.and_then(|v| v.get(k).copied()).unwrap_or(k);
                 row.set_selected(sel.as_ref().is_some_and(|r| r.contains(&k)));
                 let Some(cells) = rows.get(i) else { return };
-                for (cell, meta) in cells.iter().zip(columns) {
+                for (j, (cell, meta)) in cells.iter().zip(columns).enumerate() {
                     // Labels are not selectable so clicks reach the cell (selection, context menu).
                     let (_, cell_resp) = row.col(|ui| {
+                        if let Some((Some((r, c, text)), op)) = edit.as_mut()
+                            && (*r, *c) == (i, j)
+                        {
+                            return edit_cell(ui, text, op);
+                        }
                         let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
                         if matches!(cell, Cell::Null) {
                             let null = RichText::new(text).italics().color(Color32::GRAY);
@@ -84,7 +107,17 @@ pub fn grid(
                     });
                     cell_resp.context_menu(|ui| {
                         grid_copy::menu(ui, columns, rows, view, sel.clone(), k, cell);
+                        if let Some((_, op)) = edit.as_mut()
+                            && ui.button("Set NULL").clicked()
+                        {
+                            **op = Some(CellOp::SetNull { row: i, col: j });
+                        }
                     });
+                    if let Some((_, op)) = edit.as_mut()
+                        && cell_resp.double_clicked()
+                    {
+                        **op = Some(CellOp::Begin { row: i, col: j });
+                    }
                 }
                 let resp = row.response();
                 if resp.clicked() {
@@ -96,6 +129,27 @@ pub fn grid(
             });
         });
     clicked
+}
+
+/// Focused single-line editor: Enter asks to commit, Esc or clicking away cancels.
+fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
+    let r = ui.add(
+        egui::TextEdit::singleline(text)
+            .hint_text("Cell value")
+            .desired_width(f32::INFINITY),
+    );
+    if r.lost_focus() {
+        *op = Some(if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            // egui 0.37 reports `lost_focus` for two frames; refocus now so
+            // the next frame does not read it as a click-away cancel.
+            r.request_focus();
+            CellOp::Commit
+        } else {
+            CellOp::Cancel
+        });
+    } else if !r.has_focus() {
+        r.request_focus();
+    }
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
@@ -144,6 +198,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         });
     }
     egui::CentralPanel::default().show(ui, |ui| {
+        let mut op = None;
         let clicked = grid(
             ui,
             &tab.columns,
@@ -152,7 +207,15 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             &mut tab.selected_row,
             &mut tab.select_anchor,
             &tab.sorts,
+            Some((&mut tab.editing, &mut op)),
         );
+        match op {
+            Some(CellOp::Begin { row, col }) => tab.begin_edit(row, col),
+            Some(CellOp::Commit) => out.push(Intent::CommitEdit(id)),
+            Some(CellOp::Cancel) => tab.editing = None,
+            Some(CellOp::SetNull { row, col }) => out.push(Intent::SetNull { tab: id, row, col }),
+            None => {}
+        }
         if let Some((column, shift)) = clicked {
             out.push(Intent::SortHeader {
                 tab: id,
@@ -223,4 +286,68 @@ pub fn show_tab(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         TableView::Ddl => out.extend(show_ddl(ui, tab)),
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crustdb_core::model::{ObjectKind, ObjectRef, TypeCategory};
+    use egui_kittest::Harness;
+
+    use super::*;
+    use crate::runtime::TabId;
+
+    fn tab() -> TableTab {
+        let object = ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        };
+        let mut t = TableTab::new(TabId(1), object, 300);
+        t.columns = ["id", "v"]
+            .iter()
+            .map(|n| ColumnMeta {
+                name: (*n).into(),
+                type_name: "text".into(),
+                category: TypeCategory::Text,
+                nullable: None,
+                is_primary_key: *n == "id",
+            })
+            .collect();
+        t.rows = vec![vec![Cell::text_capped("1"), Cell::text_capped("old")].into()];
+        t.editing = Some((0, 1, "old".into()));
+        t
+    }
+
+    fn run_keys(t: &mut TableTab, text: &str, key: egui::Key) -> Vec<Intent> {
+        let mut out = vec![];
+        let mut h = Harness::new_ui(|ui| out.extend(show(ui, t)));
+        h.run();
+        h.event(egui::Event::Text(text.into()));
+        h.run();
+        h.key_press(key);
+        h.run();
+        drop(h);
+        out
+    }
+
+    #[test]
+    fn enter_in_cell_editor_commits_typed_text() {
+        let mut t = tab();
+        let out = run_keys(&mut t, "x", egui::Key::Enter);
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, Intent::CommitEdit(TabId(1))))
+        );
+        assert!(t.editing.unwrap().2.contains('x'));
+    }
+
+    #[test]
+    fn escape_in_cell_editor_cancels() {
+        let mut t = tab();
+        let out = run_keys(&mut t, "x", egui::Key::Escape);
+        assert!(out.is_empty());
+        assert!(t.editing.is_none());
+    }
 }

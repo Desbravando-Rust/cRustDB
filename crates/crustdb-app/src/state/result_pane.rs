@@ -141,19 +141,62 @@ impl ResultPane {
 /// Missing cell (row shorter than the header) sorts as null.
 static MISSING: Cell = Cell::Null;
 
-/// Nulls last in both directions; numbers by value before non-numeric text, the rest as text/bytes.
+// ponytail: Infinity/NaN/exponent forms and numbers > 309 digits fall back to f64 and may not be
+// transitive against the exact path; add a full decimal parser if that ever shows up.
+/// Splits `[+-]?(\d+(\.\d*)?|\.\d+)` into (negative, int digits, fraction digits), normalized; zero is positive.
+fn split_decimal(s: &str) -> Option<(bool, &str, &str)> {
+    let (neg, s) = match s.as_bytes().first()? {
+        b'-' => (true, &s[1..]),
+        b'+' => (false, &s[1..]),
+        _ => (false, s),
+    };
+    let (int, frac) = s.split_once('.').unwrap_or((s, ""));
+    if (int.is_empty() && frac.is_empty())
+        || !int.bytes().all(|b| b.is_ascii_digit())
+        || !frac.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let (int, frac) = (int.trim_start_matches('0'), frac.trim_end_matches('0'));
+    Some((neg && !(int.is_empty() && frac.is_empty()), int, frac))
+}
+
+/// Exact decimal comparison without f64; `None` if either side is not a plain decimal literal.
+fn cmp_exact(x: &str, y: &str) -> Option<Ordering> {
+    let ((nx, ix, fx), (ny, iy, fy)) = (split_decimal(x)?, split_decimal(y)?);
+    if nx != ny {
+        return Some(if nx {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        });
+    }
+    let mag = ix
+        .len()
+        .cmp(&iy.len())
+        .then_with(|| ix.cmp(iy))
+        .then_with(|| fx.cmp(fy));
+    Some(if nx { mag.reverse() } else { mag })
+}
+
+/// Nulls last in both directions; numbers by value (Integer/Decimal exactly, Float via f64)
+/// before non-numeric text, the rest as text/bytes.
 fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) -> Ordering {
     let o = match (a.unwrap_or(&MISSING), b.unwrap_or(&MISSING)) {
         (Cell::Null, Cell::Null) => return Ordering::Equal,
         (Cell::Null, _) => return Ordering::Greater,
         (_, Cell::Null) => return Ordering::Less,
         (Cell::Text { value: x, .. }, Cell::Text { value: y, .. }) => {
-            // ponytail: Decimal via f64 loses precision > 2^53; switch to decimal compare if needed
             let numeric = matches!(
                 cat,
                 TypeCategory::Integer | TypeCategory::Decimal | TypeCategory::Float
             );
-            if numeric {
+            let exact = matches!(cat, TypeCategory::Integer | TypeCategory::Decimal)
+                .then(|| cmp_exact(x, y))
+                .flatten();
+            if let Some(o) = exact {
+                o
+            } else if numeric {
                 match (x.parse::<f64>(), y.parse::<f64>()) {
                     (Ok(x), Ok(y)) => x.total_cmp(&y),
                     (Ok(_), Err(_)) => Ordering::Less,
@@ -172,265 +215,5 @@ fn cmp_cells(a: Option<&Cell>, b: Option<&Cell>, cat: TypeCategory, desc: bool) 
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-pub(crate) mod tests {
-    use super::*;
-    use crustdb_core::model::{Cell, ColumnMeta, Completion, TypeCategory};
-
-    use crate::storage::history::HistoryEntry;
-
-    pub(crate) fn hist(rows: Option<u64>) -> HistoryEntry {
-        HistoryEntry {
-            ts: String::new(),
-            database: None,
-            sql: String::new(),
-            duration_ms: 0,
-            rows,
-            ok: true,
-            error: None,
-        }
-    }
-
-    pub(crate) fn header() -> ResultHeader {
-        ResultHeader {
-            columns: vec![ColumnMeta {
-                name: "a".into(),
-                type_name: "int".into(),
-                category: TypeCategory::Integer,
-                nullable: None,
-                is_primary_key: false,
-            }],
-        }
-    }
-
-    pub(crate) fn rows(n: usize) -> Vec<Row> {
-        (0..n).map(|_| vec![Cell::Null].into()).collect()
-    }
-
-    pub(crate) fn done(req: u64, index: usize, affected: Option<u64>, rows: Option<u64>) -> Event {
-        Event::StatementDone {
-            req: RequestId(req),
-            index,
-            completion: Completion {
-                affected_rows: affected,
-            },
-            duration: Duration::from_millis(5),
-            history: hist(rows),
-        }
-    }
-
-    #[test]
-    fn grid_shows_last_statement_with_rows() {
-        // Arrange
-        let mut p = ResultPane::default();
-        let r = RequestId(7);
-        p.apply(&Event::ResultStarted {
-            req: r,
-            header: header(),
-        });
-        p.apply(&Event::Rows {
-            req: r,
-            rows: rows(3),
-            exhausted: true,
-        });
-        p.apply(&done(7, 0, None, Some(3)));
-
-        // Act & Assert
-        // The second statement returns nothing: the grid keeps the first one's rows.
-        p.apply(&done(7, 1, Some(2), Some(2)));
-        assert_eq!(p.rows.len(), 3);
-        assert!(p.header.is_some());
-        // A later statement with rows replaces it.
-        let mut p = ResultPane::default();
-        p.apply(&Event::ResultStarted {
-            req: r,
-            header: header(),
-        });
-        p.apply(&Event::Rows {
-            req: r,
-            rows: rows(3),
-            exhausted: true,
-        });
-        p.apply(&Event::ResultStarted {
-            req: r,
-            header: header(),
-        });
-        p.apply(&Event::Rows {
-            req: r,
-            rows: rows(1),
-            exhausted: true,
-        });
-        assert_eq!(p.rows.len(), 1);
-    }
-
-    fn text(v: &str) -> Cell {
-        Cell::Text {
-            value: v.into(),
-            truncated: false,
-        }
-    }
-
-    fn col(name: &str, category: TypeCategory) -> ColumnMeta {
-        ColumnMeta {
-            name: name.into(),
-            type_name: String::new(),
-            category,
-            nullable: None,
-            is_primary_key: false,
-        }
-    }
-
-    /// Pane with columns `n` (Integer) and `s` (Text) loaded with `rows`.
-    fn loaded(rows: Vec<Row>) -> ResultPane {
-        let mut p = ResultPane::default();
-        let r = RequestId(1);
-        p.apply(&Event::ResultStarted {
-            req: r,
-            header: ResultHeader {
-                columns: vec![
-                    col("n", TypeCategory::Integer),
-                    col("s", TypeCategory::Text),
-                ],
-            },
-        });
-        p.apply(&Event::Rows {
-            req: r,
-            rows,
-            exhausted: false,
-        });
-        p
-    }
-
-    fn row2(n: Cell, s: &str) -> Row {
-        vec![n, text(s)].into()
-    }
-
-    #[test]
-    fn view_lists_all_rows_without_sort_or_filter() {
-        // Act
-        let p = loaded(vec![row2(text("1"), "a"), row2(text("2"), "b")]);
-
-        // Assert
-        assert_eq!(p.view, vec![0, 1]);
-    }
-
-    #[test]
-    fn numeric_sort_cycles_asc_desc_off() {
-        // Arrange
-        let mut p = loaded(vec![
-            row2(text("10"), "a"),
-            row2(text("9"), "b"),
-            row2(text("100"), "c"),
-        ]);
-
-        // Act & Assert
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![1, 0, 2]);
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![2, 0, 1]);
-        p.click_header("n", false);
-        assert!(p.sorts.is_empty());
-        assert_eq!(p.view, vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn nulls_sort_last_both_ways() {
-        // Arrange
-        let mut p = loaded(vec![
-            row2(text("2"), "a"),
-            row2(Cell::Null, "b"),
-            row2(text("1"), "c"),
-        ]);
-
-        // Act & Assert
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![2, 0, 1]);
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![0, 2, 1]);
-    }
-
-    #[test]
-    fn filter_matches_any_text_cell_case_insensitive() {
-        // Arrange
-        let mut p = loaded(vec![
-            row2(text("1"), "Apple"),
-            row2(Cell::Null, "banana"),
-            row2(text("31"), "cherry"),
-        ]);
-        p.filter = "AN".into();
-
-        // Act & Assert
-        p.refresh_view();
-        assert_eq!(p.view, vec![1]);
-        p.filter = "1".into();
-        p.refresh_view();
-        assert_eq!(p.view, vec![0, 2]);
-        p.filter.clear();
-        p.refresh_view();
-        assert_eq!(p.view, vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn more_rows_keep_sort_and_filter() {
-        // Arrange
-        let mut p = loaded(vec![row2(text("5"), "x"), row2(text("3"), "y")]);
-        p.click_header("n", false);
-        p.filter = "x".into();
-
-        // Act & Assert
-        p.refresh_view();
-        assert_eq!(p.view, vec![0]);
-        p.apply(&Event::Rows {
-            req: RequestId(1),
-            rows: vec![row2(text("1"), "xx")],
-            exhausted: true,
-        });
-        assert_eq!(p.view, vec![2, 0]);
-    }
-
-    #[test]
-    fn result_started_resets_sort() {
-        // Arrange
-        let mut p = loaded(vec![row2(text("2"), "a"), row2(text("1"), "b")]);
-
-        // Act & Assert
-        p.click_header("s", true);
-        assert_eq!(p.sorts.len(), 1);
-        p.apply(&Event::ResultStarted {
-            req: RequestId(1),
-            header: header(),
-        });
-        assert!(p.sorts.is_empty());
-        assert!(p.view.is_empty());
-    }
-
-    #[test]
-    fn numeric_column_puts_non_numbers_after_numbers() {
-        // Arrange
-        let mut p = loaded(vec![
-            row2(text("abc"), "a"),
-            row2(text("10"), "b"),
-            row2(text("9"), "c"),
-            row2(text("Z"), "d"),
-        ]);
-
-        // Act & Assert
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![2, 1, 3, 0]);
-        p.click_header("n", false);
-        assert_eq!(p.view, vec![0, 3, 1, 2]);
-    }
-
-    #[test]
-    fn short_row_sorts_as_null_last() {
-        // Arrange
-        let short: Row = vec![text("1")].into();
-        let mut p = loaded(vec![short, row2(text("2"), "b"), row2(text("3"), "a")]);
-
-        // Act & Assert
-        p.click_header("s", false);
-        assert_eq!(p.view, vec![2, 1, 0]);
-        p.click_header("s", false);
-        assert_eq!(p.view, vec![1, 2, 0]);
-    }
-}
+#[path = "result_pane_tests.rs"]
+pub(crate) mod tests;
