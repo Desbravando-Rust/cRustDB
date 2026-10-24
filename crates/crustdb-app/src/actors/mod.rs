@@ -23,6 +23,8 @@ mod data_tests;
 #[cfg(test)]
 mod diagram_tests;
 #[cfg(test)]
+mod disconnect_tests;
+#[cfg(test)]
 mod tests;
 
 use data::DataActor;
