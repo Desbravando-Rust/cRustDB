@@ -32,6 +32,7 @@ ruvector.db
 # AgendDB
 agentdb.rvf
 agentdb.rvf.lock
+agentdb.rvf.idmap.json
 
 # AI Workflow
 .claude/CLAUDE.md
