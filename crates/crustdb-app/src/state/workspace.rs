@@ -388,6 +388,7 @@ impl AppState {
             }
             Event::ResultStarted { req, .. }
             | Event::Rows { req, .. }
+            | Event::FetchDone { req }
             | Event::StatementDone { req, .. }
             | Event::ExportDone { req, .. }
             | Event::ExecError { req, .. } => {
