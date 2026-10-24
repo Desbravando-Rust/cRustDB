@@ -75,6 +75,9 @@ impl TableTab {
     pub fn discard_pending(&mut self) {
         self.pending.clear();
         self.pending_row = None;
+        if self.notice.as_deref() == Some(PENDING_NOTICE) {
+            self.notice = None;
+        }
     }
 
     /// Success drops the staged changes and reloads the page; a failure keeps them for another

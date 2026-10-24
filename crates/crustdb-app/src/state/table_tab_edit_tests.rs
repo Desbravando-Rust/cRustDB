@@ -213,3 +213,26 @@ fn begin_edit_skips_text_at_memory_cap() {
     // Assert
     assert!(t.editing.is_none());
 }
+
+#[test]
+fn discard_pending_clears_only_the_pending_notice() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    type_and_commit(&mut t, 0, 1, "a");
+    t.notice = Some(NOTICE.into());
+
+    // Act
+    t.discard_pending();
+
+    // Assert
+    assert!(t.notice.is_none());
+
+    // Arrange
+    t.notice = Some("boom".into());
+
+    // Act
+    t.discard_pending();
+
+    // Assert
+    assert_eq!(t.notice.as_deref(), Some("boom"));
+}
