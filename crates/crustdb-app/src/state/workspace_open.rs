@@ -24,7 +24,11 @@ impl AppState {
                     object: t.object.clone(),
                 });
             }
-            for q in &w.queries {
+            for q in &mut w.queries {
+                // The new actor starts with no transaction and no statement in flight.
+                q.tx = crate::runtime::TxState::Idle;
+                q.running = None;
+                q.bg = false;
                 self.outbox.push(Command::OpenEditor {
                     ws: id,
                     tab: q.id,
