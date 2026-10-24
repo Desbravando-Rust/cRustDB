@@ -47,3 +47,12 @@ END { exit bad }
 ```
 
 All test files already pass; it can be wired into `.githooks/pre-commit` or `make lint`.
+
+## Changelog
+
+Don't edit `CHANGELOG.md` in PRs. Add one fragment per PR to `changelog.d/`:
+
+- Name: `<ID>.<added|changed|fixed>.md` (issue number and type).
+- Content: one English line, `- [#ID](https://github.com/Desbravando-Rust/cRustDB/issues/ID) — Short summary.`
+
+`make release` turns the fragments into a `## [X.Y.Z]` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [SemVer](https://semver.org/)) and deletes them in the `chore(release): vX.Y.Z` commit. Release candidates never get a section.
