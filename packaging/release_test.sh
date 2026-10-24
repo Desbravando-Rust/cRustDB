@@ -58,4 +58,9 @@ echo "- x" >"$CHANGELOG_DIR/13.added.md"
 "$script" changelog 0.2.0-rc1 >/dev/null 2>&1 && fail "0.2.0-rc1 deveria ser rejeitado"
 [ -f "$CHANGELOG_DIR/13.added.md" ] || fail "RC não deve consumir fragmentos"
 
+# Act & Assert: seção já existente não é duplicada
+"$script" changelog 0.2.0 >/dev/null 2>&1 && fail "[0.2.0] já existe, deveria falhar"
+[ "$(grep -c '^## \[0.2.0\]$' "$CHANGELOG_FILE")" = 1 ] || fail "seção [0.2.0] duplicada"
+[ -f "$CHANGELOG_DIR/13.added.md" ] || fail "seção duplicada não deve consumir fragmentos"
+
 [ "$fails" -eq 0 ] && echo "ok" || exit 1

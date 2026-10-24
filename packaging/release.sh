@@ -37,11 +37,16 @@ check_fragments() {
   done
 }
 
+check_section() {
+  ! grep -qxF "## [$1]" "$changelog_file" || { echo "❌ $changelog_file já tem a seção [$1]."; exit 1; }
+}
+
 # Insere `## [X.Y.Z]` acima da versão anterior (abaixo do cabeçalho) e apaga os fragmentos.
 changelog() {
   local version="${1:-}" body kind f n tmp
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ Versão inválida (RC não gera seção): '$version'"; exit 1; }
   check_fragments
+  check_section "$version"
 
   body="## [$version]"
   for kind in added changed fixed; do
@@ -87,6 +92,7 @@ bump() {
     echo "❌ Tag v$next já existe em $remote."
     exit 1
   fi
+  check_section "$next"
   confirm "Bump $cur -> $next e abrir PR?"
 
   git switch -q -c "release/v$next"
