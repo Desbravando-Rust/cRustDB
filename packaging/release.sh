@@ -136,7 +136,7 @@ release() {
   fi
   if [[ "$version" == *-rc* ]]; then
     confirm "Criar a pre-release v$version a partir de $remote/main?"
-    gh release create "v$version" --prerelease --target main --title "v$version" --notes "Release candidate $version."
+    gh release create "v$version" --prerelease --target "$(git rev-parse "$remote/main")" --title "v$version" --notes "Release candidate $version."
   else
     cargo="$(git show "$remote/main:$manifest" | awk -F'"' '/^version = / {print $2; exit}')"
     if [ "$cargo" = "$version" ] && git show "$remote/main:$changelog_file" | grep -qxF "## [$version]"; then
@@ -144,7 +144,7 @@ release() {
       tmp="$(mktemp)"
       git show "$remote/main:$changelog_file" >"$tmp"
       changelog_file="$tmp" notes "$version" >"$tmp.notes"
-      gh release create "v$version" --target main --title "v$version" --notes-file "$tmp.notes"
+      gh release create "v$version" --target "$(git rev-parse "$remote/main")" --title "v$version" --notes-file "$tmp.notes"
       rm -f "$tmp" "$tmp.notes"
     else
       bump "$version"

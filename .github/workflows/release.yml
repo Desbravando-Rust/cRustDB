@@ -11,7 +11,6 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     env:
-      GH_TOKEN: ${{ github.token }}
       HAS_SENTRY: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
     steps:
       - uses: actions/checkout@v7
@@ -40,27 +39,16 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       - name: Upload installers to the release
         run: gh release upload "$GITHUB_REF_NAME" target/dist/*.AppImage target/dist/*.tar.gz target/dist/*.deb target/dist/*.rpm target/dist/*.flatpak --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Release notes from CHANGELOG
         if: steps.ver.outputs.kind == 'real'
         run: |
           packaging/release.sh notes "${GITHUB_REF_NAME#v}" > release-notes.md
           if [ -s release-notes.md ]; then gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
           else echo "::warning::no CHANGELOG section for $GITHUB_REF_NAME"; fi
-      # Normally a no-op (make release already merged the CHANGELOG); opens a PR, never pushes to main.
-      - name: Fold changelog fragments into CHANGELOG.md
-        if: steps.ver.outputs.kind == 'real'
-        run: |
-          compgen -G "changelog.d/*.md" >/dev/null || { echo "no fragments"; exit 0; }
-          branch="release/changelog-$GITHUB_REF_NAME"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch -q origin main
-          git switch -q -c "$branch" origin/main
-          packaging/release.sh changelog "${GITHUB_REF_NAME#v}"
-          git add CHANGELOG.md changelog.d
-          git commit -q -m "chore(release): changelog $GITHUB_REF_NAME"
-          git push -q -u origin "$branch"
-          gh pr create --base main --title "chore(release): changelog $GITHUB_REF_NAME" --body "Fold \`changelog.d/\` into the CHANGELOG for $GITHUB_REF_NAME."
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Sentry not configured
         if: env.HAS_SENTRY != 'true'
         run: echo "::warning::Sentry not configured; skipping release"
@@ -75,3 +63,23 @@ jobs:
         with:
           environment: production
           release: crustdb-app@${{ steps.ver.outputs.version }}
+      # Normally a no-op (make release already merged the CHANGELOG); opens a PR, never pushes to main.
+      # continue-on-error: PR creation needs Settings > Actions > "Allow GitHub Actions to create and approve pull requests".
+      - name: Fold changelog fragments into CHANGELOG.md
+        if: steps.ver.outputs.kind == 'real'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          compgen -G "changelog.d/*.md" >/dev/null || { echo "no fragments"; exit 0; }
+          ! grep -qxF "## [${GITHUB_REF_NAME#v}]" CHANGELOG.md || { echo "CHANGELOG already has the section"; exit 0; }
+          branch="release/changelog-$GITHUB_REF_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin main
+          git switch -q -c "$branch" origin/main
+          packaging/release.sh changelog "${GITHUB_REF_NAME#v}"
+          git add CHANGELOG.md changelog.d
+          git commit -q -m "chore(release): changelog $GITHUB_REF_NAME"
+          git push -q -u origin "$branch"
+          gh pr create --base main --title "chore(release): changelog $GITHUB_REF_NAME" --body "Fold \`changelog.d/\` into the CHANGELOG for $GITHUB_REF_NAME."
