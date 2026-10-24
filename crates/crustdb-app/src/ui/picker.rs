@@ -11,6 +11,8 @@ pub enum Pick {
     Open,
     Save(TabId),
     Export(TabId),
+    /// For the connection form whose draft has this id.
+    SqliteDb(crustdb_core::model::ConnectionId),
 }
 
 pub struct Picker {
@@ -37,11 +39,15 @@ impl Picker {
                     .add_filter("CSV", &["csv"])
                     .add_filter("JSON Lines", &["jsonl"])
                     .add_filter("SQL", &["sql"]),
-                _ => d.add_filter("SQL", &["sql"]),
+                Pick::SqliteDb(_) => d
+                    .add_filter("SQLite", &["db", "sqlite", "sqlite3"])
+                    .add_filter("All files", &["*"]),
+                Pick::Open | Pick::Save(_) => d.add_filter("SQL", &["sql"]),
             };
             let path = match pick {
-                Pick::Open => d.pick_file(),
-                _ => d.set_file_name(name).save_file(),
+                // The SQLite driver opens existing files only, so no save dialog here.
+                Pick::Open | Pick::SqliteDb(_) => d.pick_file(),
+                Pick::Save(_) | Pick::Export(_) => d.set_file_name(name).save_file(),
             };
             if let Some(p) = path {
                 let _ = tx.send((pick, p));
