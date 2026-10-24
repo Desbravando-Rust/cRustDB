@@ -7,6 +7,10 @@ Delivered work, grouped by date (newest first). One line per issue.
 ## 2026-10-23
 
 - [#5](https://github.com/Desbravando-Rust/cRustDB/issues/5) — Inline editing of a single cell in the Data tab for tables with a primary key.
+- [#78](https://github.com/Desbravando-Rust/cRustDB/issues/78) — Exact sort for integer and decimal result columns (no f64 precision loss).
+- [#77](https://github.com/Desbravando-Rust/cRustDB/issues/77) — Clarify the status bar process CPU tooltip: 100% equals one core, summed over threads.
+- [#75](https://github.com/Desbravando-Rust/cRustDB/issues/75) — Icons generator moved out of the repository (standalone crate outside the workspace); `icons` make target removed.
+- [#74](https://github.com/Desbravando-Rust/cRustDB/issues/74) — Register Sentry releases on tag builds in the release workflow (crustdb-app@version, production env, commit association).
 - [#14](https://github.com/Desbravando-Rust/cRustDB/issues/14) — Read-only ER diagram for a schema or database, opened from the sidebar context menu.
 - [#17](https://github.com/Desbravando-Rust/cRustDB/issues/17) — Find and replace bar in the SQL query editor (Ctrl+F on query tabs), with match case, previous/next, replace and replace all.
 - [#16](https://github.com/Desbravando-Rust/cRustDB/issues/16) — SQL beautify in the editor (Ctrl+Shift+F or Format button); formats whole buffer or the selected statements.
