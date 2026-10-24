@@ -328,6 +328,7 @@ impl EditorActor {
                 for e in rows_events(req, rows, exhausted) {
                     self.out.emit(e);
                 }
+                self.out.emit(Event::FetchDone { req });
                 if exhausted {
                     self.paused = None;
                 } else if let Some(p) = self.paused.as_mut() {
