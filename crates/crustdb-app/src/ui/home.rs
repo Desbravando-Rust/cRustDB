@@ -30,94 +30,97 @@ const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
-    ui.add(
-        egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
-            .max_height(96.0)
-            .alt_text("cRustDB logo"),
-    );
-    ui.horizontal(|ui| {
-        ui.heading("cRustDB");
-        if ui.button(format!("{} New", icon::PLUS)).clicked() {
-            out.push(Intent::NewConnection);
-        }
-    });
-    if let Some(w) = &state.config.warning {
-        ui.colored_label(ui.visuals().warn_fg_color, w);
-    }
-    ui.separator();
-    if state.config.connections.is_empty() {
-        ui.weak("No saved connections. Create one with New.");
-    }
-    for c in &state.config.connections {
-        let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
-        let live = state
-            .live_workspace(c.id)
-            .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
-        let connecting = live.is_some_and(|w| w.status == Status::Connecting);
+    egui::Panel::bottom("home_book_promo")
+        .resizable(false)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::Image::new(egui::include_image!(
+                        "../../../../assets/imgs/book-cover.png"
+                    ))
+                    .max_height(48.0)
+                    .alt_text("Desbravando Rust book cover"),
+                );
+                ui.vertical(|ui| {
+                    ui.weak(
+                        "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+                    );
+                    ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
+                });
+            });
+        });
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.add(
+            egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
+                .max_height(96.0)
+                .alt_text("cRustDB logo"),
+        );
         ui.horizontal(|ui| {
-            let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
-            ui.label(engine).on_hover_text(engine_name(c.driver));
-            let name = egui::RichText::new(&c.name).strong();
-            if ui.selectable_label(false, name).double_clicked() && !connecting {
-                out.push(Intent::Connect(c.id));
+            ui.heading("cRustDB");
+            if ui.button(format!("{} New", icon::PLUS)).clicked() {
+                out.push(Intent::NewConnection);
             }
-            ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
-                    .on_hover_text("Delete")
-                    .clicked()
-                {
-                    out.push(Intent::DeleteConnection(c.id));
-                }
-                if ui
-                    .button(icon::PENCIL_SIMPLE)
-                    .on_hover_text("Edit")
-                    .clicked()
-                {
-                    out.push(Intent::EditConnection(c.id));
-                }
-                if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
-                    if ui.button("Open").clicked() {
-                        out.push(Intent::SwitchWorkspace(w.id));
-                    }
-                    ui.colored_label(ACTIVE, "Active");
-                    return;
-                }
-                let label = if connecting {
-                    "Connecting..."
-                } else {
-                    "Connect"
-                };
-                if ui
-                    .add_enabled(!connecting, egui::Button::new(label))
-                    .clicked()
-                {
+        });
+        if let Some(w) = &state.config.warning {
+            ui.colored_label(ui.visuals().warn_fg_color, w);
+        }
+        ui.separator();
+        if state.config.connections.is_empty() {
+            ui.weak("No saved connections. Create one with New.");
+        }
+        for c in &state.config.connections {
+            let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
+            let live = state
+                .live_workspace(c.id)
+                .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
+            let connecting = live.is_some_and(|w| w.status == Status::Connecting);
+            ui.horizontal(|ui| {
+                let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
+                ui.label(engine).on_hover_text(engine_name(c.driver));
+                let name = egui::RichText::new(&c.name).strong();
+                if ui.selectable_label(false, name).double_clicked() && !connecting {
                     out.push(Intent::Connect(c.id));
                 }
+                ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
+                        .on_hover_text("Delete")
+                        .clicked()
+                    {
+                        out.push(Intent::DeleteConnection(c.id));
+                    }
+                    if ui
+                        .button(icon::PENCIL_SIMPLE)
+                        .on_hover_text("Edit")
+                        .clicked()
+                    {
+                        out.push(Intent::EditConnection(c.id));
+                    }
+                    if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
+                        if ui.button("Open").clicked() {
+                            out.push(Intent::SwitchWorkspace(w.id));
+                        }
+                        ui.colored_label(ACTIVE, "Active");
+                        return;
+                    }
+                    let label = if connecting {
+                        "Connecting..."
+                    } else {
+                        "Connect"
+                    };
+                    if ui
+                        .add_enabled(!connecting, egui::Button::new(label))
+                        .clicked()
+                    {
+                        out.push(Intent::Connect(c.id));
+                    }
+                });
             });
-        });
-        if let Some(Status::Failed(e)) = ws.map(|w| &w.status) {
-            ui.colored_label(ui.visuals().error_fg_color, e);
+            if let Some(Status::Failed(e)) = ws.map(|w| &w.status) {
+                ui.colored_label(ui.visuals().error_fg_color, e);
+            }
         }
-    }
-    ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-        ui.horizontal(|ui| {
-            ui.add(
-                egui::Image::new(egui::include_image!(
-                    "../../../../assets/imgs/book-cover.png"
-                ))
-                .max_height(48.0)
-                .alt_text("Desbravando Rust book cover"),
-            );
-            ui.vertical(|ui| {
-                ui.weak(
-                    "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
-                );
-                ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
-            });
-        });
-        ui.separator();
     });
     out
 }
