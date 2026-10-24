@@ -186,6 +186,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             if !tab.pending.is_empty() {
                 let save = egui::Button::new("Save");
                 if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
+                    // The grid is drawn after the footer: an open editor would be cancelled
+                    // this frame, so stage its text now.
+                    tab.commit_edit();
                     out.push(Intent::SavePending(id));
                 }
                 if ui.button("Discard").clicked() {
@@ -413,6 +416,29 @@ mod tests {
                 .any(|i| matches!(i, Intent::SavePending(TabId(1))))
         );
         assert!(out.iter().any(|i| matches!(i, Intent::DiscardPending(_))));
+    }
+
+    #[test]
+    fn save_commits_open_cell_editor_first() {
+        // Arrange
+        let mut t = staged();
+        t.editing = Some((0, 1, "typed".into()));
+        let mut out = vec![];
+        let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+        h.run();
+
+        // Act
+        h.get_by_label("Save").click();
+        h.run();
+        drop(h);
+
+        // Assert
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, Intent::SavePending(TabId(1))))
+        );
+        assert!(t.editing.is_none());
+        assert_eq!(t.pending, vec![(1, Some("typed".into()))]);
     }
 
     #[test]
