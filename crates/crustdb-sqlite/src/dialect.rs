@@ -63,6 +63,7 @@ mod tests {
 
     #[test]
     fn sqlite_param_is_numbered() {
+        // Act & Assert
         assert_eq!(
             SqliteDialect.param(3, &col("id", TypeCategory::Integer)),
             "?3"
@@ -71,6 +72,7 @@ mod tests {
 
     #[test]
     fn sqlite_contains_lowercases_both_sides() {
+        // Act & Assert
         assert_eq!(
             SqliteDialect.ci_like(&col("e", TypeCategory::Text), "?1"),
             "LOWER(CAST(\"e\" AS TEXT)) LIKE LOWER(?1) ESCAPE '!'"
@@ -79,6 +81,7 @@ mod tests {
 
     #[test]
     fn sqlite_select_caps_text() {
+        // Act & Assert
         assert_eq!(
             SqliteDialect.select_expr(&col("t", TypeCategory::Text)),
             "substr(CAST(\"t\" AS TEXT), 1, 1048576) AS \"t\""
@@ -91,12 +94,15 @@ mod tests {
 
     #[test]
     fn sqlite_qualified_name() {
+        // Arrange
         let o = ObjectRef {
             database: "main".into(),
             schema: None,
             name: "t".into(),
             kind: ObjectKind::Table,
         };
+
+        // Act & Assert
         assert_eq!(SqliteDialect.qualified_name(&o), "\"main\".\"t\"");
     }
 }

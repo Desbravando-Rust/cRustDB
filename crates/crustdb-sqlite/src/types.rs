@@ -41,6 +41,7 @@ mod tests {
 
     #[test]
     fn categories_follow_affinity() {
+        // Arrange
         use TypeCategory::*;
         let cases = [
             (Some("INTEGER"), Integer),
@@ -54,6 +55,8 @@ mod tests {
             (Some("NUMERIC(10,2)"), Decimal),
             (Some("DATETIME"), Decimal),
         ];
+
+        // Act & Assert
         for (decl, want) in cases {
             assert_eq!(category(decl), want, "{decl:?}");
         }
@@ -61,6 +64,7 @@ mod tests {
 
     #[test]
     fn cells_follow_value_type() {
+        // Act & Assert
         assert_eq!(value_to_cell(ValueRef::Null), Cell::Null);
         assert_eq!(
             value_to_cell(ValueRef::Integer(-5)),

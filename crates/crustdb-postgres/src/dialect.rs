@@ -62,11 +62,13 @@ mod tests {
 
     #[test]
     fn quote_ident_doubles_quote_char() {
+        // Act & Assert
         assert_eq!(PgDialect.quote_ident(r#"we"ird Name"#), r#""we""ird Name""#);
     }
 
     #[test]
     fn pg_param_casts_text_to_column_type() {
+        // Act & Assert
         assert_eq!(
             PgDialect.param(1, &col("id", "int4", TypeCategory::Integer)),
             "CAST($1 AS int4)"
@@ -75,6 +77,7 @@ mod tests {
 
     #[test]
     fn pg_select_caps_text_transfer() {
+        // Act & Assert
         assert_eq!(
             PgDialect.select_expr(&col("body", "text", TypeCategory::Text)),
             r#"left("body"::text, 1048576) AS "body""#
@@ -83,6 +86,7 @@ mod tests {
 
     #[test]
     fn pg_select_non_text_casts_to_text() {
+        // Act & Assert
         assert_eq!(
             PgDialect.select_expr(&col("n", "int4", TypeCategory::Integer)),
             r#""n"::text AS "n""#
@@ -91,6 +95,7 @@ mod tests {
 
     #[test]
     fn pg_contains_uses_ilike() {
+        // Act & Assert
         assert_eq!(
             PgDialect.ci_like(&col("e", "text", TypeCategory::Text), "$1"),
             r#""e"::text ILIKE $1 ESCAPE '!'"#
@@ -99,6 +104,7 @@ mod tests {
 
     #[test]
     fn pg_as_text() {
+        // Act & Assert
         assert_eq!(
             PgDialect.as_text(&col("c", "int4", TypeCategory::Integer)),
             r#""c"::text"#
@@ -116,6 +122,7 @@ mod tests {
 
     #[test]
     fn pg_qualified_name() {
+        // Act & Assert
         assert_eq!(
             PgDialect.qualified_name(&obj(Some("public"))),
             r#""public"."t""#
@@ -125,6 +132,7 @@ mod tests {
 
     #[test]
     fn pg_contains_end_to_end() {
+        // Arrange
         let q = TableQuery {
             object: obj(Some("public")),
             columns: vec![col("e", "text", TypeCategory::Text)],
@@ -137,7 +145,11 @@ mod tests {
             limit: Some(10),
             offset: 0,
         };
+
+        // Act
         let b = build_table_query(&PgDialect, &q).unwrap();
+
+        // Assert
         assert_eq!(
             b.sql,
             r#"SELECT left("e"::text, 1048576) AS "e" FROM "public"."t" WHERE "e"::text ILIKE CAST($1 AS text) ESCAPE '!' LIMIT 10 OFFSET 0"#

@@ -66,8 +66,11 @@ async fn names(s: &mut Box<dyn Session>, kind: ObjectKind) -> Vec<String> {
 
 #[tokio::test]
 async fn lists_main_tables_views_columns() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = connect(f.path()).await;
+
+    // Act & Assert
     assert_eq!(s.server_version().product, Product::Sqlite);
     assert_eq!(s.server_version().major, 3);
     for sql in FIXTURE {
@@ -114,11 +117,14 @@ async fn lists_main_tables_views_columns() {
 
 #[tokio::test]
 async fn ddl_returns_create_sql() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = connect(f.path()).await;
     for sql in FIXTURE {
         run(&mut s, sql).await;
     }
+
+    // Act & Assert
     let i = SqliteDriver.introspector();
     let ddl = i
         .ddl(s.as_mut(), &obj("users", ObjectKind::Table))
@@ -134,11 +140,14 @@ async fn ddl_returns_create_sql() {
 
 #[tokio::test]
 async fn quote_ident_handles_double_quote() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = connect(f.path()).await;
     let d = SqliteDialect;
     let (t, c) = (d.quote_ident("a\"b"), d.quote_ident("c\"d"));
     run(&mut s, &format!("CREATE TABLE {t}({c} TEXT)")).await;
+
+    // Act & Assert
     run(&mut s, &format!("INSERT INTO {t} VALUES ('Hello'), ('x')")).await;
 
     let o = obj("a\"b", ObjectKind::Table);

@@ -134,6 +134,7 @@ mod tests {
 
     #[test]
     fn categories() {
+        // Arrange
         use TypeCategory::*;
         let cases = [
             (T::MYSQL_TYPE_LONG, 63, Integer),
@@ -151,6 +152,8 @@ mod tests {
             (T::MYSQL_TYPE_STRING, 63, Binary),
             (T::MYSQL_TYPE_BIT, 63, Other),
         ];
+
+        // Act & Assert
         for (t, cs, want) in cases {
             assert_eq!(category_for_column(&col(t, cs)), want, "{t:?}/{cs}");
         }
@@ -158,9 +161,12 @@ mod tests {
 
     #[test]
     fn text_protocol_bytes_follow_charset() {
+        // Arrange
         let bin = ColInfo::of(&col(T::MYSQL_TYPE_BLOB, 63));
         let text = ColInfo::of(&col(T::MYSQL_TYPE_VAR_STRING, 45));
         let json = ColInfo::of(&col(T::MYSQL_TYPE_JSON, 63));
+
+        // Act & Assert
         assert!(matches!(
             value_to_cell(Value::Bytes(vec![0, 1]), &bin),
             Cell::Bytes { total_len: 2, .. }
@@ -175,6 +181,7 @@ mod tests {
 
     #[test]
     fn binary_protocol_dates_and_times() {
+        // Arrange
         let date = info(T::MYSQL_TYPE_DATE, 0);
         let dt0 = info(T::MYSQL_TYPE_DATETIME, 0);
         let dt6 = info(T::MYSQL_TYPE_DATETIME, 6);
@@ -183,6 +190,8 @@ mod tests {
         let time = info(T::MYSQL_TYPE_TIME, 0);
         let time6 = info(T::MYSQL_TYPE_TIME, 6);
         let d = |us| Value::Date(2024, 1, 2, 3, 4, 5, us);
+
+        // Act & Assert
         assert_eq!(
             txt(value_to_cell(Value::Date(2024, 1, 2, 0, 0, 0, 0), &date)),
             "2024-01-02"
@@ -213,7 +222,10 @@ mod tests {
 
     #[test]
     fn numbers_are_decimal_text() {
+        // Arrange
         let c = info(T::MYSQL_TYPE_LONGLONG, 0);
+
+        // Act & Assert
         assert_eq!(txt(value_to_cell(Value::Int(-5), &c)), "-5");
         assert_eq!(
             txt(value_to_cell(Value::UInt(u64::MAX), &c)),

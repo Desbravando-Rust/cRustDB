@@ -24,6 +24,7 @@ mod tests {
 
     #[test]
     fn maps_builtin_oids() {
+        // Arrange
         use TypeCategory::*;
         let cases = [
             (21, Integer),
@@ -51,6 +52,8 @@ mod tests {
             (600, Other),
             (1007, Other),
         ];
+
+        // Act & Assert
         for (oid, want) in cases {
             assert_eq!(category_for_oid(oid), want, "oid {oid}");
         }
