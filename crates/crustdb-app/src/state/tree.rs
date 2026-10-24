@@ -447,7 +447,6 @@ mod tests {
 
     #[test]
     fn folders_match_spec_per_driver() {
-        // Arrange
         use ObjectKind::*;
 
         // Act & Assert
@@ -512,7 +511,6 @@ mod tests {
 
     #[test]
     fn double_click_table_opens_data_tab_function_opens_ddl() {
-        // Arrange
         use ObjectKind::*;
 
         // Act & Assert

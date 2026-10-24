@@ -63,9 +63,9 @@ async fn select_streams_rows_in_pages() {
     // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
+    affected(&mut s, "CREATE TABLE t(n INTEGER)").await;
 
     // Act & Assert
-    affected(&mut s, "CREATE TABLE t(n INTEGER)").await;
     assert_eq!(affected(&mut s, SEED).await, Some(25));
 
     let h = s

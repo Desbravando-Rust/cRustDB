@@ -176,8 +176,10 @@ mod tests {
     }
     #[test]
     fn insert_values_uses_tuple_count() {
-        // Act & Assert
+        // Arrange
         let c = classify("INSERT INTO t VALUES (1)", DriverKind::Mysql);
+
+        // Act & Assert
         assert_eq!(estimate_need(&c), EstimateNeed::None);
         assert_eq!(verdict("INSERT INTO t VALUES (1)", None), Verdict::Run);
     }
