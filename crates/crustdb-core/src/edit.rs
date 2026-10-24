@@ -139,7 +139,10 @@ mod tests {
 
     #[test]
     fn update_binds_value_and_all_pk_columns() {
+        // Act
         let b = build(&row(), 1, Some("new")).unwrap();
+
+        // Assert
         assert_eq!(
             b.sql,
             r#"UPDATE "public"."t" SET "c" = $1 WHERE "id" = $2 AND "k" = $3"#
@@ -156,14 +159,20 @@ mod tests {
 
     #[test]
     fn update_null_value_binds_none() {
+        // Act
         let b = build(&row(), 1, None).unwrap();
+
+        // Assert
         assert_eq!(b.params[0], Param(None));
     }
 
     #[test]
     fn rejects_table_without_pk() {
+        // Arrange
         let cs = vec![col("id", false), col("c", false)];
         let r = vec![text("1"), text("x")];
+
+        // Act & Assert
         let t = build_update(&TestDialect, &obj(ObjectKind::Table), &cs, &r, 1, None);
         assert_eq!(t.unwrap_err(), QueryError::NoPrimaryKey);
         let v = build_update(
@@ -179,6 +188,7 @@ mod tests {
 
     #[test]
     fn rejects_bytes_or_truncated_target_and_key() {
+        // Arrange
         let bytes = Cell::Bytes {
             value: Box::new([1]),
             total_len: 1,
@@ -190,6 +200,8 @@ mod tests {
         };
         let mut r = row();
         r[1] = bytes.clone();
+
+        // Act & Assert
         assert_eq!(
             build(&r, 1, Some("v")).unwrap_err(),
             QueryError::NotEditable("c".into())
@@ -215,9 +227,12 @@ mod tests {
     /// The server caps text at `CELL_MEMORY_CAP` without flagging it; a full-cap value may be cut.
     #[test]
     fn rejects_cells_at_memory_cap() {
+        // Arrange
         let full = text(&"a".repeat(CELL_MEMORY_CAP));
         let mut r = row();
         r[1] = full.clone();
+
+        // Act & Assert
         assert_eq!(
             build(&r, 1, Some("v")).unwrap_err(),
             QueryError::NotEditable("c".into())
@@ -232,8 +247,11 @@ mod tests {
 
     #[test]
     fn rejects_null_pk_cell() {
+        // Arrange
         let mut r = row();
         r[0] = Cell::Null;
+
+        // Act & Assert
         assert_eq!(
             build(&r, 1, Some("v")).unwrap_err(),
             QueryError::NotEditable("id".into())
@@ -242,6 +260,7 @@ mod tests {
 
     #[test]
     fn rejects_column_out_of_range() {
+        // Act & Assert
         assert!(matches!(
             build(&row(), 3, Some("v")).unwrap_err(),
             QueryError::UnknownColumn(_)

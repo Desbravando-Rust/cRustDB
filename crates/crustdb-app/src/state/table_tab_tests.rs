@@ -347,7 +347,10 @@ fn editable_tab(kind: ObjectKind, with_pk: bool) -> TableTab {
 
 #[test]
 fn edit_cell_builds_update_only_for_table_with_pk() {
+    // Arrange
     let mut t = editable_tab(ObjectKind::Table, true);
+
+    // Act & Assert
     t.begin_edit(0, 1);
     assert_eq!(t.editing, Some((0, 1, "old".into())));
     if let Some((_, _, s)) = t.editing.as_mut() {
@@ -380,8 +383,11 @@ fn edit_cell_builds_update_only_for_table_with_pk() {
 
 #[test]
 fn cell_updated_marks_needs_fetch() {
+    // Arrange
     let mut t = editable_tab(ObjectKind::Table, true);
     let _ = t.set_null(0, 1, RequestId(3));
+
+    // Act & Assert
     t.cell_updated(RequestId(2), None);
     assert!(!t.needs_fetch, "stale id ignored");
     t.cell_updated(RequestId(3), None);
@@ -390,10 +396,15 @@ fn cell_updated_marks_needs_fetch() {
 
 #[test]
 fn update_error_keeps_fetch_in_flight() {
+    // Arrange
     let mut t = editable_tab(ObjectKind::Table, true);
     let _ = t.set_null(0, 1, RequestId(3));
     t.fetch(RequestId(4));
+
+    // Act
     t.cell_updated(RequestId(3), Some("boom".into()));
+
+    // Assert
     assert_eq!(t.loading, Some(RequestId(4)));
     assert_eq!(t.notice.as_deref(), Some("boom"));
     assert!(!t.needs_fetch && t.edit_req.is_none());
@@ -401,8 +412,13 @@ fn update_error_keeps_fetch_in_flight() {
 
 #[test]
 fn begin_edit_skips_text_at_memory_cap() {
+    // Arrange
     let mut t = editable_tab(ObjectKind::Table, true);
     t.rows[0][1] = text(&"a".repeat(crustdb_core::model::CELL_MEMORY_CAP));
+
+    // Act
     t.begin_edit(0, 1);
+
+    // Assert
     assert!(t.editing.is_none());
 }

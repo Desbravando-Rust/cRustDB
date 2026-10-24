@@ -334,8 +334,13 @@ mod tests {
 
     #[test]
     fn enter_in_cell_editor_commits_typed_text() {
+        // Arrange
         let mut t = tab();
+
+        // Act
         let out = run_keys(&mut t, "x", egui::Key::Enter);
+
+        // Assert
         assert!(
             out.iter()
                 .any(|i| matches!(i, Intent::CommitEdit(TabId(1))))
@@ -345,8 +350,13 @@ mod tests {
 
     #[test]
     fn escape_in_cell_editor_cancels() {
+        // Arrange
         let mut t = tab();
+
+        // Act
         let out = run_keys(&mut t, "x", egui::Key::Escape);
+
+        // Assert
         assert!(out.is_empty());
         assert!(t.editing.is_none());
     }

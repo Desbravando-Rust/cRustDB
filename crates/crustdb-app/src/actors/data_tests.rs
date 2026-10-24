@@ -44,11 +44,14 @@ async fn ready(h: &mut H) {
 
 #[tokio::test]
 async fn update_cell_opens_editor_session_and_emits_updated() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
     });
     ready(&mut h).await;
+
+    // Act & Assert
     assert_eq!(editors(&h), 0, "FetchPage must not open a writable session");
     *h.drv.log.affected.lock().unwrap() = Some(1);
     update(&mut h, 2);
@@ -73,13 +76,18 @@ async fn update_cell_opens_editor_session_and_emits_updated() {
 
 #[tokio::test]
 async fn update_cell_zero_rows_reports_row_not_found() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
     });
     ready(&mut h).await;
     *h.drv.log.affected.lock().unwrap() = Some(0);
+
+    // Act
     update(&mut h, 2);
+
+    // Assert
     assert!(matches!(
         next(&h.rx).await,
         Event::CellUpdated { req: RequestId(2), error: Some(e) } if e == "row not found"
@@ -96,12 +104,15 @@ async fn failed_update(h: &mut H, req: u64) {
 
 #[tokio::test]
 async fn connection_error_drops_writer_and_next_update_reconnects() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
     });
     ready(&mut h).await;
     h.drv.log.drop_next.store(true, Ordering::SeqCst);
+
+    // Act & Assert
     failed_update(&mut h, 2).await;
     update(&mut h, 3);
     assert!(matches!(
@@ -113,6 +124,7 @@ async fn connection_error_drops_writer_and_next_update_reconnects() {
 
 #[tokio::test]
 async fn query_error_keeps_writer() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
@@ -131,6 +143,8 @@ async fn query_error_keeps_writer() {
         .lock()
         .unwrap()
         .push(("UPDATE".into(), e));
+
+    // Act & Assert
     failed_update(&mut h, 2).await;
     failed_update(&mut h, 3).await;
     assert_eq!(editors(&h), 1);

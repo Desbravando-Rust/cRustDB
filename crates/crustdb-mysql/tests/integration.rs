@@ -316,6 +316,7 @@ async fn update_cell_via_build_update_affects_one_row() {
     use crustdb_core::edit::build_update;
     use crustdb_core::model::{Cell, ColumnMeta, ObjectKind, ObjectRef, TypeCategory};
 
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = MysqlDriver
         .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
@@ -361,6 +362,8 @@ async fn update_cell_via_build_update_affects_one_row() {
         Some("z".into()),
     )
     .unwrap();
+
+    // Act & Assert
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
     s.start("SELECT v FROM e.t WHERE k = 'a'", ExecMode::Read)
