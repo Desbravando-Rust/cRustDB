@@ -197,8 +197,11 @@ mod tests {
 
     #[test]
     fn request_ids_are_monotonic() {
+        // Arrange
         let (rt, _rx) = Runtime::start(Arc::new(|| {}), registry());
         let a = rt.next_request_id();
+
+        // Act & Assert
         let b = rt.next_request_id();
         assert!(b.0 > a.0);
         rt.shutdown();
@@ -206,6 +209,7 @@ mod tests {
 
     #[test]
     fn events_wake_ui_via_repaint() {
+        // Arrange
         let n = Arc::new(AtomicUsize::new(0));
         let n2 = n.clone();
         let (rt, rx) = Runtime::start(
@@ -217,6 +221,8 @@ mod tests {
         for _ in 0..3 {
             rt.send(Command::CancelTab { tab: TabId(1) });
         }
+
+        // Act & Assert
         for _ in 0..3 {
             let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
             assert!(matches!(ev, Event::Notice { tab: TabId(1), .. }));
@@ -227,6 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn rows_batched_at_most_500() {
+        // Arrange
         let rows: Vec<Row> = (0..1200)
             .map(|i| {
                 vec![Cell::Text {
@@ -258,7 +265,11 @@ mod tests {
             .await
             .unwrap();
         let f = s.fetch(2000).await.unwrap();
+
+        // Act
         let evs = rows_events(RequestId(1), f.rows, f.exhausted);
+
+        // Assert
         let sizes: Vec<_> = evs
             .iter()
             .map(|e| match e {
@@ -273,11 +284,14 @@ mod tests {
 
     #[test]
     fn savepoint_is_not_a_toolbar_action() {
+        // Arrange
         let (rt, rx) = Runtime::start(Arc::new(|| {}), registry());
         rt.send(Command::Tx {
             tab: TabId(2),
             op: TxOp::Savepoint,
         });
+
+        // Act & Assert
         let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(matches!(ev, Event::Notice { tab: TabId(2), text } if text.contains("savepoint")));
         rt.shutdown();
@@ -285,8 +299,13 @@ mod tests {
 
     #[test]
     fn shutdown_joins_runtime_thread() {
+        // Arrange
         let (rt, rx) = Runtime::start(Arc::new(|| {}), registry());
+
+        // Act
         rt.shutdown();
+
+        // Assert
         // shutdown() returned, so the thread is joined and its emitter dropped.
         assert!(matches!(
             rx.try_recv(),

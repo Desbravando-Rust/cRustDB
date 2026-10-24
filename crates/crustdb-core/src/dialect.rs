@@ -263,7 +263,10 @@ mod tests {
 
     #[test]
     fn multi_sort_order_preserved() {
+        // Arrange
         let q = tq(vec![], vec![sort("b", true), sort("a", false)]);
+
+        // Act & Assert
         assert!(build(&q).sql.ends_with(
             r#"ORDER BY "public"."t"."b" DESC, "public"."t"."a" ASC LIMIT 301 OFFSET 0"#
         ));
@@ -271,14 +274,18 @@ mod tests {
 
     #[test]
     fn default_sort_uses_pk() {
+        // Arrange
         let mut q = tq(vec![], vec![]);
         q.columns[0].is_primary_key = true;
+
+        // Act & Assert
         assert!(build(&q).sql.contains(r#"ORDER BY "public"."t"."id" ASC"#));
         assert!(!build(&tq(vec![], vec![])).sql.contains("ORDER BY"));
     }
 
     #[test]
     fn contains_escapes_wildcards() {
+        // Act & Assert
         assert_eq!(escape_like("50%_a!"), "50!%!_a!!");
         let b = build(&tq(
             vec![filter("a", Operator::NotContains, &["5%"])],
@@ -293,16 +300,20 @@ mod tests {
 
     #[test]
     fn in_list_binds_each_value() {
+        // Act
         let b = build(&tq(
             vec![filter("id", Operator::In, &["1", "2", "3"])],
             vec![],
         ));
+
+        // Assert
         assert_eq!(b.params.len(), 3);
         assert!(b.sql.contains(r#""id" IN ($1, $2, $3)"#));
     }
 
     #[test]
     fn params_numbered_across_filters() {
+        // Act
         let b = build(&tq(
             vec![
                 filter("id", Operator::Between, &["1", "9"]),
@@ -311,6 +322,8 @@ mod tests {
             ],
             vec![],
         ));
+
+        // Assert
         assert!(
             b.sql
                 .contains(r#"WHERE "id" BETWEEN $1 AND $2 AND "a" <> $3 AND "b" IS NULL"#)
@@ -319,6 +332,7 @@ mod tests {
 
     #[test]
     fn validation_errors() {
+        // Act & Assert
         assert!(matches!(
             build_err(filter("id", Operator::Between, &["1"])),
             QueryError::Arity { .. }
@@ -341,16 +355,24 @@ mod tests {
 
     #[test]
     fn export_query_has_no_limit() {
+        // Arrange
         let mut q = tq(vec![], vec![]);
         q.limit = None;
+
+        // Act
         let sql = build(&q).sql;
+
+        // Assert
         assert!(!sql.contains("LIMIT") && !sql.contains("OFFSET"));
     }
 
     #[test]
     fn empty_columns_selects_star() {
+        // Arrange
         let mut q = tq(vec![], vec![]);
         q.columns.clear();
+
+        // Act & Assert
         assert!(build(&q).sql.starts_with(r#"SELECT * FROM "public"."t""#));
     }
 }

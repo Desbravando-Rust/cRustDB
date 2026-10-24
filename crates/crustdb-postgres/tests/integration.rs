@@ -31,8 +31,11 @@ fn target(pg: &PgContainer, mode: TlsMode, certs: Option<&TestCerts>) -> Connect
 #[tokio::test]
 #[ignore = "docker"]
 async fn connects_with_each_tls_mode() {
+    // Arrange
     let certs = certs_for(&["localhost"]);
     let pg = start_postgres(Some(&certs), None).await;
+
+    // Act & Assert
     for mode in [TlsMode::Require, TlsMode::VerifyCa, TlsMode::VerifyFull] {
         let mut s = PostgresDriver
             .connect(&target(&pg, mode, Some(&certs)), SessionPurpose::Editor)
@@ -57,8 +60,11 @@ async fn connects_with_each_tls_mode() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_full_rejects_wrong_hostname() {
+    // Arrange
     let certs = certs_for(&["other.test"]);
     let pg = start_postgres(Some(&certs), None).await;
+
+    // Act
     let err = PostgresDriver
         .connect(
             &target(&pg, TlsMode::VerifyFull, Some(&certs)),
@@ -67,14 +73,19 @@ async fn verify_full_rejects_wrong_hostname() {
         .await
         .err()
         .expect("must fail");
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Tls, "{err}");
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_ca_accepts_wrong_hostname() {
+    // Arrange
     let certs = certs_for(&["other.test"]);
     let pg = start_postgres(Some(&certs), None).await;
+
+    // Act & Assert
     let s = PostgresDriver
         .connect(
             &target(&pg, TlsMode::VerifyCa, Some(&certs)),
@@ -88,9 +99,12 @@ async fn verify_ca_accepts_wrong_hostname() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_ca_rejects_untrusted_ca() {
+    // Arrange
     let certs = certs_for(&["other.test"]);
     let foreign = certs_for(&["other.test"]);
     let pg = start_postgres(Some(&certs), None).await;
+
+    // Act
     let err = PostgresDriver
         .connect(
             &target(&pg, TlsMode::VerifyCa, Some(&foreign)),
@@ -99,19 +113,26 @@ async fn verify_ca_rejects_untrusted_ca() {
         .await
         .err()
         .expect("must fail");
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Tls, "{err}");
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn disable_against_tls_required_server_fails_cleanly() {
+    // Arrange
     let certs = certs_for(&["localhost"]);
     let pg = start_postgres_tls_only(&certs).await;
+
+    // Act
     let err = PostgresDriver
         .connect(&target(&pg, TlsMode::Disable, None), SessionPurpose::Editor)
         .await
         .err()
         .expect("must fail");
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Auth, "{err:?}");
     assert!(!err.message.contains(&pg.password));
 }
@@ -119,12 +140,15 @@ async fn disable_against_tls_required_server_fails_cleanly() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn metadata_session_rejects_writes() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let t = target(&pg, TlsMode::Disable, None);
     let mut s = PostgresDriver
         .connect(&t, SessionPurpose::Metadata)
         .await
         .unwrap();
+
+    // Act & Assert
     let err = s
         .start("CREATE TABLE x()", ExecMode::Other)
         .await
@@ -149,20 +173,26 @@ async fn metadata_session_rejects_writes() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn auth_failure_maps_to_auth_kind() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut t = target(&pg, TlsMode::Disable, None);
     t.password = Some(SecretString::from("wrong-pw-xyz"));
+
+    // Act
     let err = PostgresDriver
         .connect(&t, SessionPurpose::Editor)
         .await
         .err()
         .expect("must fail");
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Auth, "{err}");
     assert!(!err.message.contains("wrong-pw-xyz"));
 }
 
 #[tokio::test]
 async fn connect_timeout_after_10s() {
+    // Arrange
     // Accepts (kernel backlog) but never answers.
     let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let t = ConnectTarget {
@@ -179,11 +209,15 @@ async fn connect_timeout_after_10s() {
         connect_timeout: Duration::from_secs(1),
     };
     let start = Instant::now();
+
+    // Act
     let err = PostgresDriver
         .connect(&t, SessionPurpose::Editor)
         .await
         .err()
         .expect("must fail");
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Timeout, "{err}");
     assert!(start.elapsed() < Duration::from_secs(3));
     drop(silent);
@@ -192,11 +226,14 @@ async fn connect_timeout_after_10s() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn hostaddr_used_with_real_tls_name() {
+    // Arrange
     let certs = certs_for(&["localhost"]);
     let pg = start_postgres(Some(&certs), None).await;
     let mut t = target(&pg, TlsMode::VerifyFull, Some(&certs));
     t.connect_addr = Some(SocketAddr::from(([127, 0, 0, 1], pg.port)));
     t.port = 1; // must be ignored in favour of connect_addr
+
+    // Act & Assert
     let mut s = PostgresDriver
         .connect(&t, SessionPurpose::Editor)
         .await
@@ -207,6 +244,7 @@ async fn hostaddr_used_with_real_tls_name() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn cancel_handle_cancels_running_query() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let t = target(&pg, TlsMode::Disable, None);
     let mut s = PostgresDriver
@@ -214,6 +252,8 @@ async fn cancel_handle_cancels_running_query() {
         .await
         .unwrap();
     let h = s.cancel_handle();
+
+    // Act
     let q = tokio::spawn(async move {
         let r = async {
             s.start("SELECT pg_sleep(30)", ExecMode::Other).await?;
@@ -225,6 +265,8 @@ async fn cancel_handle_cancels_running_query() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     h.cancel().await.unwrap();
     let (_s, r) = q.await.unwrap();
+
+    // Assert
     assert_eq!(r.err().unwrap().kind, ErrorKind::Cancelled);
 }
 
@@ -262,9 +304,12 @@ fn rss_kb() -> u64 {
 #[tokio::test]
 #[ignore = "docker"]
 async fn read_cursor_load_more_bounded_memory() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let before = rss_kb();
+
+    // Act & Assert
     s.start(
         "SELECT g FROM generate_series(1, 50000000) g",
         ExecMode::Read,
@@ -284,8 +329,11 @@ async fn read_cursor_load_more_bounded_memory() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn zero_row_select_keeps_columns() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
+
+    // Act & Assert
     for mode in [ExecMode::Read, ExecMode::Other] {
         let h = s.start("SELECT 1 AS a WHERE false", mode).await.unwrap();
         assert_eq!(h.columns.len(), 1);
@@ -299,8 +347,11 @@ async fn zero_row_select_keeps_columns() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn pg_editor_columns_have_type_categories() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
+
+    // Act & Assert
     for mode in [ExecMode::Read, ExecMode::Other] {
         let h = s
             .start(
@@ -333,9 +384,12 @@ async fn pg_editor_columns_have_type_categories() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn write_with_returning_is_drained_not_cancelled() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     all(&mut s, "CREATE TABLE w(id int)", ExecMode::Other).await;
+
+    // Act & Assert
     s.start(
         "INSERT INTO w SELECT generate_series(1, 5000) RETURNING id",
         ExecMode::Other,
@@ -354,9 +408,12 @@ async fn write_with_returning_is_drained_not_cancelled() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn paused_cursor_finished_before_next_command() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let mut other = editor(&pg).await;
+
+    // Act & Assert
     s.start("SELECT g FROM generate_series(1, 100000) g", ExecMode::Read)
         .await
         .unwrap();
@@ -377,10 +434,13 @@ async fn paused_cursor_finished_before_next_command() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn cursor_inside_user_transaction_keeps_it_open() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let mut other = editor(&pg).await;
     all(&mut s, "BEGIN", ExecMode::Other).await;
+
+    // Act & Assert
     s.start("SELECT 1", ExecMode::Read).await.unwrap();
     s.fetch(10).await.unwrap();
     s.finish().await.unwrap();
@@ -397,10 +457,13 @@ async fn cursor_inside_user_transaction_keeps_it_open() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn cancel_long_query() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let h = s.cancel_handle();
     let t = Instant::now();
+
+    // Act
     let q = tokio::spawn(async move {
         let r = async {
             s.start("SELECT pg_sleep(60)", ExecMode::Read).await?;
@@ -412,6 +475,8 @@ async fn cancel_long_query() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     h.cancel().await.unwrap();
     let (mut s, r) = q.await.unwrap();
+
+    // Assert
     assert_eq!(r.err().unwrap().kind, ErrorKind::Cancelled);
     assert!(t.elapsed() < Duration::from_millis(1500));
     s.finish().await.unwrap();
@@ -421,6 +486,7 @@ async fn cancel_long_query() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn explain_rows_for_update_delete() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     all(
@@ -430,6 +496,8 @@ async fn explain_rows_for_update_delete() {
     )
     .await;
     all(&mut s, "ANALYZE t", ExecMode::Other).await;
+
+    // Act & Assert
     for sql in [
         "UPDATE t SET a = a WHERE id <= 5000",
         "DELETE FROM t WHERE id <= 5000",
@@ -443,9 +511,12 @@ async fn explain_rows_for_update_delete() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn pg_aborted_transaction_state() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     all(&mut s, "BEGIN", ExecMode::Other).await;
+
+    // Act & Assert
     assert!(s.start("SELECT 1/0", ExecMode::Other).await.is_err());
     for mode in [ExecMode::Other, ExecMode::Read] {
         let e = s.start("SELECT 1", mode).await.err().unwrap();
@@ -461,8 +532,11 @@ async fn pg_aborted_transaction_state() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn grid_caps_cell_transfer_at_1mib() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
+
+    // Act & Assert
     let h = s
         .start_params(
             "SELECT repeat('a', 50000000)::text AS big WHERE $1::text = 'x'",
@@ -481,14 +555,19 @@ async fn grid_caps_cell_transfer_at_1mib() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn server_restart_during_paused_cursor_reports_error() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     s.start("SELECT g FROM generate_series(1, 100000) g", ExecMode::Read)
         .await
         .unwrap();
     s.fetch(10).await.unwrap();
+
+    // Act
     pg.restart().await;
     let e = s.fetch(10).await.err().unwrap();
+
+    // Assert
     assert_eq!(e.kind, ErrorKind::Connect, "{e:?}");
     let _ = s.finish().await;
 }
@@ -501,11 +580,14 @@ async fn state_of(other: &mut Box<dyn Session>, pid: &str) -> String {
 #[tokio::test]
 #[ignore = "docker"]
 async fn rollback_to_savepoint_keeps_user_transaction() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let mut other = editor(&pg).await;
     all(&mut s, "CREATE TABLE sp(a int)", ExecMode::Other).await;
     let pid = all(&mut s, "SELECT pg_backend_pid()", ExecMode::Read).await[0][0].clone();
+
+    // Act & Assert
     for sql in [
         "BEGIN",
         "INSERT INTO sp VALUES (1)",
@@ -527,14 +609,19 @@ async fn rollback_to_savepoint_keeps_user_transaction() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn failing_prepare_in_user_tx_reports_real_error() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     all(&mut s, "BEGIN", ExecMode::Other).await;
+
+    // Act
     let e = s
         .start("SELECT * FROM nope", ExecMode::Other)
         .await
         .err()
         .unwrap();
+
+    // Assert
     assert!(
         matches!(&e.kind, ErrorKind::Query { code: Some(c), .. } if c == "42P01"),
         "{e:?}"
@@ -544,6 +631,7 @@ async fn failing_prepare_in_user_tx_reports_real_error() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn failed_commit_ends_user_transaction() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     all(
@@ -560,6 +648,8 @@ async fn failed_commit_ends_user_transaction() {
     .await;
     all(&mut s, "BEGIN", ExecMode::Other).await;
     all(&mut s, "INSERT INTO c VALUES (1)", ExecMode::Other).await;
+
+    // Act & Assert
     assert!(s.start("COMMIT", ExecMode::Other).await.is_err());
     assert_eq!(all(&mut s, "SELECT 1", ExecMode::Read).await[0][0], "1");
 }
@@ -567,10 +657,13 @@ async fn failed_commit_ends_user_transaction() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn failed_cursor_declare_leaves_no_open_transaction() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let mut s = editor(&pg).await;
     let mut other = editor(&pg).await;
     let pid = all(&mut s, "SELECT pg_backend_pid()", ExecMode::Read).await[0][0].clone();
+
+    // Act & Assert
     assert!(s.start("SELECT 1/0", ExecMode::Read).await.is_err());
     assert!(s.fetch(10).await.map(|f| f.rows.is_empty()).unwrap_or(true));
     s.finish().await.unwrap();

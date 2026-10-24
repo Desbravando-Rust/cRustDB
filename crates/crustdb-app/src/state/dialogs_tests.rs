@@ -63,16 +63,26 @@ fn type_pw(s: &mut DialogStack, pw: &str) {
 
 #[test]
 fn run_verdict_executes_without_dialog() {
+    // Arrange
     let mut s = DialogStack::default();
+
+    // Act
     let cmd = s.on_evaluated(WS, TAB, REQ, EXEC, eval(Verdict::Run), Instant::now());
+
+    // Assert
     assert!(matches!(cmd, Some(c) if format!("{c:?}") == format!("{:?}", execute())));
     assert!(s.top().is_none());
 }
 
 #[test]
 fn confirm_executes_once_with_evaluated_id() {
+    // Arrange
     let mut s = with_dialog(Verdict::Confirm);
+
+    // Act
     let cmd = submit(&mut s, None, "db").unwrap();
+
+    // Assert
     assert_eq!(format!("{cmd:?}"), format!("{:?}", execute()));
     assert!(s.top().is_none());
     assert!(submit(&mut s, None, "db").is_none());
@@ -80,6 +90,7 @@ fn confirm_executes_once_with_evaluated_id() {
 
 #[test]
 fn confirm_dialog_lists_flagged_statements_with_reason_and_estimate() {
+    // Arrange
     let mut ev = eval(Verdict::Confirm);
     ev.flags = vec![
         Flag {
@@ -93,7 +104,11 @@ fn confirm_dialog_lists_flagged_statements_with_reason_and_estimate() {
             reason: FlagReason::NoWhere,
         },
     ];
+
+    // Act
     let rows = crate::ui::confirm_dialog::flag_rows(&ev);
+
+    // Assert
     assert_eq!(rows.len(), 2);
     assert!(rows[0].starts_with("Statement 2:") && rows[0].contains("42"));
     assert!(rows[1].starts_with("Statement 4:") && rows[1].contains("WHERE"));
@@ -101,8 +116,11 @@ fn confirm_dialog_lists_flagged_statements_with_reason_and_estimate() {
 
 #[test]
 fn password_flow_three_failures_aborts() {
+    // Arrange
     let mut s = with_dialog(Verdict::Password);
     let pw = SecretString::from("hunter2");
+
+    // Act & Assert
     for n in 1..=3 {
         type_pw(&mut s, "wrong");
         assert!(submit(&mut s, Some(&pw), "db").is_none());
@@ -123,8 +141,11 @@ fn password_flow_three_failures_aborts() {
 
 #[test]
 fn password_right_after_failure_executes() {
+    // Arrange
     let mut s = with_dialog(Verdict::Password);
     let pw = SecretString::from("hunter2");
+
+    // Act & Assert
     type_pw(&mut s, "nope");
     assert!(submit(&mut s, Some(&pw), "db").is_none());
     type_pw(&mut s, "hunter2");
@@ -134,6 +155,7 @@ fn password_right_after_failure_executes() {
 
 #[test]
 fn password_without_db_password_requires_database_name() {
+    // Act & Assert
     assert!(verify_password("shop", None, "shop"));
     assert!(!verify_password("hunter2", None, "shop"));
     assert!(!verify_password("", None, ""));
@@ -144,7 +166,10 @@ fn password_without_db_password_requires_database_name() {
 
 #[test]
 fn constant_time_compare_rejects_prefix() {
+    // Arrange
     let pw = SecretString::from("hunter2");
+
+    // Act & Assert
     assert!(!verify_password("hunter", Some(&pw), "db"));
     assert!(!verify_password("hunter22", Some(&pw), "db"));
     assert!(!verify_password("", Some(&pw), "db"));
@@ -153,7 +178,10 @@ fn constant_time_compare_rejects_prefix() {
 
 #[test]
 fn cancel_sends_nothing() {
+    // Arrange
     let mut s = with_dialog(Verdict::Password);
+
+    // Act & Assert
     assert!(s.cancel().is_none());
     assert!(s.top().is_none());
     assert!(submit(&mut s, None, "db").is_none());
@@ -161,12 +189,15 @@ fn cancel_sends_nothing() {
 
 #[test]
 fn host_key_dialog_sends_decision() {
+    // Arrange
     let hk = || Dialog::HostKey {
         ws: WorkspaceId(3),
         host: "h".into(),
         fingerprint: "SHA256:x".into(),
     };
     let mut s = DialogStack::default();
+
+    // Act & Assert
     s.push(hk());
     assert!(matches!(
         s.accept_host_key(),
@@ -185,7 +216,10 @@ fn host_key_dialog_sends_decision() {
 
 #[test]
 fn close_with_tx_resolves_or_cancels() {
+    // Arrange
     let mut s = DialogStack::default();
+
+    // Act & Assert
     s.push(Dialog::CloseWithTx { tab: TAB });
     assert!(s.close_with_tx(TxOp::Savepoint).is_none());
     assert!(s.top().is_some());
@@ -202,8 +236,13 @@ fn close_with_tx_resolves_or_cancels() {
 
 #[test]
 fn dirty_file_discard_closes_tab() {
+    // Arrange
     let mut s = DialogStack::default();
+
+    // Act
     s.push(Dialog::DirtyFile { tab: TAB });
+
+    // Assert
     assert!(matches!(
         s.discard_dirty(),
         Some(Command::CloseTab { resolve: None, .. })
@@ -213,7 +252,10 @@ fn dirty_file_discard_closes_tab() {
 
 #[test]
 fn different_lengths_never_match_even_with_zero_padding() {
+    // Arrange
     let pw = SecretString::from("ab");
+
+    // Act & Assert
     assert!(!verify_password("ab\0", Some(&pw), "db"));
     assert!(!verify_password(
         "ab",
@@ -235,14 +277,20 @@ fn different_lengths_never_match_even_with_zero_padding() {
 
 #[test]
 fn empty_session_password_falls_back_to_database_name() {
+    // Arrange
     let empty = SecretString::from("");
+
+    // Act & Assert
     assert!(verify_password("shop", Some(&empty), "shop"));
     assert!(!verify_password("", Some(&empty), ""));
 }
 
 #[test]
 fn credentials_come_from_the_dialogs_workspace() {
+    // Arrange
     let mut s = with_dialog(Verdict::Password);
+
+    // Act & Assert
     type_pw(&mut s, "dev");
     // Another workspace with database "dev" is irrelevant; WS has the real password.
     let pw = SecretString::from("prod-secret");
@@ -255,18 +303,26 @@ fn credentials_come_from_the_dialogs_workspace() {
 
 #[test]
 fn flag_level_password_requires_password_even_if_batch_says_confirm() {
+    // Arrange
     let mut ev = eval(Verdict::Confirm);
     ev.flags[0].verdict = Verdict::Password;
     let mut s = DialogStack::default();
+
+    // Act
     s.on_evaluated(WS, TAB, REQ, EXEC, ev, Instant::now());
+
+    // Assert
     assert!(submit(&mut s, None, "db").is_none());
     assert!(s.top().is_some());
 }
 
 #[test]
 fn approval_inside_grace_window_is_ignored() {
+    // Arrange
     let mut s = with_dialog(Verdict::Confirm);
     let now = Instant::now();
+
+    // Act
     let early = s.submit_safety(
         |_| {
             Some(SessionAuth {
@@ -276,6 +332,8 @@ fn approval_inside_grace_window_is_ignored() {
         },
         now,
     );
+
+    // Assert
     assert!(early.is_none());
     assert!(s.top().is_some());
     assert!(submit(&mut s, None, "db").is_some());
@@ -283,7 +341,12 @@ fn approval_inside_grace_window_is_ignored() {
 
 #[test]
 fn debug_never_prints_the_typed_password() {
+    // Arrange
     let mut s = with_dialog(Verdict::Password);
+
+    // Act
     type_pw(&mut s, "topsecret");
+
+    // Assert
     assert!(!format!("{s:?}").contains("topsecret"));
 }

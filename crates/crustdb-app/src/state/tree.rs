@@ -383,7 +383,10 @@ mod tests {
 
     #[test]
     fn pg_tree_has_schema_level_mysql_does_not() {
+        // Arrange
         let mut pg = tree(DriverKind::Postgres);
+
+        // Act & Assert
         let r = req_of(pg.expand(NodePath::Database("app".into())));
         pg.apply_children(r, vec![obj("app", None, "public", ObjectKind::Schema)]);
         assert_eq!(labels(&pg), [(0, "app".into()), (1, "public".into())]);
@@ -401,8 +404,11 @@ mod tests {
 
     #[test]
     fn two_trees_never_share_request_ids() {
+        // Arrange
         let mut a = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
         let mut b = ObjectTree::new(WorkspaceId(2), DriverKind::Mysql);
+
+        // Act & Assert
         let ra = req_of(a.load_roots());
         let rb = req_of(b.load_roots());
         assert_ne!(ra, rb);
@@ -412,7 +418,10 @@ mod tests {
 
     #[test]
     fn empty_children_resolves_pending_and_root_refreshes() {
+        // Arrange
         let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
+
+        // Act & Assert
         let r = req_of(t.load_roots());
         t.apply_children(r, vec![]);
         assert!(t.load_roots().is_none(), "empty reply resolved the root");
@@ -426,14 +435,21 @@ mod tests {
 
     #[test]
     fn filter_keeps_original_text() {
+        // Arrange
         let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
+
+        // Act
         t.filter("ORD");
+
+        // Assert
         assert_eq!(t.filter_text(), "ORD");
     }
 
     #[test]
     fn folders_match_spec_per_driver() {
         use ObjectKind::*;
+
+        // Act & Assert
         assert_eq!(
             folder_kinds(DriverKind::Postgres),
             [
@@ -455,9 +471,12 @@ mod tests {
 
     #[test]
     fn expand_loads_once_and_caches() {
+        // Arrange
         let mut t = tree(DriverKind::Mysql);
         t.expand(NodePath::Database("app".into()));
         let f = folder(None, ObjectKind::Table);
+
+        // Act & Assert
         let r = req_of(t.expand(f.clone()));
         assert!(t.expand(f.clone()).is_none(), "pending");
         t.apply_children(r, vec![obj("app", None, "users", ObjectKind::Table)]);
@@ -470,6 +489,7 @@ mod tests {
 
     #[test]
     fn filter_matches_loaded_nodes_case_insensitive() {
+        // Arrange
         let mut t = tree(DriverKind::Mysql);
         t.expand(NodePath::Database("app".into()));
         let r = req_of(t.expand(folder(None, ObjectKind::Table)));
@@ -480,6 +500,8 @@ mod tests {
                 obj("app", None, "Orders", ObjectKind::Table),
             ],
         );
+
+        // Act & Assert
         t.filter("ORD");
         let names: Vec<_> = t.visible().map(|n| n.label).collect();
         assert_eq!(names, ["app", "Tables", "Orders"]);
@@ -490,6 +512,8 @@ mod tests {
     #[test]
     fn double_click_table_opens_data_tab_function_opens_ddl() {
         use ObjectKind::*;
+
+        // Act & Assert
         for k in [Table, View, MaterializedView] {
             assert_eq!(open_action(k), OpenAction::Data);
         }

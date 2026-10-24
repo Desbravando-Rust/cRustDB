@@ -316,6 +316,7 @@ mod tests {
 
     #[test]
     fn editor_draws_highlighted_text_with_error_gutter() {
+        // Arrange
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 'a', 1; -- c\nselect 2".into();
         tab.error_marker = Some((1, 20..21));
@@ -331,12 +332,15 @@ mod tests {
             }
             show(ui, &mut tab, &tree, &cols);
         });
+
+        // Act & Assert
         h.run();
         h.run();
     }
 
     #[test]
     fn job_paints_the_find_match_over_the_statement_tint() {
+        // Act
         let j = job(
             "ab cd",
             None,
@@ -344,6 +348,8 @@ mod tests {
             Some(3..5),
             FontId::monospace(14.0),
         );
+
+        // Assert
         let bg: Vec<_> = j
             .sections
             .iter()
@@ -360,6 +366,7 @@ mod tests {
 
     #[test]
     fn typing_multibyte_inside_statement_does_not_panic() {
+        // Arrange
         use egui_kittest::kittest::Queryable;
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 'x'".into();
@@ -375,6 +382,8 @@ mod tests {
             }
             show(ui, &mut tab, &tree, &cols);
         });
+
+        // Act
         h.run();
         h.get_by_role(egui::accesskit::Role::MultilineTextInput)
             .focus();
@@ -387,11 +396,14 @@ mod tests {
         h.run();
         h.run();
         drop(h);
+
+        // Assert
         assert_eq!(tab.text, "select 'xé'");
     }
 
     #[test]
     fn enter_accepts_the_suggestion_instead_of_a_newline() {
+        // Arrange
         use egui_kittest::kittest::Queryable;
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         let (tree, cols) = (
@@ -406,6 +418,8 @@ mod tests {
             }
             show(ui, &mut tab, &tree, &cols);
         });
+
+        // Act
         h.run();
         let role = egui::accesskit::Role::MultilineTextInput;
         h.get_by_role(role).focus();
@@ -415,6 +429,8 @@ mod tests {
         h.key_press(egui::Key::Enter);
         h.run();
         drop(h);
+
+        // Assert
         assert!(!tab.text.contains('\n'), "{:?}", tab.text);
         assert!(tab.text.to_lowercase().starts_with("sele"));
         assert!(tab.text.len() > 4, "{:?}", tab.text);
@@ -458,28 +474,41 @@ mod tests {
 
     #[test]
     fn ctrl_space_reopens_the_popup() {
+        // Arrange
         let (mut h, tab) = typed("x ", "s");
         tab.borrow_mut().ac.close();
         h.run();
         assert!(!tab.borrow().ac.open);
+
+        // Act
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Space);
         h.run();
+
+        // Assert
         assert!(tab.borrow().ac.open);
     }
 
     #[test]
     fn popup_closes_when_cursor_leaves_the_prefix() {
+        // Arrange
         let (mut h, tab) = typed("x ", "s");
         assert!(tab.borrow().ac.open);
+
+        // Act
         h.key_press(egui::Key::Home);
         h.run();
+
+        // Assert
         assert!(!tab.borrow().ac.open);
     }
 
     #[test]
     fn popup_closes_and_keeps_its_keys_when_editor_loses_focus() {
+        // Arrange
         let (mut h, tab) = typed("x ", "s");
         assert!(tab.borrow().ac.open);
+
+        // Act
         h.ctx.memory_mut(|m| {
             if let Some(f) = m.focused() {
                 m.surrender_focus(f);
@@ -489,6 +518,8 @@ mod tests {
         let before = tab.borrow().text.clone();
         h.key_press(egui::Key::Enter);
         h.run();
+
+        // Assert
         assert!(!tab.borrow().ac.open);
         assert_eq!(
             tab.borrow().text,

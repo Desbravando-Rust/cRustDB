@@ -156,7 +156,10 @@ mod tests {
 
     #[test]
     fn stop_enabled_only_while_running() {
+        // Arrange
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+
+        // Act & Assert
         assert!(
             run(&mut tab, toolbar)
                 .get_by_label("Stop")
@@ -174,8 +177,11 @@ mod tests {
 
     #[test]
     fn load_more_button_follows_exhausted() {
+        // Arrange
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.pane.header = Some(ResultHeader { columns: vec![] });
+
+        // Act & Assert
         assert!(run(&mut tab, show).query_by_label("Load more").is_some());
         tab.pane.exhausted = true;
         assert!(run(&mut tab, show).query_by_label("Load more").is_none());
@@ -219,29 +225,40 @@ mod tests {
 
     #[test]
     fn copy_event_copies_selected_row_as_tsv() {
+        // Arrange
         let mut tab = tab_with_rows();
         tab.pane.selected = Some(1);
         tab.pane.select_anchor = Some(1);
         let mut h = run(&mut tab, show);
         h.event(egui::Event::Copy);
+
+        // Act
         h.step();
+
+        // Assert
         assert_eq!(copied(&h), ["2\tb"]);
     }
 
     #[test]
     fn copy_follows_display_order_of_sorted_view() {
+        // Arrange
         let mut tab = tab_with_rows();
         tab.pane.view = vec![2, 1, 0];
         tab.pane.select_anchor = Some(2);
         tab.pane.selected = Some(1);
         let mut h = run(&mut tab, show);
         h.event(egui::Event::Copy);
+
+        // Act
         h.step();
+
+        // Assert
         assert_eq!(copied(&h), ["3\tc\n2\tb"]);
     }
 
     #[test]
     fn shift_click_extends_selection_to_copy_two_rows() {
+        // Arrange
         let mut tab = tab_with_rows();
         let mut h = run(&mut tab, show);
         h.get_by_label("1").click();
@@ -249,18 +266,27 @@ mod tests {
         h.get_by_label("2").click_modifiers(egui::Modifiers::SHIFT);
         h.run();
         h.event(egui::Event::Copy);
+
+        // Act
         h.step();
+
+        // Assert
         assert_eq!(copied(&h), ["1\ta\n2\tb"]);
     }
 
     #[test]
     fn context_menu_copies_raw_cell() {
+        // Arrange
         let mut tab = tab_with_rows();
         let mut h = run(&mut tab, show);
         h.get_by_label("b").click_secondary();
         h.run();
         h.get_by_label("Copy cell").click();
+
+        // Act
         h.step();
+
+        // Assert
         assert_eq!(copied(&h), ["b"]);
     }
 }

@@ -306,11 +306,16 @@ mod tests {
 
     #[test]
     fn host_key_prefs_keep_recorded_types_and_fail_when_none_usable() {
+        // Arrange
         let rsa = Algorithm::Rsa { hash: None };
         let sup = client::Config::default().preferred.key;
+
+        // Act
         let got = host_key_prefs(vec![rsa.clone(), Algorithm::Ed25519], &sup)
             .unwrap()
             .unwrap();
+
+        // Assert
         assert!(got.contains(&Algorithm::Ed25519));
         assert!(
             got.iter().filter(|a| (*a).clone().is_rsa()).count() > 1,
@@ -343,6 +348,7 @@ mod tests {
 
     #[test]
     fn rsa_and_ed25519_keys_load_in_both_formats() {
+        // Act & Assert
         for (ty, fmt) in [("rsa", "RFC4716"), ("rsa", "PEM"), ("ed25519", "RFC4716")] {
             let dir = tempfile::tempdir().unwrap();
             let f = keygen(dir.path(), &["-t", ty, "-m", fmt]);

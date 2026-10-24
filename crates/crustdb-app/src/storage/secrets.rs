@@ -136,8 +136,11 @@ mod tests {
 
     #[test]
     fn account_names_match_spec() {
+        // Arrange
         let id = ConnectionId(uuid::Uuid::nil());
         let n = "00000000-0000-0000-0000-000000000000";
+
+        // Act & Assert
         assert_eq!(account(id, SecretKind::Db), format!("{n}:db"));
         assert_eq!(
             account(id, SecretKind::SshPassword),
@@ -151,7 +154,10 @@ mod tests {
 
     #[test]
     fn unavailable_store_never_persists() {
+        // Arrange
         let s = UnavailableStore;
+
+        // Act & Assert
         assert!(!s.available());
         assert!(matches!(
             s.set("a", &SecretString::from("x")),
@@ -162,7 +168,10 @@ mod tests {
 
     #[test]
     fn memory_store_roundtrip() {
+        // Arrange
         let s = MemoryStore::default();
+
+        // Act & Assert
         s.set("a", &SecretString::from("x")).unwrap();
         assert_eq!(s.get("a").unwrap().unwrap().expose_secret(), "x");
         s.delete("a").unwrap();
@@ -171,14 +180,18 @@ mod tests {
 
     #[test]
     fn detect_never_panics() {
+        // Act & Assert
         let _ = detect_secret_store();
     }
 
     #[test]
     #[ignore = "needs secret service"]
     fn keyring_roundtrip() {
+        // Arrange
         let s = KeyringStore;
         let a = account(ConnectionId(uuid::Uuid::from_u128(7)), SecretKind::Db);
+
+        // Act & Assert
         s.set(&a, &SecretString::from("pw")).unwrap();
         assert_eq!(s.get(&a).unwrap().unwrap().expose_secret(), "pw");
         s.delete(&a).unwrap();

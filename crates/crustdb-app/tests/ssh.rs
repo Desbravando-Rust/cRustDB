@@ -127,6 +127,7 @@ fn start_agent(sock: &Path, key: &Path) -> Agent {
 #[tokio::test]
 #[ignore = "docker"]
 async fn ssh_tunnel_with_key_password_agent() {
+    // Arrange
     let net = network("modes");
     let ssh = start_sshd(&net).await;
     let certs = certs_for(&[DB_NAME]);
@@ -154,6 +155,8 @@ async fn ssh_tunnel_with_key_password_agent() {
             },
         ),
     ];
+
+    // Act & Assert
     for (auth, secrets) in cases {
         let label = format!("{auth:?}");
         let t = open(&ssh, auth, secrets, &pg.alias, &k, answer(false))
@@ -191,6 +194,7 @@ async fn ssh_tunnel_with_key_password_agent() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn ssh_tunnel_with_rsa_user_key_and_rsa_host_key() {
+    // Arrange
     let net = network("rsa");
     let ssh = start_sshd(&net).await;
     let dir = tempfile::tempdir().unwrap();
@@ -205,6 +209,8 @@ async fn ssh_tunnel_with_rsa_user_key_and_rsa_host_key() {
     let auth = SshAuth::Key {
         key_path: ssh.rsa_client_key_path.clone(),
     };
+
+    // Act & Assert
     open(
         &ssh,
         auth,
@@ -221,6 +227,7 @@ async fn ssh_tunnel_with_rsa_user_key_and_rsa_host_key() {
 #[tokio::test]
 #[ignore = "child of ssh_tunnel_with_key_password_agent"]
 async fn agent_child() {
+    // Arrange
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let Ok(host) = std::env::var("CRUSTDB_T_HOST") else {
         return;
@@ -246,16 +253,23 @@ async fn agent_child() {
         .await
         .unwrap();
     let mut b = [0u8; 1];
+
+    // Act
     sock.read_exact(&mut b).await.unwrap();
+
+    // Assert
     assert!(matches!(b[0], b'S' | b'N'));
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn unknown_host_key_rejected() {
+    // Arrange
     let ssh = start_sshd(&network("reject")).await;
     let dir = tempfile::tempdir().unwrap();
     let k = known(dir.path());
+
+    // Act
     let err = open(
         &ssh,
         key_auth(&ssh),
@@ -267,6 +281,8 @@ async fn unknown_host_key_rejected() {
     .await
     .err()
     .expect("must fail");
+
+    // Assert
     assert_eq!(err, SshError::HostKeyRejected);
     assert!(!k.app_file.exists());
 }
@@ -274,6 +290,7 @@ async fn unknown_host_key_rejected() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn accepted_key_saved_to_app_file() {
+    // Arrange
     let ssh = start_sshd(&network("accept")).await;
     let dir = tempfile::tempdir().unwrap();
     let k = known(dir.path());
@@ -285,6 +302,8 @@ async fn accepted_key_saved_to_app_file() {
     let _t = open(&ssh, key_auth(&ssh), SshSecrets::default(), "x", &k, ask)
         .await
         .unwrap();
+
+    // Act & Assert
     let key = host_key(&ssh);
     assert_eq!(
         rx.await.unwrap(),
@@ -308,11 +327,14 @@ async fn accepted_key_saved_to_app_file() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn changed_host_key_blocks() {
+    // Arrange
     let ssh = start_sshd(&network("changed")).await;
     let dir = tempfile::tempdir().unwrap();
     let k = known(dir.path());
     let other = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILlalEU61txklSBkku8n1ZxRgOGLYm8YtbqsDdo1Ga4j";
     k.add(&ssh.host, ssh.port, &other.parse().unwrap()).unwrap();
+
+    // Act
     let err = open(
         &ssh,
         key_auth(&ssh),
@@ -324,12 +346,15 @@ async fn changed_host_key_blocks() {
     .await
     .err()
     .expect("must fail");
+
+    // Assert
     assert_eq!(err, SshError::HostKeyMismatch);
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_full_via_ssh_checks_real_hostname() {
+    // Arrange
     let net = network("hostname");
     let ssh = start_sshd(&net).await;
     let certs = certs_for(&[DB_NAME]);
@@ -337,6 +362,8 @@ async fn verify_full_via_ssh_checks_real_hostname() {
     let dir = tempfile::tempdir().unwrap();
     let k = known(dir.path());
     k.add(&ssh.host, ssh.port, &host_key(&ssh)).unwrap();
+
+    // Act & Assert
     let t = open(
         &ssh,
         key_auth(&ssh),

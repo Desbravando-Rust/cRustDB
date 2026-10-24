@@ -81,20 +81,27 @@ mod tests {
 
     #[test]
     fn parses_stat_with_spaces_in_comm() {
+        // Arrange
         let stat = "123 (my (proc)) S 1 123 123 0 -1 4194304 100 0 0 0 40 2 0 0 20 0 1 0 5 1000 50 18446744073709551615";
+
+        // Act & Assert
         assert_eq!(parse_stat_ticks(stat), Some(42));
         assert_eq!(parse_stat_ticks("garbage"), None);
     }
 
     #[test]
     fn parses_vm_rss() {
+        // Arrange
         let status = "Name:\tcrustdb\nVmPeak:\t  9000 kB\nVmRSS:\t   12345 kB\nThreads:\t4\n";
+
+        // Act & Assert
         assert_eq!(parse_vm_rss_kb(status), Some(12345));
         assert_eq!(parse_vm_rss_kb("Name:\tx\n"), None);
     }
 
     #[test]
     fn cpu_percent_from_two_samples() {
+        // Act & Assert
         // 100 ticks = 1 cpu-second over 2 s elapsed -> 50%.
         assert_eq!(super::cpu_percent_from_two_samples(100, 200, 2.0), 50.0);
         assert_eq!(super::cpu_percent_from_two_samples(0, 200, 1.0), 200.0);
@@ -104,8 +111,11 @@ mod tests {
 
     #[test]
     fn first_sample_has_zero_cpu_and_real_rss() {
+        // Arrange
         let mut s = ProcSampler::default();
         let first = s.sample().unwrap();
+
+        // Act & Assert
         assert_eq!(first.cpu_percent, 0.0);
         assert!(first.rss_bytes > 0);
         assert!(s.sample().unwrap().cpu_percent >= 0.0);

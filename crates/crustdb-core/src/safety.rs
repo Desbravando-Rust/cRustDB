@@ -142,6 +142,7 @@ mod tests {
 
     #[test]
     fn dml_over_threshold_requires_password() {
+        // Act & Assert
         assert_eq!(
             verdict("UPDATE t SET a=1 WHERE b>0", Some(1001)),
             Verdict::Password
@@ -149,10 +150,12 @@ mod tests {
     }
     #[test]
     fn unknown_estimate_requires_password() {
+        // Act & Assert
         assert_eq!(verdict("DELETE FROM t WHERE a=1", None), Verdict::Password);
     }
     #[test]
     fn multi_row_requires_confirm() {
+        // Act & Assert
         assert_eq!(
             verdict("DELETE FROM t WHERE a>1", Some(2)),
             Verdict::Confirm
@@ -160,10 +163,12 @@ mod tests {
     }
     #[test]
     fn no_where_requires_confirm_even_if_small() {
+        // Act & Assert
         assert_eq!(verdict("DELETE FROM t", Some(1)), Verdict::Confirm);
     }
     #[test]
     fn single_row_with_where_runs() {
+        // Act & Assert
         assert_eq!(
             verdict("UPDATE t SET a=1 WHERE id=7", Some(1)),
             Verdict::Run
@@ -171,12 +176,16 @@ mod tests {
     }
     #[test]
     fn insert_values_uses_tuple_count() {
+        // Arrange
         let c = classify("INSERT INTO t VALUES (1)", DriverKind::Mysql);
+
+        // Act & Assert
         assert_eq!(estimate_need(&c), EstimateNeed::None);
         assert_eq!(verdict("INSERT INTO t VALUES (1)", None), Verdict::Run);
     }
     #[test]
     fn destructive_requires_confirm() {
+        // Act & Assert
         assert_eq!(
             verdict("ALTER TABLE t DROP COLUMN a", None),
             Verdict::Confirm
@@ -184,19 +193,25 @@ mod tests {
     }
     #[test]
     fn truncate_big_table_requires_password() {
+        // Act & Assert
         assert_eq!(verdict("TRUNCATE t", Some(5000)), Verdict::Password);
     }
     #[test]
     fn truncate_unknown_estimate_requires_password() {
+        // Act & Assert
         assert_eq!(verdict("TRUNCATE t", None), Verdict::Password);
     }
     #[test]
     fn truncate_small_table_requires_confirm() {
+        // Act & Assert
         assert_eq!(verdict("TRUNCATE t", Some(5)), Verdict::Confirm);
     }
     #[test]
     fn copy_from_requires_password() {
+        // Arrange
         let sql = "COPY t FROM '/tmp/x.csv'";
+
+        // Act & Assert
         assert_eq!(
             estimate_need(&classify(sql, DriverKind::Postgres)),
             EstimateNeed::None
@@ -205,10 +220,12 @@ mod tests {
     }
     #[test]
     fn unrecognized_requires_confirm() {
+        // Act & Assert
         assert_eq!(verdict("CALL p()", None), Verdict::Confirm);
     }
     #[test]
     fn batch_takes_strictest_verdict() {
+        // Act
         let e = eval_batch(
             &[
                 ("SELECT 1", None),
@@ -217,11 +234,14 @@ mod tests {
             ],
             1000,
         );
+
+        // Assert
         assert_eq!(e.verdict, Verdict::Password);
         assert_eq!(e.flags.len(), 2);
     }
     #[test]
     fn reads_never_flagged() {
+        // Act & Assert
         assert!(eval("SELECT * FROM t", None, 1).flags.is_empty());
     }
 }

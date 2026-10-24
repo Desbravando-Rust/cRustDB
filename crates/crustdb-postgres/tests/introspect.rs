@@ -70,8 +70,11 @@ async fn names(s: &mut Box<dyn Session>, schema: &str, kind: ObjectKind) -> Vec<
 #[tokio::test]
 #[ignore = "docker"]
 async fn lists_tree_levels_per_driver() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     let i = PostgresDriver.introspector();
+
+    // Act & Assert
     let dbs = i.databases(s.as_mut()).await.unwrap();
     assert!(dbs.contains(&"postgres".into()), "{dbs:?}");
     assert!(!dbs.iter().any(|d| d.starts_with("template")), "{dbs:?}");
@@ -125,6 +128,7 @@ async fn lists_tree_levels_per_driver() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn row_estimate_without_count() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     run(
         &mut s,
@@ -134,6 +138,8 @@ async fn row_estimate_without_count() {
     )
     .await;
     let i = PostgresDriver.introspector();
+
+    // Act & Assert
     let a = i
         .row_estimate(s.as_mut(), &obj("public", "est_a", ObjectKind::Table))
         .await
@@ -155,6 +161,7 @@ async fn row_estimate_without_count() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn ddl_for_each_object_kind() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     use ObjectKind::*;
     let all = [
@@ -172,6 +179,8 @@ async fn ddl_for_each_object_kind() {
         obj("app", "posint", Type),
     ];
     let i = PostgresDriver.introspector();
+
+    // Act & Assert
     for o in &all {
         let ddl = i.ddl(s.as_mut(), o).await.unwrap();
         assert!(ddl.contains(&o.name), "{}: {ddl}", o.name);
@@ -198,8 +207,11 @@ async fn ddl_for_each_object_kind() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn structure_lists_columns_indexes_fks() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     let i = PostgresDriver.introspector();
+
+    // Act & Assert
     let cols = i
         .columns(s.as_mut(), &obj("app", "customers", ObjectKind::Table))
         .await
@@ -306,8 +318,11 @@ async fn grid_table(s: &mut Box<dyn Session>) -> ObjectRef {
 #[tokio::test]
 #[ignore = "docker"]
 async fn fetches_page_with_filters_and_sorts() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     let g = grid_table(&mut s).await;
+
+    // Act & Assert
     let one = page(
         &mut s,
         &g,
@@ -387,6 +402,7 @@ async fn fetches_page_with_filters_and_sorts() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn numeric_sorts_are_not_lexicographic() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     let g = grid_table(&mut s).await;
     run(&mut s, "ALTER TABLE grid ADD PRIMARY KEY (id)").await;
@@ -400,6 +416,8 @@ async fn numeric_sorts_are_not_lexicographic() {
         column: "id".into(),
         descending: true,
     }];
+
+    // Act & Assert
     let d0 = page(&mut s, &g, vec![], desc, 0, 10).await;
     assert_eq!(ids(&d0), (21..=30).rev().collect::<Vec<_>>());
     // default sort = primary key
@@ -412,6 +430,7 @@ async fn numeric_sorts_are_not_lexicographic() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn json_column_can_be_sorted() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     run(
         &mut s,
@@ -424,16 +443,23 @@ async fn json_column_can_be_sorted() {
         column: "doc".into(),
         descending: false,
     }];
+
+    // Act
     let rows = page(&mut s, &o, vec![], sorts, 0, 10).await;
+
+    // Assert
     assert_eq!(rows[0][0], "2");
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn filter_value_injection_is_inert() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     let g = grid_table(&mut s).await;
     let evil = "'; DROP TABLE grid; --";
+
+    // Act & Assert
     for op in [Operator::Eq, Operator::Contains] {
         let rows = page(&mut s, &g, vec![f("name", op, &[evil])], vec![], 0, 10).await;
         assert!(rows.is_empty());
@@ -445,6 +471,7 @@ async fn filter_value_injection_is_inert() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn table_with_quoted_mixed_case_name_opens() {
+    // Arrange
     let (_pg, mut s) = setup().await;
     run(
         &mut s,
@@ -454,6 +481,8 @@ async fn table_with_quoted_mixed_case_name_opens() {
     )
     .await;
     let i = PostgresDriver.introspector();
+
+    // Act & Assert
     let tables = i
         .objects(s.as_mut(), "postgres", Some("Ação"), ObjectKind::Table)
         .await

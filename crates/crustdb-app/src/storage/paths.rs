@@ -39,7 +39,10 @@ mod tests {
 
     #[test]
     fn xdg_wins_then_home_fallback() {
+        // Arrange
         let xdg = |k: &str| (k == "XDG_DATA_HOME").then(|| "/x".to_string());
+
+        // Act & Assert
         assert_eq!(
             resolve(xdg, "XDG_DATA_HOME", ".local/share"),
             PathBuf::from("/x/crustdb")
@@ -53,9 +56,14 @@ mod tests {
 
     #[test]
     fn ensure_creates_0700() {
+        // Arrange
         use std::os::unix::fs::PermissionsExt;
         let t = tempfile::tempdir().unwrap();
+
+        // Act
         let d = ensure(t.path().join("a/crustdb"));
+
+        // Assert
         assert_eq!(d.metadata().unwrap().permissions().mode() & 0o777, 0o700);
     }
 }

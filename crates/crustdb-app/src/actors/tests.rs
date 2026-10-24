@@ -182,15 +182,23 @@ pub(super) fn connects(h: &H) -> Vec<(SessionPurpose, Option<String>)> {
 
 #[tokio::test]
 async fn connect_opens_metadata_session_with_metadata_purpose() {
+    // Arrange
     let mut h = harness(FakeScript::default());
+
+    // Act
     connect(&mut h, None).await;
+
+    // Assert
     assert_eq!(connects(&h), [(SessionPurpose::Metadata, None)]);
 }
 
 #[tokio::test]
 async fn pg_second_database_opens_second_metadata_session() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
+
+    // Act & Assert
     for _ in 0..2 {
         h.actors.dispatch(Command::LoadChildren {
             ws: WS,
@@ -212,12 +220,15 @@ async fn pg_second_database_opens_second_metadata_session() {
 
 #[tokio::test]
 async fn page_returns_has_more_only_when_limit_plus_one() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(3),
         ..FakeScript::default()
     });
     connect(&mut h, None).await;
     open_table(&mut h).await;
+
+    // Act & Assert
     fetch(&mut h, 1, query(2, vec![]));
     assert_eq!(page(&mut h).await, (RequestId(1), 2, true, None));
     fetch(&mut h, 2, query(3, vec![]));
@@ -227,6 +238,7 @@ async fn page_returns_has_more_only_when_limit_plus_one() {
 
 #[tokio::test]
 async fn page_attaches_estimate_only_without_filters() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         estimate: Some(1234),
@@ -234,6 +246,8 @@ async fn page_attaches_estimate_only_without_filters() {
     });
     connect(&mut h, None).await;
     open_table(&mut h).await;
+
+    // Act & Assert
     fetch(&mut h, 1, query(10, vec![]));
     assert_eq!(page(&mut h).await.3, Some(1234));
     let f = Filter {
@@ -247,6 +261,7 @@ async fn page_attaches_estimate_only_without_filters() {
 
 #[tokio::test(start_paused = true)]
 async fn stale_request_id_ignored() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         delay: Duration::from_secs(10),
@@ -254,10 +269,14 @@ async fn stale_request_id_ignored() {
     });
     connect(&mut h, None).await;
     open_table(&mut h).await;
+
+    // Act
     fetch(&mut h, 1, query(10, vec![]));
     tokio::time::sleep(Duration::from_secs(1)).await;
     fetch(&mut h, 2, query(10, vec![]));
     tokio::time::sleep(Duration::from_secs(30)).await;
+
+    // Assert
     let pages: Vec<_> = drain(&h.rx)
         .into_iter()
         .filter_map(|e| match e {
@@ -272,6 +291,7 @@ async fn stale_request_id_ignored() {
 
 #[tokio::test(start_paused = true)]
 async fn cancel_tab_cancels_running_page() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         delay: Duration::from_secs(10),
@@ -279,10 +299,14 @@ async fn cancel_tab_cancels_running_page() {
     });
     connect(&mut h, None).await;
     open_table(&mut h).await;
+
+    // Act
     fetch(&mut h, 1, query(10, vec![]));
     tokio::time::sleep(Duration::from_secs(1)).await;
     h.actors.dispatch(Command::CancelTab { tab: TAB });
     tokio::time::sleep(Duration::from_secs(30)).await;
+
+    // Assert
     let evs = drain(&h.rx);
     assert!(evs.iter().all(|e| !matches!(e, Event::Page { .. })));
     assert!(
@@ -294,6 +318,7 @@ async fn cancel_tab_cancels_running_page() {
 
 #[tokio::test(start_paused = true)]
 async fn ping_every_60s_emits_latency() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
@@ -302,6 +327,8 @@ async fn ping_every_60s_emits_latency() {
     open_table(&mut h).await;
     fetch(&mut h, 1, query(10, vec![]));
     page(&mut h).await;
+
+    // Act & Assert
     tokio::time::sleep(Duration::from_secs(59)).await;
     assert!(drain(&h.rx).is_empty());
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -312,17 +339,25 @@ async fn ping_every_60s_emits_latency() {
 
 #[test]
 fn backoff_doubles_up_to_30s() {
+    // Act
     let secs: Vec<_> = (0..7).map(|n| backoff(n).as_secs()).collect();
+
+    // Assert
     assert_eq!(secs, [1, 2, 4, 8, 16, 30, 30]);
 }
 
 #[tokio::test(start_paused = true)]
 async fn metadata_reconnects_with_backoff() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, None).await;
     h.drv.log.fail_pings.store(true, Ordering::SeqCst);
     h.drv.log.fail_connects.store(4, Ordering::SeqCst);
+
+    // Act
     tokio::time::sleep(Duration::from_secs(100)).await;
+
+    // Assert
     let t: Vec<_> = h
         .drv
         .log
@@ -340,6 +375,7 @@ async fn metadata_reconnects_with_backoff() {
 
 #[tokio::test]
 async fn actor_panic_emits_actor_crashed_and_restarts() {
+    // Arrange
     let mut h = harness(FakeScript {
         rows: rows(1),
         ..FakeScript::default()
@@ -347,6 +383,8 @@ async fn actor_panic_emits_actor_crashed_and_restarts() {
     connect(&mut h, None).await;
     open_table(&mut h).await;
     h.drv.log.panic_next.store(true, Ordering::SeqCst);
+
+    // Act & Assert
     fetch(&mut h, 1, query(10, vec![]));
     assert!(matches!(
         next(&h.rx).await,
@@ -358,10 +396,15 @@ async fn actor_panic_emits_actor_crashed_and_restarts() {
 
 #[tokio::test(start_paused = true)]
 async fn reconnecting_same_workspace_stops_old_actor() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, None).await;
+
+    // Act
     connect(&mut h, None).await;
     tokio::time::sleep(Duration::from_secs(61)).await;
+
+    // Assert
     let pings = drain(&h.rx)
         .into_iter()
         .filter(|e| matches!(e, Event::Ping { .. }))
@@ -371,19 +414,27 @@ async fn reconnecting_same_workspace_stops_old_actor() {
 
 #[tokio::test(start_paused = true)]
 async fn ping_failure_emits_reconnecting_then_connected() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, None).await;
     h.drv.log.fail_pings.store(true, Ordering::SeqCst);
+
+    // Act
     tokio::time::sleep(Duration::from_secs(61)).await;
+
+    // Assert
     assert!(matches!(next(&h.rx).await, Event::Reconnecting { ws: WS }));
     assert!(matches!(next(&h.rx).await, Event::Connected { ws: WS, .. }));
 }
 
 #[tokio::test(start_paused = true)]
 async fn workspace_actor_panic_resets_connection_state() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, None).await;
     h.drv.log.panic_ping.store(true, Ordering::SeqCst);
+
+    // Act & Assert
     tokio::time::sleep(Duration::from_secs(61)).await;
     let evs = drain(&h.rx);
     assert!(
@@ -402,9 +453,12 @@ async fn workspace_actor_panic_resets_connection_state() {
 
 #[tokio::test]
 async fn load_children_failure_still_answers_with_empty_children() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
+
+    // Act
     h.actors.dispatch(Command::LoadChildren {
         ws: WS,
         req: RequestId(5),
@@ -413,6 +467,8 @@ async fn load_children_failure_still_answers_with_empty_children() {
         kind: Some(ObjectKind::Table),
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Assert
     let ev = drain(&h.rx);
     assert!(ev.iter().any(|e| matches!(e, Event::Notice { .. })));
     assert!(
@@ -423,15 +479,20 @@ async fn load_children_failure_still_answers_with_empty_children() {
 
 #[tokio::test]
 async fn load_columns_uses_the_metadata_session_only() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     let mut object = object();
     object.database = "a".into();
+
+    // Act
     h.actors.dispatch(Command::LoadColumns {
         ws: WS,
         req: RequestId(7),
         object,
     });
+
+    // Assert
     let Event::Columns { req, columns } = next(&h.rx).await else {
         panic!("expected Columns");
     };
@@ -442,16 +503,21 @@ async fn load_columns_uses_the_metadata_session_only() {
 
 #[tokio::test]
 async fn load_columns_failure_answers_none() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
     let mut object = object();
     object.database = "other".into();
+
+    // Act
     h.actors.dispatch(Command::LoadColumns {
         ws: WS,
         req: RequestId(8),
         object,
     });
+
+    // Assert
     assert!(matches!(
         next(&h.rx).await,
         Event::Columns {
@@ -463,6 +529,7 @@ async fn load_columns_failure_answers_none() {
 
 #[tokio::test]
 async fn sqlite_editor_opens_configured_file() {
+    // Arrange
     let script = FakeScript {
         columns: vec![col("id")],
         rows: rows(1),
@@ -479,6 +546,8 @@ async fn sqlite_editor_opens_configured_file() {
         secrets,
     });
     assert!(matches!(next(&h.rx).await, Event::Connected { .. }));
+
+    // Act
     let database = Some("main".to_string());
     h.actors.dispatch(Command::OpenEditor { ws, tab, database });
     let statements = vec!["SELECT 1".to_string()];
@@ -493,6 +562,8 @@ async fn sqlite_editor_opens_configured_file() {
         evaluation: RequestId(1),
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Assert
     let file = Some("/tmp/a.db".to_string());
     assert!(connects(&h).contains(&(SessionPurpose::Editor, file)));
 }

@@ -138,6 +138,7 @@ mod tests {
 
     #[test]
     fn never_switches_to_a_server_announced_unix_socket() {
+        // Arrange
         let t = ConnectTarget {
             host: "h".into(),
             port: 3306,
@@ -151,13 +152,18 @@ mod tests {
             },
             connect_timeout: std::time::Duration::from_secs(1),
         };
+
+        // Act & Assert
         assert!(!opts(&t).prefer_socket());
     }
 
     #[test]
     fn old_tls_maps_to_d39_message() {
+        // Arrange
         use rustls::{AlertDescription, PeerIncompatible};
         const D39: &str = "server does not support TLS 1.2+; use an SSH tunnel or disable TLS";
+
+        // Act & Assert
         for e in [
             rustls::Error::PeerIncompatible(PeerIncompatible::ServerDoesNotSupportTls12Or13),
             rustls::Error::AlertReceived(AlertDescription::ProtocolVersion),

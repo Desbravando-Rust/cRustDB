@@ -262,8 +262,11 @@ mod tests {
 
     #[test]
     fn popup_opens_after_one_identifier_char() {
+        // Arrange
         let t = tree(&[]);
         let c = ColumnCache::default();
+
+        // Act & Assert
         assert!(!refreshed("|", &t, &c).open);
         let ac = refreshed("SEL|", &t, &c);
         assert!(ac.open);
@@ -273,7 +276,10 @@ mod tests {
 
     #[test]
     fn arrow_enter_tab_esc_behaviour() {
+        // Arrange
         let t = tree(&[]);
+
+        // Act & Assert
         let mut ac = refreshed("S|", &t, &ColumnCache::default());
         assert!(ac.items.len() > 2);
         assert_eq!(ac.on_key(Key::ArrowUp), AutocompleteAction::None);
@@ -303,7 +309,10 @@ mod tests {
 
     #[test]
     fn table_suggestions_after_from() {
+        // Arrange
         let t = tree(&["users", "orders", "audit_log"]);
+
+        // Act & Assert
         let ac = refreshed("SELECT * FROM us|", &t, &ColumnCache::default());
         assert_eq!(ac.items[0], "users");
         let ac = refreshed("SELECT * FROM |x", &t, &ColumnCache::default());
@@ -312,12 +321,15 @@ mod tests {
 
     #[test]
     fn column_suggestions_for_alias() {
+        // Arrange
         let t = tree(&["users"]);
         let mut cols = ColumnCache::default();
         cols.insert(
             obj("users", ObjectKind::Table),
             vec!["id".into(), "name".into()],
         );
+
+        // Act & Assert
         let ac = refreshed("SELECT u.| FROM users u", &t, &cols);
         assert!(ac.open, "a dot opens it without a prefix");
         assert_eq!(ac.items, ["id", "name"]);
@@ -334,15 +346,23 @@ mod tests {
 
     #[test]
     fn max_50_items() {
+        // Arrange
         let names: Vec<String> = (0..80).map(|i| format!("t{i}")).collect();
         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+
+        // Act
         let ac = refreshed("SELECT * FROM t|", &tree(&refs), &ColumnCache::default());
+
+        // Assert
         assert_eq!(ac.items.len(), MAX_ITEMS);
     }
 
     #[test]
     fn no_popup_inside_string_or_comment() {
+        // Arrange
         let off = |t: &str| t.find('|').unwrap();
+
+        // Act & Assert
         for text in [
             "SELECT 'ab|c'",
             "SELECT 1 -- fo|",
@@ -365,10 +385,13 @@ mod tests {
 
     #[test]
     fn failed_column_lookup_can_be_asked_again() {
+        // Arrange
         let t = tree(&["users"]);
         let ctx = completion_context("SELECT id FROM users", 8, MY);
         let mut cols = ColumnCache::default();
         let users = obj("users", ObjectKind::Table);
+
+        // Act & Assert
         cols.begin(users.clone(), RequestId(1));
         assert!(cols.wanted(&ctx, &t).is_empty(), "in flight");
         cols.apply(RequestId(1), None);

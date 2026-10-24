@@ -77,11 +77,14 @@ async fn use_test_db(s: &mut Box<dyn Session>) {
 #[tokio::test]
 #[ignore = "docker"]
 async fn read_cursor_load_more_bounded_memory() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     let before = rss_kb();
+
+    // Act & Assert
     // 10^9 rows: draining instead of killing would take far longer than the bound below.
     let huge = format!("{TEN_MILLION}, digits h, digits i");
     s.start(&huge, ExecMode::Read).await.unwrap();
@@ -102,8 +105,11 @@ async fn read_cursor_load_more_bounded_memory() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn zero_row_select_keeps_columns() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
+
+    // Act & Assert
     for mode in [ExecMode::Read, ExecMode::Other] {
         let h = s
             .start("SELECT 1 AS a FROM DUAL WHERE false", mode)
@@ -120,11 +126,14 @@ async fn zero_row_select_keeps_columns() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn write_is_drained_not_cancelled() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     all(&mut s, "CREATE TABLE w(id int)", ExecMode::Other).await;
+
+    // Act & Assert
     let h = s
         .start(
             "INSERT INTO w SELECT a.n FROM digits a, digits b, digits c",
@@ -154,12 +163,15 @@ async fn write_is_drained_not_cancelled() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn paused_cursor_finished_before_next_command() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     let mut other = editor(&db).await;
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     let cid = all(&mut s, "SELECT CONNECTION_ID()", ExecMode::Read).await[0][0].clone();
+
+    // Act & Assert
     s.start(TEN_MILLION, ExecMode::Read).await.unwrap();
     s.fetch(10).await.unwrap();
     assert!(s.has_active_result());
@@ -178,10 +190,13 @@ async fn paused_cursor_finished_before_next_command() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn cancel_long_query() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     let h = s.cancel_handle();
     let t = Instant::now();
+
+    // Act & Assert
     let q = tokio::spawn(async move {
         // A killed SLEEP() returns normally (value 1) instead of erroring.
         let r = async {
@@ -231,6 +246,7 @@ async fn cancel_long_query() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn explain_rows_for_update_delete() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
@@ -248,6 +264,8 @@ async fn explain_rows_for_update_delete() {
     )
     .await;
     all(&mut s, "ANALYZE TABLE t", ExecMode::Other).await;
+
+    // Act & Assert
     for sql in [
         "UPDATE t SET a = 1 WHERE id <= 5000",
         "DELETE FROM t WHERE id <= 5000",
@@ -269,10 +287,13 @@ async fn explain_rows_for_update_delete() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn transaction_states_and_implicit_commit_mysql() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
     all(&mut s, "CREATE TABLE tx(a int)", ExecMode::Other).await;
+
+    // Act
     for sql in [
         "BEGIN",
         "INSERT INTO tx VALUES (1)",
@@ -281,6 +302,8 @@ async fn transaction_states_and_implicit_commit_mysql() {
     ] {
         all(&mut s, sql, ExecMode::Other).await;
     }
+
+    // Assert
     assert_eq!(
         all(&mut s, "SELECT count(*) FROM tx", ExecMode::Read).await[0][0],
         "1"
@@ -290,6 +313,7 @@ async fn transaction_states_and_implicit_commit_mysql() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn prepared_datetime_formats() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
@@ -306,6 +330,8 @@ async fn prepared_datetime_formats() {
     )
     .await;
     let p = |v: &str| Param(Some(v.into()));
+
+    // Act & Assert
     let h = s
         .start_params(
             "SELECT d, dt, ts, t, i, f, n, x FROM dt WHERE i = ?",
@@ -350,6 +376,7 @@ async fn prepared_datetime_formats() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn latin1_column_displays() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
@@ -365,9 +392,13 @@ async fn latin1_column_displays() {
         ExecMode::Other,
     )
     .await;
+
+    // Act
     s.start("SELECT c, b FROM l", ExecMode::Read).await.unwrap();
     let f = s.fetch(10).await.unwrap();
     s.finish().await.unwrap();
+
+    // Assert
     assert_eq!(txt(&f.rows[0][0]), "é");
     assert!(
         matches!(&f.rows[0][1], Cell::Bytes { value, total_len: 2, .. } if **value == [0, 0xFF])
@@ -377,10 +408,15 @@ async fn latin1_column_displays() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn use_database_switches_and_quotes() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     all(&mut s, "CREATE DATABASE `we``ird`", ExecMode::Other).await;
+
+    // Act
     s.use_database("we`ird").await.unwrap();
+
+    // Assert
     assert_eq!(
         all(&mut s, "SELECT DATABASE()", ExecMode::Read).await[0][0],
         "we`ird"
@@ -391,12 +427,15 @@ async fn use_database_switches_and_quotes() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn server_restart_during_paused_cursor_reports_error() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     s.start(TEN_MILLION, ExecMode::Read).await.unwrap();
     s.fetch(10).await.unwrap();
+
+    // Act & Assert
     db.restart().await;
     // Rows already buffered in the socket may still arrive; the stream must end in an error.
     let mut err = None;
@@ -423,6 +462,7 @@ async fn server_restart_during_paused_cursor_reports_error() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn dropped_session_kills_paused_read() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     let mut other = editor(&db).await;
@@ -431,7 +471,11 @@ async fn dropped_session_kills_paused_read() {
     let cid = all(&mut s, "SELECT CONNECTION_ID()", ExecMode::Read).await[0][0].clone();
     s.start(TEN_MILLION, ExecMode::Read).await.unwrap();
     s.fetch(10).await.unwrap();
+
+    // Act
     drop(s);
+
+    // Assert
     let q = format!("SELECT COUNT(*) FROM information_schema.processlist WHERE id = {cid}");
     let t = Instant::now();
     while all(&mut other, &q, ExecMode::Read).await[0][0] != "0" {
@@ -443,6 +487,7 @@ async fn dropped_session_kills_paused_read() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn failed_drain_is_reported_on_next_command() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
@@ -452,6 +497,8 @@ async fn failed_drain_is_reported_on_next_command() {
         ExecMode::Other,
     )
     .await;
+
+    // Act & Assert
     s.start("CALL p()", ExecMode::Other).await.unwrap();
     assert_eq!(s.fetch(1).await.unwrap().rows.len(), 1);
     let e = s.start("SELECT 1", ExecMode::Other).await.err().unwrap();
@@ -465,11 +512,14 @@ async fn failed_drain_is_reported_on_next_command() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn kill_on_finish_never_hits_next_statement() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = editor(&db).await;
     use_test_db(&mut s).await;
     with_digits(&mut s).await;
     all(&mut s, "CREATE TABLE k(a int)", ExecMode::Other).await;
+
+    // Act & Assert
     for _ in 0..20 {
         s.start(
             "SELECT a.n FROM digits a, digits b, digits c, digits d WHERE a.n >= 0 LIMIT 2000",

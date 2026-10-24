@@ -206,7 +206,10 @@ mod tests {
 
     #[test]
     fn after_from_expects_table() {
+        // Act
         let c = ctx("SELECT * FROM us|");
+
+        // Assert
         assert_eq!(c.expect, Expect::Table);
         assert_eq!(c.prefix, "us");
         assert_eq!(c.prefix_range, 14..16);
@@ -214,7 +217,10 @@ mod tests {
 
     #[test]
     fn after_alias_dot_expects_column_with_qualifier() {
+        // Act
         let c = ctx("SELECT u.| FROM users u");
+
+        // Assert
         assert_eq!(
             c.expect,
             Expect::Column {
@@ -233,6 +239,7 @@ mod tests {
 
     #[test]
     fn select_list_expects_column_without_qualifier() {
+        // Act & Assert
         assert_eq!(ctx("SELECT na|").expect, Expect::Column { qualifier: None });
         assert_eq!(
             ctx("SELECT * FROM t WHERE a = 1 AND b|").expect,
@@ -242,6 +249,7 @@ mod tests {
 
     #[test]
     fn statement_start_expects_keyword_and_empty_text_is_empty() {
+        // Act & Assert
         assert_eq!(ctx("SEL|").expect, Expect::Keyword);
         assert_eq!(ctx("SELECT 1; UP|").expect, Expect::Keyword);
         let c = completion_context("", 0, PG);
@@ -251,7 +259,10 @@ mod tests {
 
     #[test]
     fn referenced_tables_handles_joins_as_and_lists() {
+        // Act
         let c = ctx("SELECT | FROM a AS x, c JOIN s.b y ON x.i = y.i WHERE 1");
+
+        // Assert
         let t: Vec<_> = c
             .referenced_tables
             .iter()
@@ -262,7 +273,10 @@ mod tests {
 
     #[test]
     fn clause_keywords_only_decide_expect() {
+        // Arrange
         let col = Expect::Column { qualifier: None };
+
+        // Act & Assert
         for t in [
             "SELECT * FROM t ORDER BY |",
             "SELECT * FROM t GROUP BY |",
@@ -279,6 +293,7 @@ mod tests {
 
     #[test]
     fn cursor_after_semicolon_starts_new_statement() {
+        // Act & Assert
         for t in ["SELECT 1; |", "SELECT * FROM t;\n|"] {
             let c = ctx(t);
             assert_eq!(c.expect, Expect::Keyword, "{t}");
@@ -288,13 +303,17 @@ mod tests {
 
     #[test]
     fn multibyte_prefix_range() {
+        // Act
         let c = ctx("SELECT ação|");
+
+        // Assert
         assert_eq!(c.prefix, "ação");
         assert_eq!(c.prefix_range, 7..13);
     }
 
     #[test]
     fn rank_prefix_before_substring() {
+        // Act & Assert
         assert_eq!(
             rank(&["user_id", "id", "users", "my_user"], "us", 50),
             [0, 2, 3]
@@ -304,8 +323,11 @@ mod tests {
 
     #[test]
     fn rank_caps_at_max() {
+        // Arrange
         let owned: Vec<String> = (0..100).map(|i| format!("c{i}")).collect();
         let c: Vec<&str> = owned.iter().map(String::as_str).collect();
+
+        // Act & Assert
         assert_eq!(rank(&c, "c", 50).len(), 50);
     }
 }

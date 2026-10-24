@@ -29,6 +29,7 @@ fn col(name: &str, type_name: &str, category: TypeCategory, pk: bool) -> ColumnM
 #[tokio::test]
 #[ignore = "docker"]
 async fn update_cell_via_build_update_affects_one_row() {
+    // Arrange
     let pg = start_postgres(None, None).await;
     let target = ConnectTarget {
         host: "localhost".into(),
@@ -70,6 +71,8 @@ async fn update_cell_via_build_update_affects_one_row() {
         Cell::text_capped("10"),
     ];
     let dialect = PostgresDriver.dialect();
+
+    // Act & Assert
     let b = build_update(dialect, &object, &cols, &row, 2, Some("42".into())).unwrap();
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));

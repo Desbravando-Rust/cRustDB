@@ -137,8 +137,11 @@ mod tests {
 
     #[test]
     fn cycles_across_table_and_query_tabs_and_wraps() {
+        // Arrange
         let (mut s, ws) = setup();
         let w = s.workspace_mut(ws).unwrap();
+
+        // Act & Assert
         assert_eq!(w.active_tab, Some(TabId(2)));
         w.cycle_tab(1);
         assert_eq!(w.active_tab, Some(TabId(1)));
@@ -148,7 +151,10 @@ mod tests {
 
     #[test]
     fn dirty_tab_asks_save_discard_cancel_before_closing() {
+        // Arrange
         let (mut s, ws) = setup();
+
+        // Act & Assert
         assert!(matches!(
             s.close_tab(ws, TabId(2)),
             Some(Command::CloseTab { resolve: None, .. })
@@ -162,10 +168,13 @@ mod tests {
 
     #[test]
     fn dirty_dialog_comes_before_the_tx_guard() {
+        // Arrange
         let (mut s, ws) = setup();
         let q = s.query_mut(TabId(2)).unwrap();
         q.dirty = true;
         q.tx = TxState::Open;
+
+        // Act & Assert
         assert!(s.close_tab(ws, TabId(2)).is_none());
         assert_eq!(s.dialogs.top(), Some(&Dialog::DirtyFile { tab: TabId(2) }));
         assert!(s.discard_dirty_and_close().is_none());
@@ -177,7 +186,10 @@ mod tests {
 
     #[test]
     fn close_with_open_tx_asks_first() {
+        // Arrange
         let (mut s, ws) = setup();
+
+        // Act & Assert
         s.workspace_mut(ws).unwrap().queries[0].tx = TxState::Open;
         assert!(s.close_tab(ws, TabId(2)).is_none());
         assert_eq!(
@@ -196,11 +208,16 @@ mod tests {
 
     #[test]
     fn tx_changed_event_makes_close_ask_first() {
+        // Arrange
         let (mut s, ws) = setup();
+
+        // Act
         s.apply(crate::runtime::Event::TxChanged {
             tab: TabId(2),
             state: TxState::Open,
         });
+
+        // Assert
         assert!(s.close_tab(ws, TabId(2)).is_none());
         assert_eq!(
             s.dialogs.top(),
@@ -210,8 +227,13 @@ mod tests {
 
     #[test]
     fn close_with_aborted_tx_asks_first() {
+        // Arrange
         let (mut s, ws) = setup();
+
+        // Act
         s.workspace_mut(ws).unwrap().queries[0].tx = TxState::Aborted;
+
+        // Assert
         assert!(s.close_tab(ws, TabId(2)).is_none());
         assert_eq!(
             s.dialogs.top(),
@@ -221,8 +243,11 @@ mod tests {
 
     #[test]
     fn toggle_comment_at_covers_selected_lines() {
+        // Arrange
         let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
         q.text = "a\nb\nc".into();
+
+        // Act & Assert
         q.toggle_comment_at(2..4);
         assert_eq!(q.text, "a\n-- b\n-- c");
         q.toggle_comment_at(2..9);
@@ -231,28 +256,41 @@ mod tests {
 
     #[test]
     fn format_at_formats_selection_only() {
+        // Arrange
         let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
         q.text = "-- é\nselect a,b from t;\nselect  1".into();
         // Only `a,b` is selected: the whole statement around it is formatted.
         let start = "-- é\nselect ".chars().count();
+
+        // Act
         q.format_at(start..start + 3);
+
+        // Assert
         assert_eq!(q.text, "-- é\nselect a, b\nfrom t;\nselect  1");
         assert!(q.dirty);
     }
 
     #[test]
     fn format_at_selection_ending_inside_a_comment_keeps_it() {
+        // Arrange
         let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
         q.text = "select 1 -- delete from t".into();
+
+        // Act
         q.format_at(0.."select 1 -- ".chars().count());
+
+        // Assert
         assert_eq!(q.text, "select 1 -- delete from t");
         assert!(!q.dirty);
     }
 
     #[test]
     fn format_at_empty_selection_formats_buffer() {
+        // Arrange
         let mut q = QueryTab::new(TabId(1), crustdb_core::model::DriverKind::Postgres, None);
         q.text = "select a from t where x=1".into();
+
+        // Act & Assert
         q.format_at(3..3);
         assert_eq!(q.text, "select a\nfrom t\nwhere x = 1");
         assert!(q.dirty);
@@ -265,7 +303,10 @@ mod tests {
 
     #[test]
     fn reopening_an_open_object_focuses_its_tab() {
+        // Arrange
         let (mut s, ws) = setup();
+
+        // Act & Assert
         let obj = s
             .workspace_mut(ws)
             .unwrap()
@@ -280,8 +321,11 @@ mod tests {
 
     #[test]
     fn removing_the_active_tab_activates_its_neighbour() {
+        // Arrange
         let (mut s, ws) = setup();
         let w = s.workspace_mut(ws).unwrap();
+
+        // Act & Assert
         w.remove_tab(TabId(2));
         assert_eq!(w.active_tab, Some(TabId(1)));
         w.remove_tab(TabId(1));

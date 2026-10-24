@@ -3,13 +3,17 @@ use super::*;
 
 #[test]
 fn select_is_read() {
+    // Act
     let c = classify("SELECT * FROM t", DriverKind::Postgres);
+
+    // Assert
     assert_eq!(c.class, StatementClass::Read);
     assert!(c.cursorable);
     assert_eq!(c.exec_mode(), ExecMode::Read);
 }
 #[test]
 fn cte_with_delete_is_dml() {
+    // Act & Assert
     assert!(matches!(
         classify(
             "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d",
@@ -21,20 +25,27 @@ fn cte_with_delete_is_dml() {
 }
 #[test]
 fn explain_analyze_delete_is_dml() {
+    // Act
     let c = classify("EXPLAIN ANALYZE DELETE FROM t", DriverKind::Postgres);
+
+    // Assert
     assert_eq!(c.class, StatementClass::Dml(DmlKind::Delete));
     assert!(!c.has_where);
     assert_eq!(c.target.unwrap().name, "t");
 }
 #[test]
 fn explain_without_analyze_is_read_not_cursorable() {
+    // Act
     let c = classify("EXPLAIN DELETE FROM t", DriverKind::Postgres);
+
+    // Assert
     assert_eq!(c.class, StatementClass::Read);
     assert!(!c.cursorable);
     assert_eq!(c.exec_mode(), ExecMode::Other);
 }
 #[test]
 fn show_and_describe_are_read() {
+    // Act & Assert
     for (s, k) in [
         ("SHOW TABLES", DriverKind::Mysql),
         ("DESCRIBE t", DriverKind::Mysql),
@@ -50,12 +61,14 @@ fn show_and_describe_are_read() {
 }
 #[test]
 fn update_without_where_flagged() {
+    // Act & Assert
     let c = classify("UPDATE t SET a = 1", DriverKind::Mysql);
     assert!(!c.has_where);
     assert!(classify("UPDATE t SET a = 1 WHERE b = 2", DriverKind::Mysql).has_where);
 }
 #[test]
 fn insert_values_counts_tuples() {
+    // Act & Assert
     assert_eq!(
         classify("INSERT INTO t VALUES (1),(2),(3)", DriverKind::Mysql).values_rows,
         Some(3)
@@ -63,6 +76,7 @@ fn insert_values_counts_tuples() {
 }
 #[test]
 fn replace_and_copy() {
+    // Act & Assert
     assert_eq!(
         classify("REPLACE INTO t VALUES (1)", DriverKind::Mysql).class,
         StatementClass::Dml(DmlKind::Replace)
@@ -76,6 +90,7 @@ fn replace_and_copy() {
 }
 #[test]
 fn drop_truncate_alter_are_destructive() {
+    // Act & Assert
     for s in [
         "DROP TABLE t",
         "TRUNCATE t",
@@ -97,14 +112,18 @@ fn drop_truncate_alter_are_destructive() {
 }
 #[test]
 fn drop_table_has_target() {
+    // Act
     let t = classify("DROP TABLE public.users", DriverKind::Postgres)
         .target
         .unwrap();
+
+    // Assert
     assert_eq!(t.name, "users");
     assert_eq!(t.qualifier.as_deref(), Some("public"));
 }
 #[test]
 fn create_variants() {
+    // Act & Assert
     assert!(matches!(
         classify("CREATE OR REPLACE VIEW v AS SELECT 1", DriverKind::Postgres).class,
         StatementClass::Destructive(DestructiveKind::CreateOrReplace)
@@ -119,6 +138,7 @@ fn create_variants() {
 }
 #[test]
 fn side_effect_function_is_unknown() {
+    // Act & Assert
     for s in [
         "SELECT pg_terminate_backend(42)",
         "SELECT PG_ADVISORY_LOCK_shared(1)",
@@ -138,6 +158,7 @@ fn side_effect_function_is_unknown() {
 }
 #[test]
 fn call_and_unparseable_are_unknown() {
+    // Act & Assert
     assert_eq!(
         classify("CALL p()", DriverKind::Postgres).class,
         StatementClass::Unknown
@@ -153,6 +174,7 @@ fn call_and_unparseable_are_unknown() {
 }
 #[test]
 fn tx_that_stays_open_is_savepoint_class() {
+    // Act & Assert
     for sql in [
         "ROLLBACK TO SAVEPOINT x",
         "ROLLBACK TO x",
@@ -169,6 +191,7 @@ fn tx_that_stays_open_is_savepoint_class() {
 
 #[test]
 fn tx_and_session() {
+    // Act & Assert
     assert_eq!(
         classify("START TRANSACTION", DriverKind::Mysql).class,
         StatementClass::Tx(TxOp::Begin)
@@ -207,6 +230,7 @@ mod fixes {
 
     #[test]
     fn parenthesized_explain_analyze_is_inner_dml() {
+        // Act & Assert
         assert_eq!(
             pg("EXPLAIN (ANALYZE) DELETE FROM t").class,
             StatementClass::Dml(DmlKind::Delete)
@@ -222,6 +246,7 @@ mod fixes {
     }
     #[test]
     fn copy_with_nested_dml_is_dml() {
+        // Act & Assert
         assert!(matches!(
             pg("COPY (DELETE FROM t RETURNING *) TO STDOUT").class,
             StatementClass::Dml(DmlKind::Delete)
@@ -229,6 +254,7 @@ mod fixes {
     }
     #[test]
     fn table_position_side_effect_fn_is_unknown() {
+        // Act & Assert
         for s in [
             "SELECT * FROM pg_terminate_backend(42)",
             "SELECT * FROM pg_stat_activity, LATERAL pg_terminate_backend(pid) x",
@@ -241,6 +267,7 @@ mod fixes {
     }
     #[test]
     fn side_effect_fn_in_other_classes() {
+        // Act & Assert
         assert_eq!(
             pg("CREATE TABLE x AS SELECT pg_terminate_backend(pid) FROM pg_stat_activity").class,
             StatementClass::Unknown
@@ -252,6 +279,7 @@ mod fixes {
     }
     #[test]
     fn mysql_load_data_is_dml() {
+        // Act & Assert
         let c = my("LOAD DATA LOCAL INFILE '/x' INTO TABLE db.t");
         assert_eq!(c.class, StatementClass::Dml(DmlKind::LoadData));
         let t = c.target.unwrap();
@@ -263,16 +291,21 @@ mod fixes {
     }
     #[test]
     fn multi_table_delete_targets_deleted_table() {
+        // Act
         let c = my("DELETE t2 FROM t1 JOIN t2 ON t1.a = t2.a WHERE t1.b = 1");
+
+        // Assert
         assert_eq!(c.target.unwrap().name, "t2");
         assert!(c.has_where);
     }
     #[test]
     fn explain_is_never_cursorable() {
+        // Act & Assert
         assert!(!pg("EXPLAIN ANALYZE SELECT 1").cursorable);
     }
     #[test]
     fn copy_to_file_is_unknown_stdout_is_read() {
+        // Act & Assert
         assert_eq!(pg("COPY t TO '/tmp/x'").class, StatementClass::Unknown);
         assert_eq!(pg("COPY t TO PROGRAM 'cat'").class, StatementClass::Unknown);
         let c = pg("COPY t TO STDOUT");
@@ -280,11 +313,15 @@ mod fixes {
     }
     #[test]
     fn select_into_not_cursorable() {
+        // Act
         let c = pg("SELECT a INTO newt FROM t");
+
+        // Assert
         assert!(!c.cursorable);
     }
     #[test]
     fn grant_revoke_are_ddl() {
+        // Act & Assert
         assert!(pg("GRANT SELECT ON t TO u").is_ddl);
         assert!(pg("REVOKE SELECT ON t FROM u").is_ddl);
     }
@@ -295,6 +332,7 @@ mod round2 {
 
     #[test]
     fn analyse_spelling() {
+        // Act & Assert
         assert_eq!(
             classify("EXPLAIN (ANALYSE) DELETE FROM t", DriverKind::Postgres).class,
             StatementClass::Dml(DmlKind::Delete)
@@ -306,10 +344,13 @@ mod round2 {
     }
     #[test]
     fn downgraded_create_keeps_ddl() {
+        // Act
         let c = classify(
             "CREATE TABLE x AS SELECT GET_LOCK('a',1)",
             DriverKind::Mysql,
         );
+
+        // Assert
         assert_eq!(c.class, StatementClass::Unknown);
         assert!(c.is_ddl);
         assert_eq!(c.target.unwrap().name, "x");

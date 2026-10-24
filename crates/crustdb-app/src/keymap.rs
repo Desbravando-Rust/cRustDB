@@ -98,6 +98,7 @@ mod tests {
 
     #[test]
     fn every_spec_shortcut_maps_to_action() {
+        // Arrange
         use Action::*;
         let rows = [
             (C, Key::N, NewConnection),
@@ -120,6 +121,8 @@ mod tests {
             (C, Key::H, History),
             (CS, Key::E, ExportCsv),
         ];
+
+        // Act & Assert
         for (m, k, a) in rows {
             assert_eq!(press(k, m, Focus::Other), Some(a), "{k:?}");
         }
@@ -131,6 +134,7 @@ mod tests {
 
     #[test]
     fn space_toggles_row_detail_only_with_grid_focus() {
+        // Act & Assert
         assert_eq!(
             press(Key::Space, Modifiers::NONE, Focus::Grid),
             Some(Action::RowDetail)

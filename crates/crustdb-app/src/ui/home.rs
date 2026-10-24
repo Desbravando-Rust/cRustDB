@@ -150,6 +150,7 @@ mod tests {
 
     #[test]
     fn home_lists_saved_connections() {
+        // Arrange
         let s = state(&["alpha", "beta"]);
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
@@ -157,13 +158,18 @@ mod tests {
                 show(ui, &s);
             }
         });
+
+        // Act
         h.run();
+
+        // Assert
         h.get_by_label("alpha");
         h.get_by_label("beta");
     }
 
     #[test]
     fn home_shows_logo() {
+        // Arrange
         let s = state(&[]);
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
@@ -174,15 +180,20 @@ mod tests {
         // `run` waits for pending images, so the decode must be done by now.
         h.run();
         h.get_by_label("cRustDB logo");
+
+        // Act
         let poll = h.ctx.try_load_image(
             "bytes://../../../../assets/imgs/logo2.png",
             egui::SizeHint::default(),
         );
+
+        // Assert
         assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
     }
 
     #[test]
     fn home_shows_book_promo() {
+        // Arrange
         let s = state(&[]);
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
@@ -196,15 +207,20 @@ mod tests {
         );
         h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT));
         h.get_by_label("Desbravando Rust book cover");
+
+        // Act
         let poll = h.ctx.try_load_image(
             "bytes://../../../../assets/imgs/book-cover.png",
             egui::SizeHint::default(),
         );
+
+        // Assert
         assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
     }
 
     #[test]
     fn book_promo_links_to_site() {
+        // Arrange
         let s = state(&[]);
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
@@ -216,14 +232,19 @@ mod tests {
         h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
             .click();
         h.step();
+
+        // Act
         let opened = h.output().platform_output.commands.iter().any(|c| {
             matches!(c, egui::OutputCommand::OpenUrl(u) if u.url == "https://desbravandorust.com.br/")
         });
+
+        // Assert
         assert!(opened);
     }
 
     #[test]
     fn double_click_connects() {
+        // Arrange
         let s = state(&["alpha"]);
         let id = s.config.connections[0].id;
         let mut intents = vec![];
@@ -238,13 +259,18 @@ mod tests {
         h.step();
         h.get_by_label("alpha").click();
         h.step();
+
+        // Act
         h.run();
         drop(h);
+
+        // Assert
         assert!(intents.contains(&Intent::Connect(id)));
     }
 
     #[test]
     fn live_connection_shows_open_instead_of_connect() {
+        // Arrange
         let mut s = state(&["alpha"]);
         let ws = s.open_workspace(s.config.connections[0].clone());
         s.workspaces[0].status = Status::Online(ServerVersion {
@@ -262,6 +288,8 @@ mod tests {
             }
         });
         h.run();
+
+        // Act & Assert
         h.get_by_label("Active");
         assert!(h.query_by_label("Connect").is_none());
         h.get_by_label("Open").click();
@@ -272,6 +300,7 @@ mod tests {
 
     #[test]
     fn engine_colors_differ() {
+        // Act & Assert
         assert_ne!(
             engine_color(DriverKind::Postgres),
             engine_color(DriverKind::Mysql)

@@ -9,14 +9,20 @@ fn tab(text: &str) -> QueryTab {
 
 #[test]
 fn run_current_uses_statement_under_cursor() {
+    // Arrange
     let t = tab("select 1; select 2;");
+
+    // Act & Assert
     assert_eq!(t.targets(12, None, false), vec!["select 2"]);
     assert_eq!(t.targets(3, Some(3..3), false), vec!["select 1"]);
 }
 
 #[test]
 fn run_with_selection_runs_statements_inside_selection() {
+    // Arrange
     let t = tab("select 1; select 2; select 3;");
+
+    // Act & Assert
     assert_eq!(
         t.targets(0, Some(10..29), false),
         vec!["select 2", "select 3"]
@@ -25,20 +31,29 @@ fn run_with_selection_runs_statements_inside_selection() {
 
 #[test]
 fn partial_selection_runs_only_selected_text() {
+    // Arrange
     let t = tab("delete from a;\nselect 2");
+
+    // Act & Assert
     // Selection starts at `a` and crosses the `;`.
     assert_eq!(t.targets(0, Some(12..23), false), vec!["a", "select 2"]);
 }
 
 #[test]
 fn run_all_returns_every_statement() {
+    // Arrange
     let t = tab("select 1; select 2; select 3");
+
+    // Act & Assert
     assert_eq!(t.targets(0, None, true).len(), 3);
 }
 
 #[test]
 fn char_to_byte_offset_roundtrip() {
+    // Arrange
     let s = "ação🦀x";
+
+    // Act & Assert
     assert_eq!(char_to_byte(s, 0), 0);
     assert_eq!(char_to_byte(s, 2), 3);
     assert_eq!(char_to_byte(s, 4), 6);
@@ -49,15 +64,23 @@ fn char_to_byte_offset_roundtrip() {
 
 #[test]
 fn toggle_comment_adds_and_removes_dash_dash() {
+    // Arrange
     let t = "select 1\n  select 2\nselect 3";
+
+    // Act
     let on = toggle_comment(t, 0..2);
+
+    // Assert
     assert_eq!(on, "-- select 1\n--   select 2\nselect 3");
     assert_eq!(toggle_comment(&on, 0..2), t);
 }
 
 #[test]
 fn error_position_maps_to_line() {
+    // Arrange
     let s = "ação;\nselect x";
+
+    // Act & Assert
     // 'x' is the 14th char (1-based) on line 1.
     assert_eq!(error_line(s, 14), 1);
     assert_eq!(error_line(s, 1), 0);
@@ -76,9 +99,12 @@ fn started(t: &mut QueryTab, req: u64) {
 
 #[test]
 fn messages_list_every_statement_with_affected_rows() {
+    // Arrange
     let mut t = tab("");
     started(&mut t, 7);
     t.apply(&done(7, 0, Some(4), Some(4)));
+
+    // Act
     t.apply(&Event::ExecError {
         req: RequestId(7),
         index: 1,
@@ -92,6 +118,8 @@ fn messages_list_every_statement_with_affected_rows() {
         history: hist(None),
     });
     let m = &t.pane.messages;
+
+    // Assert
     assert_eq!(m.len(), 2);
     assert!(m[0].ok && m[0].text.contains("4 rows affected"));
     assert!(!m[1].ok && m[1].text.contains("boom") && m[1].index == 1);
@@ -101,7 +129,10 @@ fn messages_list_every_statement_with_affected_rows() {
 
 #[test]
 fn running_spans_the_batch_and_stop_clears_it() {
+    // Arrange
     let mut t = tab("");
+
+    // Act & Assert
     started(&mut t, 7);
     assert_eq!(t.running, Some(RequestId(7)));
     t.apply(&done(7, 0, None, Some(1)));
@@ -127,6 +158,7 @@ fn running_spans_the_batch_and_stop_clears_it() {
 
 #[test]
 fn load_more_hidden_when_exhausted() {
+    // Arrange
     let mut t = tab("");
     started(&mut t, 7);
     let r = RequestId(7);
@@ -139,6 +171,8 @@ fn load_more_hidden_when_exhausted() {
         rows: rows(2),
         exhausted: false,
     });
+
+    // Act & Assert
     t.apply(&done(7, 1, None, Some(2)));
     assert!(t.pane.load_more_visible());
     assert!(matches!(t.load_more(), Some(Command::LoadMore { .. })));
@@ -154,9 +188,12 @@ fn load_more_hidden_when_exhausted() {
 
 #[test]
 fn error_position_is_offset_by_statement_start() {
+    // Arrange
     let mut t = tab("select 1;\nselect x");
     t.starts = vec![0, 10];
     t.begin_run(RequestId(7));
+
+    // Act
     t.apply(&Event::ExecError {
         req: RequestId(7),
         index: 1,
@@ -169,22 +206,30 @@ fn error_position_is_offset_by_statement_start() {
         },
         history: hist(None),
     });
+
+    // Assert
     assert_eq!(t.error_marker.map(|m| m.0), Some(1));
 }
 
 #[test]
 fn stale_evaluation_notice_clears_running() {
+    // Arrange
     let mut t = tab("");
     started(&mut t, 7);
+
+    // Act
     t.apply(&Event::Notice {
         tab: t.id,
         text: STALE_EVALUATION.into(),
     });
+
+    // Assert
     assert_eq!(t.running, None);
 }
 
 #[test]
 fn load_more_and_export_are_busy_stoppable_and_report() {
+    // Arrange
     let mut t = tab("");
     started(&mut t, 7);
     let r = RequestId(7);
@@ -197,6 +242,8 @@ fn load_more_and_export_are_busy_stoppable_and_report() {
         rows: rows(1),
         exhausted: false,
     });
+
+    // Act & Assert
     t.apply(&done(7, 1, None, Some(1)));
     assert!(t.load_more().is_some() && t.running.is_some() && !t.can_run());
     assert!(matches!(t.stop(), Some(Command::CancelTab { .. })));
@@ -222,7 +269,10 @@ fn load_more_and_export_are_busy_stoppable_and_report() {
 
 #[test]
 fn run_disabled_while_running_stop_enabled() {
+    // Arrange
     let mut t = tab("");
+
+    // Act & Assert
     assert!(t.can_run() && !t.can_stop());
     started(&mut t, 7);
     assert!(!t.can_run() && t.can_stop());
@@ -230,7 +280,10 @@ fn run_disabled_while_running_stop_enabled() {
 
 #[test]
 fn db_selector_disabled_with_open_tx_on_pg() {
+    // Arrange
     let mut t = tab("");
+
+    // Act & Assert
     assert!(t.can_switch_db());
     t.tx = TxState::Open;
     assert!(!t.can_switch_db());
@@ -246,7 +299,10 @@ fn db_selector_disabled_with_open_tx_on_pg() {
 
 #[test]
 fn tx_badge_state_follows_event() {
+    // Arrange
     let mut t = tab("");
+
+    // Act & Assert
     t.apply(&Event::TxChanged {
         tab: t.id,
         state: TxState::Aborted,
@@ -261,6 +317,7 @@ fn tx_badge_state_follows_event() {
 
 #[test]
 fn highlight_disabled_above_1mib_or_750_lines() {
+    // Act & Assert
     assert!(highlight_enabled("select 1"));
     assert!(!highlight_enabled(&"a".repeat(HIGHLIGHT_MAX_BYTES + 1)));
     assert!(highlight_enabled(&"\n".repeat(HIGHLIGHT_MAX_LINES - 1)));
@@ -269,13 +326,19 @@ fn highlight_disabled_above_1mib_or_750_lines() {
 
 #[test]
 fn current_statement_range_for_background() {
+    // Arrange
     let t = tab("select 1;\n  select 2;");
+
+    // Act & Assert
     assert_eq!(t.current_range(15), Some(12..20));
 }
 
 #[test]
 fn save_clears_dirty_and_sets_title() {
+    // Arrange
     let dir = tempfile::tempdir().unwrap();
+
+    // Act & Assert
     let path = dir.path().join("q.sql");
     let mut t = tab("select 1");
     assert_eq!(t.title(), "Query");
@@ -296,7 +359,10 @@ fn save_clears_dirty_and_sets_title() {
 
 #[test]
 fn history_double_click_inserts_at_cursor() {
+    // Arrange
     let mut t = tab("aé b");
+
+    // Act & Assert
     assert_eq!(t.insert_at(2, "SELECT 1"), 10);
     assert_eq!(t.text, "aéSELECT 1 b");
     assert!(t.dirty);

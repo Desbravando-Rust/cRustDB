@@ -26,6 +26,7 @@ fn query_err(h: &H, pat: &str) {
 
 #[tokio::test(start_paused = true)]
 async fn evaluation_does_not_survive_database_change_or_connection_loss() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     evaluate(&mut h, 1, &["DELETE FROM t"]);
@@ -37,6 +38,8 @@ async fn evaluation_does_not_survive_database_change_or_connection_loss() {
             database: "other".into(),
         },
     );
+
+    // Act & Assert
     execute(&mut h, 2, 1);
     assert_eq!(notices(&settle(&h).await).len(), 1);
     assert!(starts(&h).is_empty());
@@ -66,10 +69,13 @@ async fn evaluation_does_not_survive_database_change_or_connection_loss() {
 
 #[tokio::test(start_paused = true)]
 async fn failed_commit_or_rollback_leaves_idle() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["BEGIN"]).await;
     query_err(&h, "COMMIT");
+
+    // Act & Assert
     let ev = run(&mut h, 2, &["COMMIT"]).await;
     assert_eq!(tx_states(&ev), [TxState::Idle]);
     run(&mut h, 3, &["BEGIN"]).await;
@@ -85,9 +91,12 @@ async fn failed_commit_or_rollback_leaves_idle() {
 
 #[tokio::test(start_paused = true)]
 async fn mysql_failed_ddl_in_open_tx_is_implicit_commit() {
+    // Arrange
     let mut h = harness_with(FakeDriver::with_kind(script(0), DriverKind::Mysql));
     let mut cfg = config(Some("d"));
     cfg.driver = DriverKind::Mysql;
+
+    // Act & Assert
     h.actors.dispatch(Command::Connect {
         ws: WS,
         config: cfg,
@@ -104,11 +113,14 @@ async fn mysql_failed_ddl_in_open_tx_is_implicit_commit() {
 
 #[tokio::test(start_paused = true)]
 async fn load_more_error_in_open_pg_tx_aborts_it() {
+    // Arrange
     let mut h = harness(script(1500));
     open(&mut h).await;
     run(&mut h, 1, &["BEGIN"]).await;
     run(&mut h, 2, &["SELECT 1"]).await;
     h.drv.log.fail_fetch.store(true, Ordering::SeqCst);
+
+    // Act
     cmd(
         &mut h,
         Command::LoadMore {
@@ -116,14 +128,19 @@ async fn load_more_error_in_open_pg_tx_aborts_it() {
             req: RequestId(3),
         },
     );
+
+    // Assert
     assert_eq!(tx_states(&settle(&h).await), [TxState::Aborted]);
 }
 
 #[tokio::test(start_paused = true)]
 async fn failure_to_open_session_is_not_a_lost_connection() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
+
+    // Act & Assert
     let ev = run(&mut h, 1, &["SELECT 1"]).await;
     assert!(notices(&ev).is_empty());
     assert!(tx_states(&ev).is_empty());
@@ -136,9 +153,12 @@ async fn failure_to_open_session_is_not_a_lost_connection() {
 
 #[tokio::test(start_paused = true)]
 async fn mysql_ddl_parse_error_keeps_tx_open() {
+    // Arrange
     let mut h = harness_with(FakeDriver::with_kind(script(0), DriverKind::Mysql));
     let mut cfg = config(Some("d"));
     cfg.driver = DriverKind::Mysql;
+
+    // Act & Assert
     h.actors.dispatch(Command::Connect {
         ws: WS,
         config: cfg,

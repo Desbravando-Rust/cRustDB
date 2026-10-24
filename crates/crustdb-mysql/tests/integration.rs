@@ -39,11 +39,14 @@ fn server_without_ecdhe() -> bool {
 #[tokio::test]
 #[ignore = "docker"]
 async fn connects_with_each_tls_mode() {
+    // Arrange
     if server_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql(Some(&certs), None).await;
+
+    // Act & Assert
     for mode in [TlsMode::Require, TlsMode::VerifyCa, TlsMode::VerifyFull] {
         let mut s = MysqlDriver
             .connect(&target(&db, mode, Some(&certs)), SessionPurpose::Editor)
@@ -67,17 +70,22 @@ async fn connects_with_each_tls_mode() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn detects_mariadb_product() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let s = MysqlDriver
         .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
         .await
         .unwrap();
+
+    // Act
     let v = s.server_version();
     let expected = if image().starts_with("mariadb") {
         Product::Mariadb
     } else {
         Product::Mysql
     };
+
+    // Assert
     assert_eq!(v.product, expected, "{}", v.raw);
     assert!(v.major >= 5, "{}", v.raw);
 }
@@ -85,8 +93,11 @@ async fn detects_mariadb_product() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_full_rejects_wrong_hostname() {
+    // Arrange
     let certs = certs_for(&["other.test"]);
     let db = start_mysql(Some(&certs), None).await;
+
+    // Act & Assert
     let err = MysqlDriver
         .connect(
             &target(&db, TlsMode::VerifyFull, Some(&certs)),
@@ -101,9 +112,12 @@ async fn verify_full_rejects_wrong_hostname() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_ca_is_fail_closed_on_mysql() {
+    // Arrange
     // mysql_async cannot skip the hostname check with current rustls: VerifyCa == VerifyFull.
     let certs = certs_for(&["other.test"]);
     let db = start_mysql(Some(&certs), None).await;
+
+    // Act & Assert
     let err = MysqlDriver
         .connect(
             &target(&db, TlsMode::VerifyCa, Some(&certs)),
@@ -118,9 +132,12 @@ async fn verify_ca_is_fail_closed_on_mysql() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn verify_ca_rejects_untrusted_ca() {
+    // Arrange
     let certs = certs_for(&["other.test"]);
     let foreign = certs_for(&["other.test"]);
     let db = start_mysql(Some(&certs), None).await;
+
+    // Act & Assert
     let err = MysqlDriver
         .connect(
             &target(&db, TlsMode::VerifyCa, Some(&foreign)),
@@ -136,11 +153,14 @@ async fn verify_ca_rejects_untrusted_ca() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn tls_rejects_server_without_tls12() {
+    // Arrange
     if !server_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql(Some(&certs), None).await;
+
+    // Act & Assert
     let err = MysqlDriver
         .connect(
             &target(&db, TlsMode::Require, Some(&certs)),
@@ -157,8 +177,11 @@ async fn tls_rejects_server_without_tls12() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn metadata_session_rejects_writes() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let t = target(&db, TlsMode::Disable, None);
+
+    // Act & Assert
     let mut s = MysqlDriver
         .connect(&t, SessionPurpose::Metadata)
         .await
@@ -187,9 +210,12 @@ async fn metadata_session_rejects_writes() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn auth_failure_maps_to_auth_kind() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut t = target(&db, TlsMode::Disable, None);
     t.password = Some(SecretString::from("wrong-pw-xyz"));
+
+    // Act & Assert
     let err = MysqlDriver
         .connect(&t, SessionPurpose::Editor)
         .await
@@ -201,6 +227,7 @@ async fn auth_failure_maps_to_auth_kind() {
 
 #[tokio::test]
 async fn connect_timeout_after_10s() {
+    // Act & Assert
     // Accepts (kernel backlog) but never answers.
     let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let t = ConnectTarget {
@@ -230,6 +257,7 @@ async fn connect_timeout_after_10s() {
 #[tokio::test]
 #[ignore = "docker"]
 async fn hostname_override_used_with_tunnel_addr() {
+    // Arrange
     if server_without_ecdhe() {
         return;
     }
@@ -238,16 +266,21 @@ async fn hostname_override_used_with_tunnel_addr() {
     let mut t = target(&db, TlsMode::VerifyFull, Some(&certs));
     t.connect_addr = Some(SocketAddr::from(([127, 0, 0, 1], db.port)));
     t.port = 1; // must be ignored in favour of connect_addr
+
+    // Act
     let mut s = MysqlDriver
         .connect(&t, SessionPurpose::Editor)
         .await
         .unwrap();
+
+    // Assert
     s.ping().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "docker"]
 async fn cancel_handle_cancels_running_query() {
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = MysqlDriver
         .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
@@ -269,7 +302,11 @@ async fn cancel_handle_cancels_running_query() {
     });
     tokio::time::sleep(Duration::from_millis(500)).await;
     h.cancel().await.unwrap();
+
+    // Act
     let (_s, r) = q.await.unwrap();
+
+    // Assert
     assert_eq!(r.err().unwrap().kind, ErrorKind::Cancelled);
 }
 
@@ -279,6 +316,7 @@ async fn update_cell_via_build_update_affects_one_row() {
     use crustdb_core::edit::build_update;
     use crustdb_core::model::{Cell, ColumnMeta, ObjectKind, ObjectRef, TypeCategory};
 
+    // Arrange
     let db = start_mysql(None, None).await;
     let mut s = MysqlDriver
         .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
@@ -324,6 +362,8 @@ async fn update_cell_via_build_update_affects_one_row() {
         Some("z".into()),
     )
     .unwrap();
+
+    // Act & Assert
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
     s.start("SELECT v FROM e.t WHERE k = 'a'", ExecMode::Read)

@@ -128,7 +128,10 @@ mod tests {
 
     #[test]
     fn parses_postgres_with_sslmode() {
+        // Act
         let p = parse_connection_url("postgres://u:p%40ss@h:6543/db?sslmode=verify-full").unwrap();
+
+        // Assert
         assert_eq!(p.driver, DriverKind::Postgres);
         assert_eq!(p.host, "h");
         assert_eq!(p.port, Some(6543));
@@ -141,7 +144,10 @@ mod tests {
 
     #[test]
     fn postgresql_scheme_accepted() {
+        // Act
         let p = parse_connection_url("postgresql://h").unwrap();
+
+        // Assert
         assert_eq!(p.driver, DriverKind::Postgres);
         assert_eq!(
             (p.port, p.user, p.database, p.tls_mode),
@@ -151,6 +157,7 @@ mod tests {
 
     #[test]
     fn mariadb_maps_to_mysql() {
+        // Act & Assert
         assert_eq!(
             parse_connection_url("mariadb://h").unwrap().driver,
             DriverKind::Mysql
@@ -159,12 +166,16 @@ mod tests {
 
     #[test]
     fn mysql_ssl_mode_verify_identity_maps_to_verify_full() {
+        // Act
         let p = parse_connection_url("mysql://h/db?ssl-mode=VERIFY_IDENTITY").unwrap();
+
+        // Assert
         assert_eq!(p.tls_mode, Some(TlsMode::VerifyFull));
     }
 
     #[test]
     fn prefer_downgrades_to_require_with_warning() {
+        // Act & Assert
         let p = parse_connection_url("postgres://h/db?sslmode=prefer").unwrap();
         assert_eq!(p.tls_mode, Some(TlsMode::Require));
         assert_eq!(
@@ -180,6 +191,7 @@ mod tests {
 
     #[test]
     fn parses_sqlite_url_as_file_path() {
+        // Act & Assert
         let p = parse_connection_url("sqlite:///tmp/a%20b.db").unwrap();
         assert_eq!(p.driver, DriverKind::Sqlite);
         assert_eq!(p.database.as_deref(), Some("/tmp/a b.db"));
@@ -192,6 +204,7 @@ mod tests {
 
     #[test]
     fn sqlite_url_with_host_rejected() {
+        // Act & Assert
         // `dados.db` would be the host, silently leaving no file.
         assert_eq!(
             parse_connection_url("sqlite://dados.db").unwrap_err(),
@@ -201,6 +214,7 @@ mod tests {
 
     #[test]
     fn unknown_scheme_rejected() {
+        // Act & Assert
         assert_eq!(
             parse_connection_url("redis://h").unwrap_err(),
             UrlError::UnsupportedScheme("redis".into())
@@ -209,13 +223,17 @@ mod tests {
 
     #[test]
     fn ipv6_host_parsed() {
+        // Act
         let p = parse_connection_url("postgres://[::1]:5432/db").unwrap();
+
+        // Assert
         assert_eq!(p.host, "::1");
         assert_eq!(p.port, Some(5432));
     }
 
     #[test]
     fn errors_and_ignored_values() {
+        // Act & Assert
         assert_eq!(
             parse_connection_url("postgres:///db").unwrap_err(),
             UrlError::MissingHost
@@ -250,7 +268,10 @@ mod tests {
 
     #[test]
     fn debug_does_not_leak_password() {
+        // Act
         let p = parse_connection_url("postgres://u:hunter2@h/db").unwrap();
+
+        // Assert
         assert!(!format!("{p:?}").contains("hunter2"));
     }
 }

@@ -64,11 +64,13 @@ mod tests {
 
     #[test]
     fn mysql_quote_ident_doubles_backtick() {
+        // Act & Assert
         assert_eq!(MysqlDialect.quote_ident("a`b"), "`a``b`");
     }
 
     #[test]
     fn mysql_param_is_question_mark() {
+        // Act & Assert
         assert_eq!(
             MysqlDialect.param(3, &col("id", "int", TypeCategory::Integer)),
             "?"
@@ -77,6 +79,7 @@ mod tests {
 
     #[test]
     fn mysql_contains_lowercases_both_sides() {
+        // Act & Assert
         assert_eq!(
             MysqlDialect.ci_like(&col("e", "varchar(10)", TypeCategory::Text), "?"),
             "LOWER(CAST(`e` AS CHAR)) LIKE LOWER(?) ESCAPE '!'"
@@ -85,6 +88,7 @@ mod tests {
 
     #[test]
     fn mysql_select_caps_text_and_binary() {
+        // Act & Assert
         assert_eq!(
             MysqlDialect.select_expr(&col("b", "blob", TypeCategory::Binary)),
             "LEFT(`b`, 1048576) AS `b`"
@@ -97,12 +101,15 @@ mod tests {
 
     #[test]
     fn mysql_qualified_name() {
+        // Arrange
         let o = |db: &str| ObjectRef {
             database: db.into(),
             schema: None,
             name: "t".into(),
             kind: ObjectKind::Table,
         };
+
+        // Act & Assert
         assert_eq!(MysqlDialect.qualified_name(&o("db")), "`db`.`t`");
         assert_eq!(MysqlDialect.qualified_name(&o("")), "`t`");
     }

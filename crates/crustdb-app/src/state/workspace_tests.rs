@@ -44,6 +44,7 @@ pub(crate) fn state(names: &[&str]) -> AppState {
 
 #[test]
 fn apply_connected_marks_workspace_online() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     assert_eq!(ws, WorkspaceId(1));
@@ -54,10 +55,14 @@ fn apply_connected_marks_workspace_online() {
         patch: 0,
         raw: "16.0".into(),
     };
+
+    // Act
     s.apply(Event::Connected {
         ws,
         server: server.clone(),
     });
+
+    // Assert
     assert_eq!(s.workspaces[0].status, Status::Online(server));
     assert!(!s.workspaces[0].form_open());
 }
@@ -99,8 +104,11 @@ fn page(req: u64) -> Event {
 
 #[test]
 fn open_table_loads_structure_then_fetches_with_catalog_columns() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
+
+    // Act & Assert
     let cmds = s.open_table(ws, obj(), RequestId(7));
     assert!(matches!(cmds[0], Command::OpenTable { tab: TabId(1), .. }));
     assert!(matches!(
@@ -135,9 +143,14 @@ fn func() -> ObjectRef {
 
 #[test]
 fn open_object_function_emits_open_and_ddl() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
+
+    // Act
     let cmds = s.open_table(ws, func(), RequestId(1));
+
+    // Assert
     assert!(matches!(
         cmds[..],
         [
@@ -157,10 +170,13 @@ fn open_object_function_emits_open_and_ddl() {
 
 #[test]
 fn tab_ids_are_unique_across_workspaces_and_kinds() {
+    // Arrange
     let mut s = state(&["a", "b"]);
     let a = s.open_workspace(s.config.connections[0].clone());
     let b = s.open_workspace(s.config.connections[1].clone());
     let mut ids = vec![];
+
+    // Act
     for (ws, o) in [(a, obj()), (b, func()), (a, func()), (b, obj())] {
         for c in s.open_table(ws, o, RequestId(1)) {
             if let Command::OpenTable { tab, .. } = c {
@@ -168,11 +184,14 @@ fn tab_ids_are_unique_across_workspaces_and_kinds() {
             }
         }
     }
+
+    // Assert
     assert_eq!(ids, [1, 2, 3, 4]);
 }
 
 #[test]
 fn page_ignores_stale_req_and_keeps_catalog_columns() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     s.open_table(ws, obj(), RequestId(7));
@@ -183,6 +202,8 @@ fn page_ignores_stale_req_and_keeps_catalog_columns() {
         fks: vec![],
     });
     s.take_fetches(|| RequestId(8));
+
+    // Act & Assert
     s.apply(page(6));
     let t = s.table_mut(TabId(1)).unwrap();
     assert!(t.loading.is_some() && t.estimate.is_none());
@@ -195,9 +216,12 @@ fn page_ignores_stale_req_and_keeps_catalog_columns() {
 
 #[test]
 fn ddl_retry_reemits_load_ddl_and_event_fills_text() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     s.open_table(ws, func(), RequestId(1));
+
+    // Act & Assert
     s.apply(Event::Notice {
         tab: TabId(1),
         text: "boom".into(),
@@ -230,9 +254,12 @@ fn ddl_retry_reemits_load_ddl_and_event_fills_text() {
 
 #[test]
 fn notice_and_crash_release_loading() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     s.open_table(ws, obj(), RequestId(1));
+
+    // Act & Assert
     s.apply(Event::Notice {
         tab: TabId(1),
         text: "boom".into(),
@@ -247,18 +274,24 @@ fn notice_and_crash_release_loading() {
 
 #[test]
 fn apply_connect_failed_keeps_form_open_with_error() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
+
+    // Act
     s.apply(Event::ConnectFailed {
         ws,
         error: "refused".into(),
     });
+
+    // Assert
     assert_eq!(s.workspaces[0].status, Status::Failed("refused".into()));
     assert!(s.workspaces[0].form_open());
 }
 
 #[test]
 fn query_tab_opens_and_run_sends_evaluate_only() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
@@ -269,6 +302,8 @@ fn query_tab_opens_and_run_sends_evaluate_only() {
         .active_query_mut()
         .unwrap()
         .text = "select 1; select 2".into();
+
+    // Act & Assert
     let Some(Command::Evaluate { statements, .. }) = s.run_query(tab, 3..3, false, RequestId(5))
     else {
         panic!("no Evaluate");
@@ -290,6 +325,7 @@ fn query_tab_opens_and_run_sends_evaluate_only() {
 
 #[test]
 fn execute_marks_tab_running_and_routes_events_by_req() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
@@ -304,6 +340,8 @@ fn execute_marks_tab_running_and_routes_events_by_req() {
             flags: vec![],
         },
     });
+
+    // Act & Assert
     let cmd = s.take_commands().pop().unwrap();
     s.note_sent(&cmd);
     let Command::Execute { req, .. } = cmd else {
@@ -333,6 +371,7 @@ fn execute_marks_tab_running_and_routes_events_by_req() {
 
 #[test]
 fn run_selection_is_in_chars_not_bytes() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
@@ -343,18 +382,25 @@ fn run_selection_is_in_chars_not_bytes() {
         .active_query_mut()
         .unwrap()
         .text = "select 'ação🦀'; select 2".into();
+
+    // Act
     // chars 0..16 = `select 'ação🦀';`
     let Some(Command::Evaluate { statements, .. }) = s.run_query(tab, 0..16, false, RequestId(1))
     else {
         panic!("no Evaluate");
     };
+
+    // Assert
     assert_eq!(statements, vec!["select 'ação🦀'"]);
 }
 
 #[test]
 fn delete_connection_requires_confirmation() {
+    // Arrange
     let mut s = state(&["a", "b"]);
     let id = s.config.connections[0].id;
+
+    // Act & Assert
     s.request_delete(id);
     assert_eq!(s.config.connections.len(), 2);
     assert!(matches!(
@@ -368,23 +414,32 @@ fn delete_connection_requires_confirmation() {
 
 #[test]
 fn read_only_config_refuses_delete() {
+    // Arrange
     let mut s = state(&["a"]);
     s.config.read_only = true;
+
+    // Act
     s.request_delete(s.config.connections[0].id);
+
+    // Assert
     assert!(s.dialogs.top().is_none());
     assert_eq!(s.config.connections.len(), 1);
 }
 
 #[test]
 fn failed_save_keeps_connection() {
+    // Arrange
     let mut s = state(&["a"]);
     s.request_delete(s.config.connections[0].id);
+
+    // Act & Assert
     assert_eq!(s.confirm_delete(|_| Err("io")), Err("io"));
     assert_eq!(s.config.connections.len(), 1);
 }
 
 #[test]
 fn evaluated_routes_by_registered_request() {
+    // Arrange
     use crustdb_core::safety::{Evaluation, Flag, FlagReason, Verdict};
     let ev = |verdict| Evaluation {
         verdict,
@@ -397,6 +452,8 @@ fn evaluated_routes_by_registered_request() {
     let mut s = state(&["a"]);
     let (ws, tab) = (WorkspaceId(5), TabId(6));
     s.register_evaluate(RequestId(1), ws, tab);
+
+    // Act & Assert
     s.apply(Event::Evaluated {
         req: RequestId(1),
         evaluation: ev(Verdict::Confirm),
@@ -443,8 +500,11 @@ fn evaluated_routes_by_registered_request() {
 
 #[test]
 fn live_workspace_ignores_failed_and_returns_latest() {
+    // Arrange
     let mut s = state(&["a", "b"]);
     let (a, b) = (s.config.connections[0].id, s.config.connections[1].id);
+
+    // Act & Assert
     assert_eq!(s.live_workspace(a), None);
     let ws = s.open_workspace(s.config.connections[0].clone());
     assert_eq!(s.live_workspace(a), Some(WorkspaceId(1)));
@@ -457,9 +517,12 @@ fn live_workspace_ignores_failed_and_returns_latest() {
 
 #[test]
 fn ctrl_f_toggles_find_on_query_tabs_and_filter_on_table_tabs() {
+    // Arrange
     let mut s = state(&["a"]);
     let ws = s.open_workspace(s.config.connections[0].clone());
     s.open_table(ws, obj(), RequestId(1));
+
+    // Act & Assert
     let w = s.workspace_mut(ws).unwrap();
     w.toggle_find_or_filter();
     assert!(w.active_table_mut().unwrap().filter_open);

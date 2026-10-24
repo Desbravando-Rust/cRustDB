@@ -18,9 +18,14 @@ fn load(h: &mut super::tests::H, req: u64, database: &str) {
 
 #[tokio::test]
 async fn load_diagram_answers_with_the_schema_tables() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
+
+    // Act
     load(&mut h, 9, "a");
+
+    // Assert
     assert!(matches!(
         next(&h.rx).await,
         Event::Diagram { req: RequestId(9), tables: Some(t) } if t.is_empty()
@@ -29,6 +34,7 @@ async fn load_diagram_answers_with_the_schema_tables() {
 
 #[tokio::test]
 async fn load_diagram_fetches_columns_of_each_table() {
+    // Arrange
     let mut h = harness(FakeScript {
         columns: vec![col("id")],
         ..Default::default()
@@ -40,7 +46,11 @@ async fn load_diagram_fetches_columns_of_each_table() {
         kind: ObjectKind::Table,
     });
     connect(&mut h, Some("a")).await;
+
+    // Act
     load(&mut h, 11, "a");
+
+    // Assert
     let Event::Diagram {
         tables: Some(t), ..
     } = next(&h.rx).await
@@ -54,11 +64,14 @@ async fn load_diagram_fetches_columns_of_each_table() {
 
 #[tokio::test]
 async fn load_diagram_failure_answers_none_with_notice() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
     load(&mut h, 10, "b");
     let mut seen = vec![];
+
+    // Act
     let tables = loop {
         match next(&h.rx).await {
             Event::Diagram { req, tables } => {
@@ -68,6 +81,8 @@ async fn load_diagram_failure_answers_none_with_notice() {
             e => seen.push(e),
         }
     };
+
+    // Assert
     assert!(tables.is_none());
     assert!(seen.iter().any(|e| matches!(e, Event::Notice { .. })));
 }

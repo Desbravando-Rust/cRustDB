@@ -154,6 +154,7 @@ mod tests {
 
     #[test]
     fn binary_allows_only_null_checks() {
+        // Act & Assert
         assert_eq!(
             operators_for(TypeCategory::Binary, DriverKind::Postgres),
             &[Operator::IsNull, Operator::IsNotNull]
@@ -162,12 +163,14 @@ mod tests {
 
     #[test]
     fn ilike_only_on_postgres() {
+        // Act & Assert
         assert!(!operators_for(TypeCategory::Text, DriverKind::Mysql).contains(&Operator::ILike));
         assert!(operators_for(TypeCategory::Text, DriverKind::Postgres).contains(&Operator::ILike));
     }
 
     #[test]
     fn in_list_parsing() {
+        // Act & Assert
         assert_eq!(parse_in_list(" 1, 2,,3 ,"), vec!["1", "2", "3"]);
     }
 }

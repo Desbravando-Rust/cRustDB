@@ -60,9 +60,12 @@ const SEED: &str = "WITH RECURSIVE c(x) AS \
 
 #[tokio::test]
 async fn select_streams_rows_in_pages() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     affected(&mut s, "CREATE TABLE t(n INTEGER)").await;
+
+    // Act & Assert
     assert_eq!(affected(&mut s, SEED).await, Some(25));
 
     let h = s
@@ -92,8 +95,11 @@ async fn select_streams_rows_in_pages() {
 
 #[tokio::test]
 async fn dml_reports_affected_rows() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
+
+    // Act & Assert
     assert_eq!(affected(&mut s, "CREATE TABLE t(n INTEGER)").await, Some(0));
     assert_eq!(affected(&mut s, SEED).await, Some(25));
     assert_eq!(
@@ -107,6 +113,7 @@ async fn dml_reports_affected_rows() {
 
 #[tokio::test]
 async fn start_params_binds_null_and_text() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     s.start_params(
@@ -116,16 +123,23 @@ async fn start_params_binds_null_and_text() {
     .await
     .unwrap();
     let r = s.fetch(10).await.unwrap();
+
+    // Act
     s.finish().await.unwrap();
+
+    // Assert
     assert_eq!(txt(&r.rows[0][0]), "1");
     assert_eq!(txt(&r.rows[0][1]), "x'y");
 }
 
 #[tokio::test]
 async fn read_only_purpose_rejects_write() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     affected(&mut s, "CREATE TABLE t(n INTEGER)").await;
+
+    // Act & Assert
     s.close().await;
 
     let mut ro = open(f.path(), SessionPurpose::Metadata).await;
@@ -150,6 +164,7 @@ async fn read_only_purpose_rejects_write() {
 
 #[tokio::test]
 async fn cancel_interrupts_long_query() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     let h = s.cancel_handle();
@@ -166,6 +181,8 @@ async fn cancel_interrupts_long_query() {
         .await;
         (s, r)
     });
+
+    // Act & Assert
     // An interrupt before the first step is a no-op, so repeat it until the query ends.
     let (mut s, r) = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -184,8 +201,11 @@ async fn cancel_interrupts_long_query() {
 
 #[tokio::test]
 async fn multiple_statements_rejected() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
+
+    // Act & Assert
     let e = s
         .start("SELECT 1; SELECT 2", ExecMode::Other)
         .await
@@ -198,8 +218,11 @@ async fn multiple_statements_rejected() {
 
 #[tokio::test]
 async fn comment_only_sql_is_noop() {
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
+
+    // Act & Assert
     for sql in ["", "-- just a comment", "/* block */"] {
         let h = s.start(sql, ExecMode::Other).await.unwrap();
         assert!(h.columns.is_empty(), "{sql:?}");
@@ -212,6 +235,7 @@ async fn update_cell_via_build_update_affects_one_row() {
     use crustdb_core::edit::build_update;
     use crustdb_core::model::{ColumnMeta, ObjectKind, ObjectRef};
 
+    // Arrange
     let f = NamedTempFile::new().unwrap();
     let mut s = open(f.path(), SessionPurpose::Editor).await;
     affected(
@@ -252,6 +276,8 @@ async fn update_cell_via_build_update_affects_one_row() {
         Some("z".into()),
     )
     .unwrap();
+
+    // Act & Assert
     s.start_params(&b.sql, &b.params).await.unwrap();
     assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
     assert_eq!(
