@@ -259,6 +259,31 @@ mod tests {
     }
 
     #[test]
+    fn book_promo_stays_visible_when_list_overflows() {
+        // Arrange
+        let names: Vec<String> = (0..15).map(|i| format!("conn{i}")).collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let s = state(&names);
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(800.0, 300.0))
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
+        h.run();
+
+        // Act
+        let r = h
+            .get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
+            .rect();
+
+        // Assert
+        assert!(r.max.y <= 300.0, "promo cut off: {r:?}");
+    }
+
+    #[test]
     fn double_click_connects() {
         // Arrange
         let s = state(&["alpha"]);
