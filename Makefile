@@ -2,14 +2,12 @@
 REMOTE ?= origin
 BRANCHES := $(shell git for-each-ref --format='%(refname:short)' 'refs/heads/feat/*')
 
-.PHONY: push-branches list-branches lockfix test release release-tag hooks lint test
+.PHONY: push-branches list-branches lockfix test release hooks lint test
 
-# Release: 1) bump de versão + PR; 2) após o merge, tag vX.Y.Z que dispara os instaladores no CI.
+# Release: pergunta a versão (X.Y.Z ou X.Y.Z-rcN). Bump + PR se preciso; senão cria a release no GitHub,
+# o que dispara .github/workflows/release.yml (instaladores). Rode de novo após o merge do PR de bump.
 release:
-	@./packaging/release.sh bump
-
-release-tag:
-	@./packaging/release.sh tag
+	@./packaging/release.sh release
 
 # Resolve conflito no Cargo.lock: parte de um lado (SIDE=ours|theirs) e o cargo
 # reconcilia com os Cargo.toml mesclados, sem atualizar as demais versões.
