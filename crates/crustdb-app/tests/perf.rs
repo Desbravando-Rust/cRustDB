@@ -85,6 +85,8 @@ fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
                 &mut anchor,
                 &[],
                 None,
+                &[],
+                None,
             );
         });
     h.run();

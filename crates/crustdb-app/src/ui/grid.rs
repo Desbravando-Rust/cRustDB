@@ -53,6 +53,8 @@ pub fn grid(
     anchor: &mut Option<usize>,
     sorts: &[Sort],
     mut edit: Option<CellEdit<'_>>,
+    pending: &[(usize, Option<String>)],
+    pending_row: Option<usize>,
 ) -> Option<(String, bool)> {
     let mut clicked = None;
     // ponytail: O(n) scan of `view` per frame; keep positions in state if big views lag.
@@ -96,6 +98,14 @@ pub fn grid(
                             && (*r, *c) == (i, j)
                         {
                             return edit_cell(ui, text, op);
+                        }
+                        if pending_row == Some(i)
+                            && let Some((_, v)) = pending.iter().find(|(c, _)| *c == j)
+                        {
+                            let warn = ui.visuals().warn_fg_color;
+                            let t = RichText::new(v.as_deref().unwrap_or("NULL")).color(warn);
+                            ui.add(egui::Label::new(t).truncate().selectable(false));
+                            return;
                         }
                         let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
                         if matches!(cell, Cell::Null) {
@@ -173,6 +183,16 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
+            if !tab.pending.is_empty() {
+                let save = egui::Button::new("Save");
+                if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
+                    out.push(Intent::SavePending(id));
+                }
+                if ui.button("Discard").clicked() {
+                    out.push(Intent::DiscardPending(id));
+                }
+                ui.label(format!("{} pending", tab.pending.len()));
+            }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);
                 if ui.button("Retry").clicked() {
@@ -208,6 +228,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             &mut tab.select_anchor,
             &tab.sorts,
             Some((&mut tab.editing, &mut op)),
+            &tab.pending,
+            tab.pending_row,
         );
         match op {
             Some(CellOp::Begin { row, col }) => tab.begin_edit(row, col),
@@ -293,6 +315,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crustdb_core::model::{ObjectKind, ObjectRef, TypeCategory};
     use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
 
     use super::*;
     use crate::runtime::TabId;
@@ -359,5 +382,63 @@ mod tests {
         // Assert
         assert!(out.is_empty());
         assert!(t.editing.is_none());
+    }
+
+    fn staged() -> TableTab {
+        let mut t = tab();
+        t.editing = None;
+        t.pending = vec![(1, Some("new".into()))];
+        t.pending_row = Some(0);
+        t
+    }
+
+    #[test]
+    fn save_and_discard_buttons_emit_intents_when_pending() {
+        // Arrange
+        let mut t = staged();
+        let mut out = vec![];
+        let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+        h.run();
+
+        // Act
+        h.get_by_label("Save").click();
+        h.run();
+        h.get_by_label("Discard").click();
+        h.run();
+        drop(h);
+
+        // Assert
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, Intent::SavePending(TabId(1))))
+        );
+        assert!(out.iter().any(|i| matches!(i, Intent::DiscardPending(_))));
+    }
+
+    #[test]
+    fn no_save_button_without_pending() {
+        // Arrange
+        let mut t = tab();
+        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label("Save").is_none());
+    }
+
+    #[test]
+    fn pending_cell_shows_staged_value() {
+        // Arrange
+        let mut t = staged();
+        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label("new").is_some());
+        assert!(h.query_by_label("old").is_none());
     }
 }
