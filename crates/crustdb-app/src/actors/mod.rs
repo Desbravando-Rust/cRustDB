@@ -363,6 +363,7 @@ mod target_tests {
 
     #[test]
     fn sqlite_target_keeps_file_path() {
+        // Act & Assert
         let t = shared(DriverKind::Sqlite).target_for("main");
         assert_eq!(t.database.as_deref(), Some("/tmp/a.db"));
         let t = shared(DriverKind::Mysql).target_for("main");

@@ -69,10 +69,13 @@ fn part(path: &Path) -> std::path::PathBuf {
 
 #[tokio::test]
 async fn export_full_table_streams_csv() {
+    // Arrange
     let mut h = harness(big(250_000));
     open_table_tab(&mut h).await;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("t.csv");
+
+    // Act & Assert
     export(&mut h, 7, query_for_export(), &path);
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(250_000));
@@ -93,6 +96,7 @@ async fn export_full_table_streams_csv() {
 
 #[tokio::test]
 async fn export_respects_filters_and_sorts() {
+    // Arrange
     let mut h = harness(big(3));
     open_table_tab(&mut h).await;
     let dir = tempfile::tempdir().unwrap();
@@ -108,6 +112,8 @@ async fn export_respects_filters_and_sorts() {
         column: "id".into(),
         descending: true,
     }];
+
+    // Act & Assert
     export(&mut h, 1, q, &dir.path().join("t.csv"));
     assert_eq!(done(&h).await.0, Ok(3));
     let sql = super::super::editor::tests::starts(&h).remove(0);
@@ -117,9 +123,12 @@ async fn export_respects_filters_and_sorts() {
 
 #[tokio::test]
 async fn export_uses_export_purpose_session() {
+    // Arrange
     let mut h = harness(big(1));
     open_table_tab(&mut h).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act & Assert
     export(&mut h, 1, query_for_export(), &dir.path().join("t.csv"));
     assert_eq!(done(&h).await.0, Ok(1));
     let c = h.drv.log.connects.lock().unwrap();
@@ -128,11 +137,14 @@ async fn export_uses_export_purpose_session() {
 
 #[tokio::test]
 async fn cancel_export_removes_partial_file() {
+    // Arrange
     let mut h = harness(big(20_000));
     h.drv.log.fetch_delay_ms.store(2_000, Ordering::SeqCst);
     open_table_tab(&mut h).await;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("t.csv");
+
+    // Act & Assert
     export(&mut h, 3, query_for_export(), &path);
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(part(&path).exists());
@@ -144,11 +156,14 @@ async fn cancel_export_removes_partial_file() {
 
 #[tokio::test]
 async fn export_result_drains_without_reexecuting() {
+    // Arrange
     let mut h = harness(script(2_500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await; // 1000 loaded, cursor paused
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("r.csv");
+
+    // Act & Assert
     cmd(
         &mut h,
         Command::ExportResult {
@@ -168,6 +183,7 @@ async fn export_result_drains_without_reexecuting() {
 
 #[tokio::test]
 async fn export_result_warns_on_truncated_cells() {
+    // Arrange
     let mut s = script(1);
     s.rows = vec![
         vec![Cell::Text {
@@ -180,6 +196,8 @@ async fn export_result_warns_on_truncated_cells() {
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act
     cmd(
         &mut h,
         Command::ExportResult {
@@ -188,6 +206,8 @@ async fn export_result_warns_on_truncated_cells() {
             path: dir.path().join("r.csv"),
         },
     );
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(1));
     assert!(
@@ -198,6 +218,7 @@ async fn export_result_warns_on_truncated_cells() {
 
 #[tokio::test]
 async fn sink_writes_jsonl_by_extension() {
+    // Arrange
     let mut s = script(2);
     s.rows.push(
         vec![Cell::Text {
@@ -211,7 +232,11 @@ async fn sink_writes_jsonl_by_extension() {
     run(&mut h, 1, &["SELECT 1"]).await;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("out.jsonl");
+
+    // Act
     export_result(&mut h, 2, &path);
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(3));
     assert!(!part(&path).exists());
@@ -227,12 +252,17 @@ async fn sink_writes_jsonl_by_extension() {
 
 #[tokio::test]
 async fn unknown_extension_exports_csv_with_notice() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("out.txt");
+
+    // Act
     export_result(&mut h, 2, &path);
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(1));
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "id\n0\n");
@@ -244,10 +274,13 @@ async fn unknown_extension_exports_csv_with_notice() {
 
 #[tokio::test]
 async fn export_result_without_result_fails() {
+    // Arrange
     let mut h = harness(script(1));
     connect(&mut h, Some("d")).await;
     open_editor(&mut h);
     let dir = tempfile::tempdir().unwrap();
+
+    // Act
     cmd(
         &mut h,
         Command::ExportResult {
@@ -256,6 +289,8 @@ async fn export_result_without_result_fails() {
             path: dir.path().join("r.csv"),
         },
     );
+
+    // Assert
     assert!(done(&h).await.0.is_err());
 }
 
@@ -272,11 +307,16 @@ fn export_result(h: &mut H, req: u64, path: &Path) {
 
 #[tokio::test(start_paused = true)]
 async fn export_of_cut_result_warns_it_is_partial() {
+    // Arrange
     let mut h = harness(script(1_500));
     open(&mut h).await;
     run(&mut h, 1, &["INSERT INTO t VALUES (1) RETURNING id"]).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act
     export_result(&mut h, 2, &dir.path().join("r.csv"));
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(1_000));
     assert!(
@@ -287,6 +327,7 @@ async fn export_of_cut_result_warns_it_is_partial() {
 
 #[tokio::test(start_paused = true)]
 async fn export_without_result_keeps_pg_transaction_open() {
+    // Arrange
     let mut h = harness(FakeScript::default());
     open(&mut h).await;
     cmd(
@@ -298,7 +339,11 @@ async fn export_without_result_keeps_pg_transaction_open() {
     );
     run(&mut h, 1, &["UPDATE t SET a = 1 WHERE id = 1"]).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act
     export_result(&mut h, 2, &dir.path().join("r.csv"));
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert!(res.is_err());
     assert!(!tx_states(&seen).contains(&crate::runtime::TxState::Aborted));
@@ -306,10 +351,13 @@ async fn export_without_result_keeps_pg_transaction_open() {
 
 #[tokio::test(start_paused = true)]
 async fn export_to_bad_path_leaves_cursor_usable() {
+    // Arrange
     let mut h = harness(script(2_500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act & Assert
     export_result(&mut h, 2, &dir.path().join("missing/r.csv"));
     assert!(done(&h).await.0.is_err());
     cmd(
@@ -332,12 +380,17 @@ async fn export_to_bad_path_leaves_cursor_usable() {
 
 #[tokio::test(start_paused = true)]
 async fn export_after_cursor_expiry_warns_it_is_partial() {
+    // Arrange
     let mut h = harness(script(2_500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
     tokio::time::sleep(Duration::from_secs(301)).await;
     let dir = tempfile::tempdir().unwrap();
+
+    // Act
     export_result(&mut h, 2, &dir.path().join("r.csv"));
+
+    // Assert
     let (res, seen) = done(&h).await;
     assert_eq!(res, Ok(1_000));
     assert!(
@@ -348,6 +401,7 @@ async fn export_after_cursor_expiry_warns_it_is_partial() {
 
 #[tokio::test(start_paused = true)]
 async fn cancel_export_waiting_in_backlog_is_honoured() {
+    // Arrange
     let mut s = script(10);
     s.delay = Duration::from_secs(5);
     let mut h = harness(s);
@@ -359,7 +413,11 @@ async fn cancel_export_waiting_in_backlog_is_honoured() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("r.csv");
     export_result(&mut h, 4, &path);
+
+    // Act
     cmd(&mut h, Command::CancelExport { req: RequestId(4) });
+
+    // Assert
     let (res, _) = done(&h).await;
     assert_eq!(res, Err("cancelled".into()));
     assert!(!path.exists() && !part(&path).exists());
@@ -367,19 +425,27 @@ async fn cancel_export_waiting_in_backlog_is_honoured() {
 
 #[test]
 fn failed_finish_removes_partial_file() {
+    // Arrange
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("out.csv");
     std::fs::create_dir(&target).unwrap(); // the rename onto a directory fails
     let mut sink = super::Sink::create(&target, "t".into(), DriverKind::Postgres).unwrap();
+
+    // Act
     sink.write(&rows(2)).unwrap();
+
+    // Assert
     assert!(sink.finish().is_err());
     assert!(!part(&target).exists());
 }
 
 #[test]
 fn dropped_sink_removes_partial_file() {
+    // Arrange
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("out.csv");
+
+    // Act & Assert
     let sink = super::Sink::create(&target, "t".into(), DriverKind::Postgres).unwrap();
     assert!(part(&target).exists());
     drop(sink);
