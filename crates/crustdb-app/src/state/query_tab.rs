@@ -202,7 +202,13 @@ impl QueryTab {
                     self.idle();
                 }
             }
-            Event::FetchDone { .. } => self.idle(),
+            Event::Rows { .. } => {
+                self.pane.apply(e);
+                // ponytail: ends Load more at its first batch; later batches still reach the pane.
+                if self.bg {
+                    self.idle();
+                }
+            }
             Event::ExportDone { result, .. } => {
                 let (ok, text) = match result {
                     Ok(n) => (true, format!("exported {n} rows")),

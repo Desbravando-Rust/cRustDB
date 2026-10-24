@@ -116,15 +116,6 @@ fn row_counts(ev: &[Event]) -> Vec<(usize, bool)> {
         .collect()
 }
 
-/// Exactly one `FetchDone` for the paused `req`, after every batch.
-fn fetch_done_last(ev: &[Event], req: RequestId) -> bool {
-    let n = ev
-        .iter()
-        .filter(|e| matches!(e, Event::FetchDone { .. }))
-        .count();
-    n == 1 && matches!(ev.last(), Some(Event::FetchDone { req: r }) if *r == req)
-}
-
 #[tokio::test(start_paused = true)]
 async fn evaluate_finishes_paused_cursor_before_explain() {
     // Arrange
@@ -284,7 +275,6 @@ async fn load_more_fetches_editor_row_limit() {
     );
     let ev = settle(&h).await;
     assert_eq!(row_counts(&ev), [(500, false), (500, false)]);
-    assert!(fetch_done_last(&ev, RequestId(1001)));
     cmd(
         &mut h,
         Command::LoadMore {
@@ -294,7 +284,6 @@ async fn load_more_fetches_editor_row_limit() {
     );
     let ev = settle(&h).await;
     assert_eq!(row_counts(&ev), [(500, true)]);
-    assert!(fetch_done_last(&ev, RequestId(1001)));
     assert_eq!(ops(&h).last().unwrap(), "finish");
     // Nothing paused any more.
     cmd(

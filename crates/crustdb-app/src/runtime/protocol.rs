@@ -236,10 +236,6 @@ pub enum Event {
         rows: Vec<Row>,
         exhausted: bool,
     },
-    /// A Load more finished emitting its `Rows` batches.
-    FetchDone {
-        req: RequestId,
-    },
     ExecError {
         req: RequestId,
         index: usize,
