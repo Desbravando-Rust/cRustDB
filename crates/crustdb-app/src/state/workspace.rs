@@ -251,37 +251,6 @@ impl AppState {
             .collect()
     }
 
-    pub fn open_workspace(&mut self, config: ConnectionConfig) -> WorkspaceId {
-        // A retry supersedes the failed attempt of the same connection.
-        self.workspaces
-            .retain(|w| !(w.config.id == config.id && matches!(w.status, Status::Failed(_))));
-        let id = WorkspaceId(self.next_ws);
-        self.next_ws += 1;
-        self.workspaces.push(WorkspaceState {
-            id,
-            tree: ObjectTree::new(id, config.driver),
-            columns: ColumnCache::default(),
-            config,
-            status: Status::Connecting,
-            tabs: vec![],
-            queries: vec![],
-            active_tab: None,
-            diagram: None,
-            session_password: None,
-        });
-        self.active = Some(id);
-        id
-    }
-
-    /// Newest workspace of `conn` that is connecting or online (a failed one may be retried).
-    pub fn live_workspace(&self, conn: ConnectionId) -> Option<WorkspaceId> {
-        self.workspaces
-            .iter()
-            .rev()
-            .find(|w| w.config.id == conn && !matches!(w.status, Status::Failed(_)))
-            .map(|w| w.id)
-    }
-
     pub fn active_online(&self) -> Option<&WorkspaceState> {
         let id = self.active?;
         self.workspaces
@@ -486,6 +455,9 @@ impl AppState {
         Ok(Some(id))
     }
 }
+
+#[path = "workspace_open.rs"]
+mod open;
 
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
