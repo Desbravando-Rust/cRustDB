@@ -107,6 +107,15 @@ impl DialogStack {
         self.0.pop()
     }
 
+    /// Drops the dialogs that belong to a workspace or to one of its tabs.
+    pub fn retain_ws(&mut self, ws: WorkspaceId, tabs: &[TabId]) {
+        self.0.retain(|d| match d {
+            Dialog::Safety { ws: w, .. } | Dialog::HostKey { ws: w, .. } => *w != ws,
+            Dialog::CloseWithTx { tab } | Dialog::DirtyFile { tab } => !tabs.contains(tab),
+            Dialog::DeleteConnection { .. } => true,
+        });
+    }
+
     pub fn top(&self) -> Option<&Dialog> {
         self.0.last()
     }

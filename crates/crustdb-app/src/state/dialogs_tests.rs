@@ -350,3 +350,28 @@ fn debug_never_prints_the_typed_password() {
     // Assert
     assert!(!format!("{s:?}").contains("topsecret"));
 }
+
+#[test]
+fn retain_ws_drops_only_that_workspaces_dialogs() {
+    // Arrange
+    let other = WorkspaceId(9);
+    let mut s = with_dialog(Verdict::Confirm);
+    s.push(Dialog::DirtyFile { tab: TAB });
+    s.push(Dialog::HostKey {
+        ws: WS,
+        host: "h".into(),
+        fingerprint: "f".into(),
+    });
+    s.push(Dialog::HostKey {
+        ws: other,
+        host: "h".into(),
+        fingerprint: "f".into(),
+    });
+
+    // Act
+    s.retain_ws(WS, &[TAB]);
+
+    // Assert
+    assert!(matches!(s.pop(), Some(Dialog::HostKey { ws, .. }) if ws == other));
+    assert!(s.pop().is_none());
+}
