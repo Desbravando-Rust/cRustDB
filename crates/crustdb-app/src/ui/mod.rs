@@ -33,6 +33,7 @@ pub enum Intent {
     ConfirmDelete,
     CancelDialog,
     FormImportUrl,
+    FormBrowseSqlite,
     FormTest,
     FormSave,
     FormConnect,

@@ -156,9 +156,14 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
             if f.draft.driver == DriverKind::Sqlite {
                 // A local file: no server, credentials, TLS or tunnel.
                 ui.label("Database file");
-                let mut p = f.draft.database.as_ref().map(PathBuf::from);
-                path_edit(ui, &mut p);
-                f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
+                ui.horizontal(|ui| {
+                    let mut p = f.draft.database.as_ref().map(PathBuf::from);
+                    path_edit(ui, &mut p);
+                    f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
+                    if ui.button("Browse…").clicked() {
+                        out.push(Intent::FormBrowseSqlite);
+                    }
+                });
                 ui.end_row();
                 error_for(ui, f, "database");
                 ui.end_row();
@@ -344,5 +349,26 @@ mod tests {
         for hidden in ["Host", "Port", "User", "Password", "TLS mode", "SSH tunnel"] {
             assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
         }
+    }
+
+    #[test]
+    fn sqlite_form_browse_emits_intent() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
+        let mut intents = vec![];
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                intents.extend(show(ui, &mut f));
+            });
+        h.run();
+
+        // Act
+        h.get_by_label("Browse…").click();
+        h.run();
+        drop(h);
+
+        // Assert
+        assert!(intents.contains(&Intent::FormBrowseSqlite));
     }
 }
