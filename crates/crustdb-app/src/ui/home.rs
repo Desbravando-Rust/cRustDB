@@ -28,13 +28,19 @@ fn engine_name(kind: DriverKind) -> &'static str {
 
 const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
-pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
-    let mut out = vec![];
+pub(crate) fn logo(ui: &mut egui::Ui, max_height: f32) {
     ui.add(
         egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
-            .max_height(96.0)
+            .max_height(max_height)
             .alt_text("cRustDB logo"),
     );
+}
+
+pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
+    let mut out = vec![];
+    if state.active_online().is_none() {
+        logo(ui, 96.0);
+    }
     ui.horizontal(|ui| {
         ui.heading("cRustDB");
         if ui.button(format!("{} New", icon::PLUS)).clicked() {

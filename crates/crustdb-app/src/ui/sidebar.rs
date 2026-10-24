@@ -11,6 +11,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let Some(active) = state.active_online() else {
         return out;
     };
+    super::home::logo(ui, 48.0);
     egui::ComboBox::from_id_salt("workspace")
         .selected_text(&active.config.name)
         .show_ui(ui, |ui| {
@@ -109,18 +110,20 @@ mod tests {
         });
         s.active = Some(ws);
         let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
 
         // Act
         h.run();
 
         // Assert
         let logo = h.get_by_label("cRustDB logo").rect();
-        let combo = h.get_by_label("alpha").rect();
+        let combo = h.get_by_role(egui::accesskit::Role::ComboBox).rect();
         assert!(logo.top() < combo.top());
     }
 }
