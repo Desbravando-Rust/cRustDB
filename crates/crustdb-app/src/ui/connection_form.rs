@@ -313,7 +313,6 @@ mod tests {
     fn url_box_shows_example_hint() {
         // Arrange
         let mut f = ConnectionForm::new(DriverKind::Postgres, true);
-        f.show_url = true;
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
