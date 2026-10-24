@@ -15,6 +15,7 @@ impl CrustApp {
     pub(super) fn handle_files(&mut self, intent: Intent) {
         match intent {
             Intent::OpenFile => self.picker.start(Pick::Open, &self.ctx, ""),
+            Intent::FormBrowseSqlite => self.picker.start(Pick::SqliteDb, &self.ctx, ""),
             Intent::ExportResult(tab) => {
                 self.picker
                     .start(Pick::Export(tab), &self.ctx, "result.csv")
@@ -105,6 +106,12 @@ impl CrustApp {
                 Pick::Export(tab) => {
                     let cmd = self.state.query_mut(tab).and_then(|q| q.export(path));
                     self.send(cmd);
+                }
+                // A form closed meanwhile drops the pick.
+                Pick::SqliteDb => {
+                    if let Some(f) = &mut self.form {
+                        f.draft.database = Some(path.to_string_lossy().into_owned());
+                    }
                 }
                 Pick::Open => {
                     let Some(ws) = self.state.active else {

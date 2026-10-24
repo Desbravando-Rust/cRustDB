@@ -155,9 +155,14 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
             if f.draft.driver == DriverKind::Sqlite {
                 // A local file: no server, credentials, TLS or tunnel.
                 ui.label("Database file");
-                let mut p = f.draft.database.as_ref().map(PathBuf::from);
-                path_edit(ui, &mut p);
-                f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
+                ui.horizontal(|ui| {
+                    let mut p = f.draft.database.as_ref().map(PathBuf::from);
+                    path_edit(ui, &mut p);
+                    f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
+                    if ui.button("Browse…").clicked() {
+                        out.push(Intent::FormBrowseSqlite);
+                    }
+                });
                 ui.end_row();
                 error_for(ui, f, "database");
                 ui.end_row();
