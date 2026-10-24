@@ -272,3 +272,65 @@ async fn cancel_handle_cancels_running_query() {
     let (_s, r) = q.await.unwrap();
     assert_eq!(r.err().unwrap().kind, ErrorKind::Cancelled);
 }
+
+#[tokio::test]
+#[ignore = "docker"]
+async fn update_cell_via_build_update_affects_one_row() {
+    use crustdb_core::edit::build_update;
+    use crustdb_core::model::{Cell, ColumnMeta, ObjectKind, ObjectRef, TypeCategory};
+
+    let db = start_mysql(None, None).await;
+    let mut s = MysqlDriver
+        .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
+        .await
+        .unwrap();
+    for sql in [
+        "CREATE DATABASE e",
+        "CREATE TABLE e.t(id INT, k VARCHAR(8), v VARCHAR(8), PRIMARY KEY (id, k))",
+        "INSERT INTO e.t VALUES (1, 'a', 'x'), (1, 'b', 'y')",
+    ] {
+        s.start(sql, ExecMode::Other).await.unwrap();
+        s.finish().await.unwrap();
+    }
+    let col = |name: &str, type_name: &str, category, pk| ColumnMeta {
+        name: name.into(),
+        type_name: type_name.into(),
+        category,
+        nullable: None,
+        is_primary_key: pk,
+    };
+    let cols = vec![
+        col("id", "int", TypeCategory::Integer, true),
+        col("k", "varchar", TypeCategory::Text, true),
+        col("v", "varchar", TypeCategory::Text, false),
+    ];
+    let object = ObjectRef {
+        database: "e".into(),
+        schema: None,
+        name: "t".into(),
+        kind: ObjectKind::Table,
+    };
+    let row = vec![
+        Cell::text_capped("1"),
+        Cell::text_capped("a"),
+        Cell::text_capped("x"),
+    ];
+    let b = build_update(
+        MysqlDriver.dialect(),
+        &object,
+        &cols,
+        &row,
+        2,
+        Some("z".into()),
+    )
+    .unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+    s.start("SELECT v FROM e.t WHERE k = 'a'", ExecMode::Read)
+        .await
+        .unwrap();
+    let f = s.fetch(10).await.unwrap();
+    s.finish().await.unwrap();
+    assert_eq!(f.rows[0][0], Cell::text_capped("z"));
+    s.close().await;
+}

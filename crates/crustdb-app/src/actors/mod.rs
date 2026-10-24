@@ -19,6 +19,8 @@ mod export;
 mod workspace;
 
 #[cfg(test)]
+mod data_tests;
+#[cfg(test)]
 mod diagram_tests;
 #[cfg(test)]
 mod tests;
@@ -209,6 +211,7 @@ impl Actors {
                 None
             }
             Command::FetchPage { tab, .. }
+            | Command::UpdateCell { tab, .. }
             | Command::LoadStructure { tab, .. }
             | Command::LoadDdl { tab, .. }
             | Command::Evaluate { tab, .. }

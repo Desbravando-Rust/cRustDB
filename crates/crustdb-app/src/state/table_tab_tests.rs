@@ -271,3 +271,82 @@ fn toggles_drafts_and_clear() {
     };
     assert!(query.filters.is_empty() && query.offset == 0 && t.drafts.is_empty());
 }
+
+fn text(s: &str) -> Cell {
+    Cell::Text {
+        value: s.into(),
+        truncated: false,
+    }
+}
+
+fn editable_tab(kind: ObjectKind, with_pk: bool) -> TableTab {
+    let mut t = tab(300);
+    t.object.kind = kind;
+    let mut id = pk("id");
+    id.is_primary_key = with_pk;
+    t.columns = vec![id, col("v", TypeCategory::Text)];
+    t.rows = vec![vec![text("1"), text("old")].into()];
+    t
+}
+
+#[test]
+fn edit_cell_builds_update_only_for_table_with_pk() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.begin_edit(0, 1);
+    assert_eq!(t.editing, Some((0, 1, "old".into())));
+    if let Some((_, _, s)) = t.editing.as_mut() {
+        *s = "new".into();
+    }
+    let Some(Command::UpdateCell { req, update, .. }) = t.commit_edit(RequestId(7)) else {
+        panic!("expected UpdateCell");
+    };
+    assert_eq!(req, RequestId(7));
+    assert!(update.sql.starts_with(r#"UPDATE "public"."t" SET "v" = "#));
+    assert!(t.editing.is_none());
+    // Unchanged value: nothing to send.
+    t.begin_edit(0, 1);
+    assert!(t.commit_edit(RequestId(8)).is_none());
+    assert!(matches!(
+        t.set_null(0, 1, RequestId(9)),
+        Some(Command::UpdateCell { .. })
+    ));
+
+    for mut t in [
+        editable_tab(ObjectKind::View, true),
+        editable_tab(ObjectKind::Table, false),
+    ] {
+        t.begin_edit(0, 1);
+        assert!(t.editing.is_none());
+        assert!(t.set_null(0, 1, RequestId(1)).is_none());
+        assert!(t.notice.is_some());
+    }
+}
+
+#[test]
+fn cell_updated_marks_needs_fetch() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    let _ = t.set_null(0, 1, RequestId(3));
+    t.cell_updated(RequestId(2), None);
+    assert!(!t.needs_fetch, "stale id ignored");
+    t.cell_updated(RequestId(3), None);
+    assert!(t.needs_fetch && t.edit_req.is_none());
+}
+
+#[test]
+fn update_error_keeps_fetch_in_flight() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    let _ = t.set_null(0, 1, RequestId(3));
+    t.fetch(RequestId(4));
+    t.cell_updated(RequestId(3), Some("boom".into()));
+    assert_eq!(t.loading, Some(RequestId(4)));
+    assert_eq!(t.notice.as_deref(), Some("boom"));
+    assert!(!t.needs_fetch && t.edit_req.is_none());
+}
+
+#[test]
+fn begin_edit_skips_text_at_memory_cap() {
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.rows[0][1] = text(&"a".repeat(crustdb_core::model::CELL_MEMORY_CAP));
+    t.begin_edit(0, 1);
+    assert!(t.editing.is_none());
+}

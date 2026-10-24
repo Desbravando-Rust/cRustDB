@@ -56,6 +56,13 @@ pub enum Intent {
     PrevPage(TabId),
     StopTab(TabId),
     Retry(TabId),
+    /// Sends the inline grid edit of the table tab.
+    CommitEdit(TabId),
+    SetNull {
+        tab: TabId,
+        row: usize,
+        col: usize,
+    },
     ConfirmSafety,
     CloseResolve(crate::runtime::TxOp),
     SaveFile,

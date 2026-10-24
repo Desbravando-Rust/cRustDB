@@ -251,6 +251,20 @@ impl CrustApp {
                     rt.send(t.retry(rt.next_request_id()));
                 }
             }
+            Intent::CommitEdit(tab) => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.commit_edit(rt.next_request_id())
+                {
+                    rt.send(c);
+                }
+            }
+            Intent::SetNull { tab, row, col } => {
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.set_null(row, col, rt.next_request_id())
+                {
+                    rt.send(c);
+                }
+            }
             Intent::ApplyFilters(tab) => {
                 if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
                     && let Some(c) = t.apply_filters(rt.next_request_id())
