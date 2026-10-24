@@ -2,7 +2,6 @@ name: ci
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 concurrency:
@@ -33,8 +32,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -f # keep patterns like *.rs from globbing against the checkout
-          # Tags and new branches (no usable base) always run everything.
-          if [[ "$GITHUB_REF" == refs/tags/* || -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+          # New branches (no usable base) always run everything.
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             echo "match=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           pats=$(echo "${EXT_LIST:-*.rs}" | tr ',' ' ')
@@ -135,67 +134,3 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
-  release:
-    # Tag pushes only (v*); never on branch pushes or pull requests.
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [fmt, clippy, test, deny, coverage]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    env:
-      HAS_SENTRY: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Check tag matches crate version
-        id: ver
-        run: |
-          v="$(awk -F'"' '/^version/ {print $2; exit}' crates/crustdb-app/Cargo.toml)"
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          if [ "$v" = "${GITHUB_REF_NAME#v}" ]; then
-            echo "match=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::tag $GITHUB_REF_NAME != crate version $v; skipping Sentry release"
-          fi
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev flatpak flatpak-builder
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb,cargo-generate-rpm
-      - name: Install Flatpak runtime
-        run: |
-          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
-      # bwrap (flatpak-builder) needs unprivileged user namespaces, blocked by AppArmor on ubuntu-24.04.
-      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: packaging/build-linux.sh "${GITHUB_REF_NAME#v}"
-        env:
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-      - name: Release notes from CHANGELOG
-        run: |
-          awk -v h="## [${GITHUB_REF_NAME#v}]" '$0 == h {f = 1; next} f && /^## / {exit} f' CHANGELOG.md > release-notes.md
-          [ -s release-notes.md ] || echo "::warning::no CHANGELOG section for $GITHUB_REF_NAME"
-      - uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-notes.md
-          files: |
-            target/dist/*.AppImage
-            target/dist/*.tar.gz
-            target/dist/*.deb
-            target/dist/*.rpm
-            target/dist/*.flatpak
-      - name: Sentry not configured
-        if: env.HAS_SENTRY != 'true'
-        run: echo "::warning::Sentry not configured; skipping release"
-      - name: Sentry release
-        if: env.HAS_SENTRY == 'true' && steps.ver.outputs.match == 'true'
-        continue-on-error: true
-        uses: getsentry/action-release@v3
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        with:
-          environment: production
-          release: crustdb-app@${{ steps.ver.outputs.version }}
