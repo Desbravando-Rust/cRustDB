@@ -322,7 +322,10 @@ mod tests {
 
     #[test]
     fn default_ports_follow_driver() {
+        // Arrange
         let mut f = form();
+
+        // Act & Assert
         assert_eq!(f.draft.port, 5432);
         f.set_driver(DriverKind::Mysql);
         assert_eq!(f.draft.port, 3306);
@@ -339,7 +342,10 @@ mod tests {
 
     #[test]
     fn import_url_fills_fields_and_keeps_password_out_of_config() {
+        // Arrange
         let mut f = form();
+
+        // Act & Assert
         f.import_url("mysql://bob:s3cret@db.example.com/shop?ssl-mode=preferred")
             .unwrap();
         assert_eq!(f.draft.driver, DriverKind::Mysql);
@@ -359,7 +365,10 @@ mod tests {
 
     #[test]
     fn tls_below_verify_full_shows_warning() {
+        // Arrange
         let mut f = form();
+
+        // Act & Assert
         assert!(!f.tls_downgraded());
         assert!(f.tls_notes().is_empty());
         f.draft.tls.mode = TlsMode::Require;
@@ -372,9 +381,12 @@ mod tests {
 
     #[test]
     fn save_without_keyring_checkbox_stores_no_secret() {
+        // Arrange
         let mut f = form();
         f.password = "pw".to_owned().into();
         f.save_in_keyring = false;
+
+        // Act & Assert
         let (cfg, secrets) = f.to_save(&[]).unwrap();
         assert!(!cfg.save_password && secrets.is_empty());
         f.save_in_keyring = true;
@@ -386,9 +398,12 @@ mod tests {
 
     #[test]
     fn keyring_unavailable_disables_checkbox_with_hint() {
+        // Arrange
         let mut f = ConnectionForm::new(DriverKind::Postgres, false);
         f.draft.name = "n".into();
         f.draft.host = "h".into();
+
+        // Act & Assert
         assert!(!f.save_in_keyring);
         assert!(f.keyring_hint().is_some());
         f.password = "pw".to_owned().into();
@@ -400,9 +415,12 @@ mod tests {
 
     #[test]
     fn test_button_sends_connect_with_ephemeral_workspace() {
+        // Arrange
         let mut f = form();
         f.password = "pw".to_owned().into();
         let cmd = f.start_test(WorkspaceId(7), &[]).unwrap();
+
+        // Act & Assert
         let Command::Connect {
             ws,
             config,
@@ -432,7 +450,10 @@ mod tests {
 
     #[test]
     fn closing_form_mid_test_yields_workspace_to_disconnect() {
+        // Arrange
         let mut f = form();
+
+        // Act & Assert
         assert_eq!(f.take_pending_test(), None);
         f.start_test(WorkspaceId(5), &[]).unwrap();
         assert_eq!(f.take_pending_test(), Some(WorkspaceId(5)));
@@ -444,6 +465,7 @@ mod tests {
 
     #[test]
     fn sqlite_form_drops_network_fields() {
+        // Arrange
         let mut f = form();
         f.set_ssh(true);
         f.draft.tls.ca_path = Some("/nonexistent/ca.pem".into());
@@ -451,15 +473,24 @@ mod tests {
         f.save_in_keyring = true;
         f.set_driver(DriverKind::Sqlite);
         f.draft.database = Some("/tmp/a.db".into());
+
+        // Act
         let (cfg, secrets) = f.to_save(&[]).unwrap();
+
+        // Assert
         assert!(cfg.ssh.is_none() && cfg.tls.ca_path.is_none());
         assert!(!cfg.save_password && secrets.is_empty());
     }
 
     #[test]
     fn import_sqlite_url_names_from_file() {
+        // Arrange
         let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+
+        // Act
         f.import_url("sqlite:///tmp/a.db").unwrap();
+
+        // Assert
         assert_eq!(f.draft.driver, DriverKind::Sqlite);
         assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
         assert_eq!(f.draft.name, "a.db");

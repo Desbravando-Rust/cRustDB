@@ -51,7 +51,10 @@ fn filter_eq(c: &str, v: &str) -> Filter {
 
 #[test]
 fn pagination_next_enabled_only_when_limit_plus_one() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     t.apply_page(rows(301));
     assert!(t.has_more);
     assert_eq!(t.rows.len(), 300);
@@ -61,7 +64,10 @@ fn pagination_next_enabled_only_when_limit_plus_one() {
 
 #[test]
 fn sort_header_cycle_and_shift_multi() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     t.click_header("a", false);
     assert_eq!(t.sorts, [asc("a")]);
     t.click_header("a", false);
@@ -74,29 +80,45 @@ fn sort_header_cycle_and_shift_multi() {
 
 #[test]
 fn footer_shows_estimate_without_filters() {
+    // Arrange
     let t = tab_with(300, 1, Some(1_200_000), vec![]);
+
+    // Act & Assert
     assert_eq!(t.footer_label(), "Rows 301–600 of ~1.2M");
 }
 
 #[test]
 fn footer_hides_total_with_filters() {
+    // Arrange
     let t = tab_with(300, 0, Some(1_200_000), vec![filter_eq("a", "1")]);
+
+    // Act & Assert
     assert_eq!(t.footer_label(), "Rows 1–300");
 }
 
 #[test]
 fn sort_or_filter_change_resets_to_first_page() {
+    // Arrange
     let mut t = tab(300);
     t.page = 3;
+
+    // Act
     t.click_header("a", false);
+
+    // Assert
     assert_eq!(t.page, 0);
 }
 
 #[test]
 fn query_uses_limit_plus_one_and_page_offset() {
+    // Arrange
     let mut t = tab(300);
     t.page = 2;
+
+    // Act
     let q = t.query();
+
+    // Assert
     assert_eq!((q.limit, q.offset), (Some(301), 600));
 }
 
@@ -112,7 +134,10 @@ fn pk(name: &str) -> ColumnMeta {
 
 #[test]
 fn structure_sets_catalog_columns_and_query_orders_by_pk() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     t.apply_structure(Structure {
         columns: vec![ColumnDetail {
             meta: pk("id"),
@@ -130,16 +155,24 @@ fn structure_sets_catalog_columns_and_query_orders_by_pk() {
 
 #[test]
 fn fail_clears_loading_and_keeps_message() {
+    // Arrange
     let mut t = tab(300);
     t.fetch(RequestId(1));
+
+    // Act
     t.fail("cancelled".into());
+
+    // Assert
     assert!(t.loading.is_none());
     assert_eq!(t.notice.as_deref(), Some("cancelled"));
 }
 
 #[test]
 fn retry_reloads_structure_then_page_and_loading_covers_structure() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     t.load_structure(RequestId(1));
     assert!(t.is_loading());
     assert_eq!(t.footer_label(), "Loading…");
@@ -156,7 +189,10 @@ fn retry_reloads_structure_then_page_and_loading_covers_structure() {
 
 #[test]
 fn page_moves_report_change() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     assert!(!t.next_page() && !t.prev_page());
     t.has_more = true;
     assert!(t.next_page() && t.prev_page());
@@ -164,7 +200,10 @@ fn page_moves_report_change() {
 
 #[test]
 fn unordered_only_without_pk_and_sort() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     assert!(t.unordered());
     t.click_header("a", false);
     assert!(!t.unordered());
@@ -196,6 +235,7 @@ fn draft(column: &str, op: Operator, input: &str) -> FilterDraft {
 
 #[test]
 fn apply_sends_fetch_with_and_combined_filters() {
+    // Arrange
     let mut t = tab(300);
     t.columns = vec![
         col("a", TypeCategory::Integer),
@@ -206,6 +246,8 @@ fn apply_sends_fetch_with_and_combined_filters() {
         draft("a", Operator::Gt, "1"),
         draft("b", Operator::Like, "x%"),
     ];
+
+    // Act & Assert
     let Some(Command::FetchPage { query, .. }) = t.apply_filters(RequestId(9)) else {
         panic!("expected FetchPage");
     };
@@ -219,7 +261,10 @@ fn apply_sends_fetch_with_and_combined_filters() {
 
 #[test]
 fn server_filter_error_shown_in_bar() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     assert_eq!(t.bar_error(), None);
     t.filters = vec![filter_eq("a", "x")];
     t.fail("invalid input syntax for type integer".into());
@@ -228,7 +273,10 @@ fn server_filter_error_shown_in_bar() {
 
 #[test]
 fn set_view_clears_notice_and_loads_ddl_once() {
+    // Arrange
     let mut t = tab(300);
+
+    // Act & Assert
     t.fail("data error".into());
     assert!(matches!(
         t.set_view(TableView::Ddl, RequestId(1)),
@@ -245,17 +293,25 @@ fn set_view_clears_notice_and_loads_ddl_once() {
 
 #[test]
 fn bar_error_only_from_data_view() {
+    // Arrange
     let mut t = tab(300);
     t.filters = vec![filter_eq("a", "x")];
     t.view = TableView::Ddl;
+
+    // Act
     t.fail("ddl failed".into());
+
+    // Assert
     assert_eq!(t.bar_error(), None);
 }
 
 #[test]
 fn toggles_drafts_and_clear() {
+    // Arrange
     let mut t = tab(300);
     t.columns = vec![col("a", TypeCategory::Integer)];
+
+    // Act & Assert
     t.toggle_filter_bar();
     assert!(t.filter_open && t.drafts.len() == 1);
     t.add_draft();

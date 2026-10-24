@@ -228,21 +228,27 @@ mod tests {
 
     #[test]
     fn samples_once_per_second() {
+        // Arrange
         let mut b = StatusBoard::default();
         let t0 = Instant::now();
         let mut calls = 0;
+
+        // Act
         for ms in [0, 100, 900, 1000, 1500, 2100] {
             b.tick(t0 + Duration::from_millis(ms), || {
                 calls += 1;
                 stats()
             });
         }
+
+        // Assert
         assert_eq!(calls, 3);
         assert_eq!(b.proc, stats());
     }
 
     #[test]
     fn first_row_is_measured_from_execute_to_result_started() {
+        // Arrange
         use crate::storage::history::HistoryEntry;
         use crustdb_core::driver::ResultHeader;
         use crustdb_core::model::Completion;
@@ -283,7 +289,11 @@ mod tests {
             },
             t0 + Duration::from_millis(100),
         );
+
+        // Act
         let q = m.last_query.unwrap();
+
+        // Assert
         assert_eq!(q.first_row, Duration::from_millis(40));
         assert_eq!(q.total, Duration::from_millis(100));
     }

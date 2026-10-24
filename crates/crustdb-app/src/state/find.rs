@@ -132,7 +132,10 @@ mod tests {
 
     #[test]
     fn matches_case_insensitive_returns_char_ranges() {
+        // Arrange
         let text = "SELECT é, select";
+
+        // Act & Assert
         assert_eq!(matches(text, "select", false), vec![0..6, 10..16]);
         assert_eq!(matches(text, "select", true), vec![10..16]);
         assert_eq!(matches("éé x", "x", true), vec![3..4]);
@@ -142,8 +145,13 @@ mod tests {
 
     #[test]
     fn next_prev_wrap_around() {
+        // Arrange
         let text = "a b a b a";
+
+        // Act
         let mut f = find("a");
+
+        // Assert
         assert_eq!(f.step(text, true), Some(4..5));
         assert_eq!(f.step(text, true), Some(8..9));
         assert_eq!(f.step(text, true), Some(0..1));
@@ -156,6 +164,7 @@ mod tests {
 
     #[test]
     fn count_label() {
+        // Act & Assert
         let mut f = find("a");
         assert_eq!(f.count_label("a a a a a"), "1/5");
         f.step("a a a a a", true);
@@ -167,10 +176,15 @@ mod tests {
 
     #[test]
     fn replace_current_replaces_one_and_keeps_position() {
+        // Arrange
         let mut text = String::from("é x é x x");
+
+        // Act
         let mut f = find("x");
         f.replacement = "yy".into();
         f.current = 1;
+
+        // Assert
         assert!(f.replace_current(&mut text));
         assert_eq!(text, "é x é yy x");
         assert_eq!(f.current_match(&text), Some(9..10));
@@ -184,9 +198,14 @@ mod tests {
 
     #[test]
     fn replace_all_returns_count() {
+        // Arrange
         let mut text = String::from("a é A");
+
+        // Act
         let mut f = find("a");
         f.replacement = "aa".into();
+
+        // Assert
         assert_eq!(f.replace_all(&mut text), 2);
         assert_eq!(text, "aa é aa");
         assert_eq!(find("z").replace_all(&mut text), 0);

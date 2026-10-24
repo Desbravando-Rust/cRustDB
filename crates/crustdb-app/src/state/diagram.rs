@@ -139,8 +139,13 @@ mod tests {
 
     #[test]
     fn layout_places_tables_in_grid_without_overlap() {
+        // Arrange
         let tables: Vec<_> = (1..=5).map(|n| table(&format!("t{n}"), n, &[])).collect();
+
+        // Act
         let rects = layout(&tables);
+
+        // Assert
         assert_eq!(rects.len(), 5);
         // ceil(sqrt(5)) = 3 columns: t4 starts a second row under t1.
         assert!(rects[1].min.x > rects[0].max.x);
@@ -159,20 +164,26 @@ mod tests {
 
     #[test]
     fn edges_skip_fks_to_tables_outside_schema() {
+        // Act
         let tables = [
             table("customers", 2, &[]),
             table("orders", 3, &["customers", "elsewhere"]),
         ];
+
+        // Assert
         assert_eq!(edges(&tables), [(1, 0)]);
         assert!(edges(&[]).is_empty());
     }
 
     #[test]
     fn diagram_event_fills_only_the_pending_request() {
+        // Arrange
         use crate::runtime::{Command, Event, RequestId};
         let mut s = crate::state::workspace::tests::state(&["a"]);
         let ws = s.open_workspace(s.config.connections[0].clone());
         let w = s.workspace_mut(ws).unwrap();
+
+        // Act & Assert
         let cmd = w.open_diagram(RequestId(3), "d".into(), Some("public".into()));
         assert!(matches!(
             cmd,

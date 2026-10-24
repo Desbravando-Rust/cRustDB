@@ -125,11 +125,16 @@ mod tests {
 
     #[test]
     fn operator_list_follows_column_category() {
+        // Arrange
         let cols = [
             col("n", TypeCategory::Integer),
             col("b", TypeCategory::Binary),
         ];
+
+        // Act
         let d = |c| draft(c, Operator::Eq, "");
+
+        // Assert
         assert!(
             d("n")
                 .operators(&cols, DriverKind::Postgres)
@@ -148,6 +153,7 @@ mod tests {
 
     #[test]
     fn between_requires_two_values() {
+        // Act & Assert
         let cols = [col("n", TypeCategory::Integer)];
         assert!(
             draft("n", Operator::Between, "1")
@@ -178,6 +184,7 @@ mod tests {
 
     #[test]
     fn labels_and_op_validation_and_set_column() {
+        // Act & Assert
         assert_eq!(label(Operator::StartsWith), "starts with");
         assert_eq!(label(Operator::IsNotNull), "IS NOT NULL");
         assert_eq!(label(Operator::Ne), "!=");
