@@ -101,22 +101,27 @@ mod tests {
 
     #[test]
     fn csv_null_is_empty_unquoted_and_empty_string_quoted() {
+        // Act & Assert
         assert_eq!(out(&[Cell::Null, text(""), text("a")]), ",\"\",a\n");
     }
 
     #[test]
     fn csv_quotes_comma_quote_newline() {
+        // Act & Assert
         assert_eq!(out(&[text("a,\"b")]), "\"a,\"\"b\"\n");
         assert_eq!(out(&[text("a\nb"), text("a\rb")]), "\"a\nb\",\"a\rb\"\n");
     }
 
     #[test]
     fn csv_binary_as_0x_hex() {
+        // Arrange
         let c = Cell::Bytes {
             value: vec![0xde, 0xad].into(),
             total_len: 2,
             truncated: false,
         };
+
+        // Act & Assert
         assert_eq!(out(&[c]), "0xdead\n");
     }
 
@@ -132,15 +137,21 @@ mod tests {
 
     #[test]
     fn csv_header_uses_column_names() {
+        // Arrange
         let mut buf = Vec::new();
         let mut w = CsvOut::new(&mut buf);
         w.header(&[col("id"), col("a,b")]).unwrap();
+
+        // Act
         w.finish().unwrap();
+
+        // Assert
         assert_eq!(String::from_utf8(buf).unwrap(), "id,\"a,b\"\n");
     }
 
     #[test]
     fn tsv_quotes_tab_newline_quote_and_optional_header() {
+        // Arrange
         let bytes = Cell::Bytes {
             value: vec![0xde, 0xad].into(),
             total_len: 2,
@@ -152,6 +163,8 @@ mod tests {
             vec![bytes, text("r\rs"), text("plain")].into(),
         ];
         let cols = [col("id"), col("a\tb"), col("c")];
+
+        // Act & Assert
         assert_eq!(to_tsv(&cols, &rows[..1], false), "\t\"\"\ta,b");
         assert_eq!(
             to_tsv(&cols, &rows, true),

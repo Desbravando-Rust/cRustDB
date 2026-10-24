@@ -145,6 +145,7 @@ mod tests {
 
     #[test]
     fn iso8601_formats_known_instants() {
+        // Act & Assert
         assert_eq!(format_iso8601(0), "1970-01-01T00:00:00Z");
         assert_eq!(format_iso8601(1_792_245_791), "2026-10-17T14:03:11Z");
         assert_eq!(format_iso8601(951_782_400), "2000-02-29T00:00:00Z");
@@ -152,10 +153,15 @@ mod tests {
 
     #[test]
     fn history_appends_jsonl_with_0600() {
+        // Arrange
         let (_t, s, id) = store();
         s.append(id, &entry("select 1")).unwrap();
+
+        // Act
         s.append(id, &entry("select 2")).unwrap();
         let p = s.path(id);
+
+        // Assert
         assert_eq!(
             fs::metadata(&p).unwrap().permissions().mode() & 0o777,
             0o600
@@ -166,11 +172,16 @@ mod tests {
 
     #[test]
     fn history_compacts_to_limit() {
+        // Arrange
         let (_t, s, id) = store();
         for i in 0..10_050 {
             s.append(id, &entry(&format!("q{i}"))).unwrap();
         }
+
+        // Act
         let e = s.load(id).unwrap();
+
+        // Assert
         assert_eq!(e.len(), 10_000);
         assert_eq!(e[0].sql, "q50");
         assert_eq!(e[9_999].sql, "q10049");
@@ -186,8 +197,13 @@ mod tests {
 
     #[test]
     fn history_search_substring_case_insensitive() {
+        // Arrange
         let v = vec![entry("SELECT * FROM Users"), entry("delete from t")];
+
+        // Act
         let r = HistoryStore::search(&v, "users");
+
+        // Assert
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].sql, "SELECT * FROM Users");
         assert_eq!(HistoryStore::search(&v, "").len(), 2);
@@ -195,12 +211,17 @@ mod tests {
 
     #[test]
     fn history_skips_corrupt_lines() {
+        // Arrange
         let (_t, s, id) = store();
         s.append(id, &entry("a")).unwrap();
         let mut f = OpenOptions::new().append(true).open(s.path(id)).unwrap();
         f.write_all(b"{not json\n\xff\xfe\n").unwrap();
         s.append(id, &entry("b")).unwrap();
+
+        // Act
         let e = s.load(id).unwrap();
+
+        // Assert
         assert_eq!(
             e.iter().map(|e| e.sql.as_str()).collect::<Vec<_>>(),
             ["a", "b"]
@@ -209,8 +230,11 @@ mod tests {
 
     #[test]
     fn history_load_propagates_io_errors() {
+        // Arrange
         let (_t, s, id) = store();
         fs::create_dir_all(s.path(id)).unwrap();
+
+        // Act & Assert
         assert!(s.load(id).is_err());
     }
 }

@@ -135,7 +135,10 @@ mod tests {
 
     #[test]
     fn status_icons_follow_tls_mode() {
+        // Arrange
         let (closed, ok) = tls_icon(TlsMode::VerifyFull);
+
+        // Act & Assert
         let (amber_icon, amber) = tls_icon(TlsMode::Require);
         assert_eq!((amber_icon, amber), tls_icon(TlsMode::VerifyCa));
         let (cut, bad) = tls_icon(TlsMode::Disable);
@@ -146,7 +149,10 @@ mod tests {
 
     #[test]
     fn tooltip_contains_safety_rules() {
+        // Arrange
         let t = safety_tooltip(1000);
+
+        // Act & Assert
         for needle in ["1000", "WHERE", "Password", "Confirm", "DROP"] {
             assert!(t.contains(needle), "missing {needle}: {t}");
         }

@@ -52,6 +52,7 @@ mod tests {
 
     #[test]
     fn double_click_returns_the_entry_sql() {
+        // Arrange
         let mut panel = HistoryPanel {
             entries: vec![entry("select 2"), entry("select 1")],
             filter: String::new(),
@@ -65,8 +66,12 @@ mod tests {
         h.step();
         h.get_by_label("select 1").click();
         h.step();
+
+        // Act
         h.run();
         drop(h);
+
+        // Assert
         assert_eq!(picked.as_deref(), Some("select 1"));
     }
 }

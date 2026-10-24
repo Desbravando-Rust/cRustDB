@@ -43,7 +43,10 @@ fn write(format: Format, kind: DriverKind, cols: &[ColumnMeta], rows: &[Vec<Cell
 
 #[test]
 fn format_from_extension() {
+    // Arrange
     let f = |p: &str| Format::from_path(Path::new(p));
+
+    // Act & Assert
     assert_eq!(f("a.jsonl"), Some(Format::Json));
     assert_eq!(f("a.json"), Some(Format::Json));
     assert_eq!(f("a.NDJSON"), Some(Format::Json));
@@ -56,6 +59,7 @@ fn format_from_extension() {
 
 #[test]
 fn jsonl_null_number_text_bytes() {
+    // Arrange
     use TypeCategory::*;
     let cols = [
         col("i", Integer),
@@ -77,6 +81,8 @@ fn jsonl_null_number_text_bytes() {
         bytes(&[0xde, 0xad]),
         text("t"),
     ];
+
+    // Act & Assert
     assert_eq!(
         write(Format::Json, DriverKind::Postgres, &cols, &[row]),
         "{\"i\":-12,\"d\":1.50,\"f\":2.5e3,\"nan\":\"NaN\",\"s\":\"7\",\"n\":null,\"b\":\"0xdead\",\"ok\":true}\n"
@@ -85,6 +91,7 @@ fn jsonl_null_number_text_bytes() {
 
 #[test]
 fn jsonl_escapes_quotes_newlines_in_keys_and_values() {
+    // Arrange
     let cols = [
         col("a\"b", TypeCategory::Text),
         col("a\"b", TypeCategory::Text),
@@ -93,6 +100,8 @@ fn jsonl_escapes_quotes_newlines_in_keys_and_values() {
         vec![text("x\ny\\\""), text("")],
         vec![Cell::Null, text("z")],
     ];
+
+    // Act & Assert
     assert_eq!(
         write(Format::Json, DriverKind::Mysql, &cols, &rows),
         "{\"a\\\"b\":\"x\\ny\\\\\\\"\",\"a\\\"b\":\"\"}\n{\"a\\\"b\":null,\"a\\\"b\":\"z\"}\n"
@@ -101,14 +110,20 @@ fn jsonl_escapes_quotes_newlines_in_keys_and_values() {
 
 #[test]
 fn sql_literal_pg_doubles_quote_and_bytea_hex() {
+    // Arrange
     let pg = DriverKind::Postgres;
+
+    // Act & Assert
     assert_eq!(sql_literal(pg, &text("it's a\\b")), "'it''s a\\b'");
     assert_eq!(sql_literal(pg, &bytes(&[0x00, 0xff])), "'\\x00ff'::bytea");
 }
 
 #[test]
 fn sql_literal_mysql_backslash_goes_hex() {
+    // Arrange
     let my = DriverKind::Mysql;
+
+    // Act & Assert
     assert_eq!(sql_literal(my, &text("a\\b")), "_utf8mb4 X'615c62'");
     assert_eq!(sql_literal(my, &text("a\0")), "_utf8mb4 X'6100'");
     assert_eq!(sql_literal(my, &text("it's")), "'it''s'");
@@ -117,17 +132,21 @@ fn sql_literal_mysql_backslash_goes_hex() {
 
 #[test]
 fn sql_literal_null() {
+    // Act & Assert
     assert_eq!(sql_literal(DriverKind::Postgres, &Cell::Null), "NULL");
     assert_eq!(sql_literal(DriverKind::Mysql, &Cell::Null), "NULL");
 }
 
 #[test]
 fn sql_insert_quotes_idents_and_table() {
+    // Arrange
     let cols = [
         col("id", TypeCategory::Integer),
         col("we\"ird", TypeCategory::Text),
     ];
     let rows = [vec![text("1"), Cell::Null], vec![text("2"), text("x")]];
+
+    // Act & Assert
     assert_eq!(
         write(Format::Sql, DriverKind::Postgres, &cols, &rows),
         "SET standard_conforming_strings = on;\n\
@@ -145,6 +164,7 @@ fn sql_insert_quotes_idents_and_table() {
 /// doubled-quote literal below would close early and run `DROP TABLE`. The dump pins it on.
 #[test]
 fn sql_insert_pg_pins_standard_conforming_strings() {
+    // Arrange
     let cols = [col("s", TypeCategory::Text)];
     let out = write(
         Format::Sql,
@@ -152,6 +172,8 @@ fn sql_insert_pg_pins_standard_conforming_strings() {
         &cols,
         &[vec![text("\\'; DROP TABLE t; --")]],
     );
+
+    // Act & Assert
     assert_eq!(
         out,
         "SET standard_conforming_strings = on;\n\

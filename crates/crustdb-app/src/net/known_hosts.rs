@@ -86,6 +86,7 @@ mod tests {
 
     #[test]
     fn known_hosts_parses_openssh_format() {
+        // Arrange
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
         let key = PublicKey::from_openssh(KEY_A).unwrap();
@@ -94,6 +95,8 @@ mod tests {
             format!("# comment\nother.test {KEY_B}\n[bastion.test]:2222,[10.0.0.1]:2222 {KEY_A} comment\n"),
         )
         .unwrap();
+
+        // Act & Assert
         assert_eq!(k.check("bastion.test", 2222, &key), HostKeyStatus::Known);
         assert_eq!(k.check("10.0.0.1", 2222, &key), HostKeyStatus::Known);
         assert!(matches!(
@@ -104,30 +107,39 @@ mod tests {
 
     #[test]
     fn mismatch_detected() {
+        // Arrange
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
         std::fs::write(&k.user_file, format!("h.test {KEY_B}\n")).unwrap();
         let key = PublicKey::from_openssh(KEY_A).unwrap();
+
+        // Act & Assert
         assert_eq!(k.check("h.test", 22, &key), HostKeyStatus::Mismatch);
     }
 
     #[test]
     fn different_key_type_for_known_host_is_mismatch() {
+        // Arrange
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
         let ecdsa = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=";
         std::fs::write(&k.user_file, format!("h.test {ecdsa}\n")).unwrap();
         let key = PublicKey::from_openssh(KEY_A).unwrap();
+
+        // Act & Assert
         assert_eq!(k.check("h.test", 22, &key), HostKeyStatus::Mismatch);
         assert_eq!(k.algorithms("h.test", 22).len(), 1);
     }
 
     #[test]
     fn malformed_file_fails_closed() {
+        // Arrange
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
         let key = PublicKey::from_openssh(KEY_A).unwrap();
         std::fs::write(&k.user_file, "h.test ssh-ed25519 !!!\n").unwrap();
+
+        // Act & Assert
         assert_eq!(k.check("h.test", 22, &key), HostKeyStatus::Mismatch);
         std::fs::write(&k.user_file, b"\xff\xfe\n").unwrap();
         assert_eq!(k.check("h.test", 22, &key), HostKeyStatus::Mismatch);
@@ -135,6 +147,7 @@ mod tests {
 
     #[test]
     fn unreadable_existing_file_fails_closed() {
+        // Arrange
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
@@ -144,15 +157,22 @@ mod tests {
             return; // running as root
         }
         let key = PublicKey::from_openssh(KEY_A).unwrap();
+
+        // Act & Assert
         assert_eq!(k.check("h.test", 22, &key), HostKeyStatus::Mismatch);
     }
 
     #[test]
     fn add_writes_app_file_only_and_is_then_known() {
+        // Arrange
         let dir = tempfile::tempdir().unwrap();
         let k = kh(&dir);
         let key = PublicKey::from_openssh(KEY_A).unwrap();
+
+        // Act
         k.add("h.test", 2222, &key).unwrap();
+
+        // Assert
         assert_eq!(k.check("h.test", 2222, &key), HostKeyStatus::Known);
         assert!(!k.user_file.exists());
     }

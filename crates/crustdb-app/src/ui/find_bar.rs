@@ -114,6 +114,7 @@ mod tests {
 
     #[test]
     fn find_bar_counts_matches_and_replaces_all() {
+        // Arrange
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 1; SELECT 2".into();
         tab.find.open = true;
@@ -127,14 +128,19 @@ mod tests {
         h.run();
         h.get_by_label("1/2");
         h.get_by_label("Replace all").click();
+
+        // Act
         h.run();
         drop(h);
+
+        // Assert
         assert_eq!(tab.text, "x 1; x 2");
         assert!(tab.dirty);
     }
 
     #[test]
     fn enter_in_find_keeps_the_editor_text() {
+        // Arrange
         let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
         tab.text = "select 1; select 2".into();
         tab.find.open = true;
@@ -155,8 +161,12 @@ mod tests {
         h.run();
         h.key_press(Key::Enter);
         h.run();
+
+        // Act
         let focus_kept = h.ctx.memory(|m| m.has_focus(id.with("find")));
         drop(h);
+
+        // Assert
         assert_eq!(tab.text, "select 1; select 2");
         assert_eq!(tab.find.current, 1);
         assert!(focus_kept);

@@ -225,8 +225,11 @@ mod tests {
 
     #[test]
     fn config_roundtrip_matches_spec_json() {
+        // Arrange
         let (_t, s) = store();
         fs::write(&s.path, SPEC).unwrap();
+
+        // Act & Assert
         let loaded = s.load().unwrap();
         assert_eq!(loaded.connections.len(), 1);
         s.save(&loaded.connections).unwrap();
@@ -237,8 +240,13 @@ mod tests {
 
     #[test]
     fn config_roundtrip_has_no_secrets() {
+        // Arrange
         let (_t, s) = store();
+
+        // Act
         s.save(&[sample()]).unwrap();
+
+        // Assert
         assert!(
             !fs::read_to_string(&s.path)
                 .unwrap()
@@ -248,8 +256,13 @@ mod tests {
 
     #[test]
     fn config_written_atomically_with_0600() {
+        // Arrange
         let (t, s) = store();
+
+        // Act
         s.save(&[sample()]).unwrap();
+
+        // Assert
         assert_eq!(
             s.path.metadata().unwrap().permissions().mode() & 0o777,
             0o600
@@ -259,11 +272,16 @@ mod tests {
 
     #[test]
     fn unknown_version_opens_read_only() {
+        // Arrange
         let (_t, s) = store();
         let v1: serde_json::Value = serde_json::from_str(SPEC).unwrap();
         let raw = serde_json::json!({"version": 99, "connections": v1["connections"]}).to_string();
         fs::write(&s.path, &raw).unwrap();
+
+        // Act
         let l = s.load().unwrap();
+
+        // Assert
         assert!(l.read_only && l.warning.is_some());
         assert_eq!(l.connections.len(), 1);
         assert!(matches!(s.save(&[]), Err(ConfigError::ReadOnly)));
@@ -272,11 +290,16 @@ mod tests {
 
     #[test]
     fn stale_tmp_with_open_mode_does_not_leak_into_final() {
+        // Arrange
         let (t, s) = store();
         let tmp = t.path().join("connections.json.tmp");
         fs::write(&tmp, "x").unwrap();
         fs::set_permissions(&tmp, fs::Permissions::from_mode(0o644)).unwrap();
+
+        // Act
         s.save(&[sample()]).unwrap();
+
+        // Assert
         assert_eq!(
             s.path.metadata().unwrap().permissions().mode() & 0o777,
             0o600
@@ -285,8 +308,11 @@ mod tests {
 
     #[test]
     fn invalid_json_backed_up_and_empty() {
+        // Arrange
         let (t, s) = store();
         fs::write(&s.path, "{not json").unwrap();
+
+        // Act & Assert
         let l = s.load().unwrap();
         assert!(l.connections.is_empty() && !l.read_only && l.warning.is_some());
         let baks = fs::read_dir(t.path())
@@ -304,7 +330,10 @@ mod tests {
 
     #[test]
     fn validate_rejects_duplicate_name_and_bad_ranges() {
+        // Arrange
         let ok = sample();
+
+        // Act & Assert
         assert!(validate(&ok, &[]).is_ok());
         let mut other = ok.clone();
         other.id =
@@ -330,11 +359,14 @@ mod tests {
 
     #[test]
     fn sqlite_requires_file_not_host_or_port() {
+        // Arrange
         let mut c = sample();
         c.driver = DriverKind::Sqlite;
         c.host = String::new();
         c.port = 0;
         c.database = Some("/tmp/a.db".into());
+
+        // Act & Assert
         assert!(validate(&c, &[]).is_ok());
         c.database = None;
         let errs = validate(&c, &[]).unwrap_err();

@@ -96,6 +96,7 @@ mod tests {
 
     #[test]
     fn diagram_window_draws_tables_and_columns() {
+        // Arrange
         let fk = ForeignKeyInfo {
             name: "fk".into(),
             columns: vec!["customer_id".into()],
@@ -118,7 +119,11 @@ mod tests {
             },
         ]));
         let mut h = Harness::new_ui(|ui| show(ui.ctx(), &mut d));
+
+        // Act
         h.run();
+
+        // Assert
         h.get_by_label("customers");
         h.get_by_label("orders");
         h.get_by_label("id int4 PK");

@@ -290,6 +290,7 @@ mod tests {
 
     #[test]
     fn form_shows_keyring_hint_and_buttons() {
+        // Arrange
         let mut f = ConnectionForm::new(DriverKind::Postgres, false);
         f.set_ssh(true);
         let mut h = Harness::builder()
@@ -297,7 +298,11 @@ mod tests {
             .build_ui(|ui| {
                 show(ui, &mut f);
             });
+
+        // Act
         h.run();
+
+        // Assert
         h.get_by_label("Save");
         h.get_by_label("Test");
         h.get_by_label("OS keyring unavailable: passwords cannot be saved");
@@ -305,6 +310,7 @@ mod tests {
 
     #[test]
     fn sqlite_form_shows_only_file_fields() {
+        // Arrange
         let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
         let mut h = Harness::builder()
             .with_accessibility_check(false)
@@ -314,6 +320,8 @@ mod tests {
         h.run();
         h.get_by_label("Database file");
         h.get_by_label("Page size");
+
+        // Act & Assert
         for hidden in ["Host", "Port", "User", "Password", "TLS mode", "SSH tunnel"] {
             assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
         }

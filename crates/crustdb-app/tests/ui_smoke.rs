@@ -112,6 +112,7 @@ fn wait_for(h: &mut Harness<'_>, label: &str) {
 
 #[test]
 fn connect_and_open_table_renders_grid() {
+    // Arrange
     let (mut h, app, _dir) = start();
     h.run();
     h.get_by_label("Connect").click();
@@ -123,16 +124,21 @@ fn connect_and_open_table_renders_grid() {
         name: "users".into(),
         kind: ObjectKind::Table,
     };
+
+    // Act
     app.borrow_mut()
         .as_mut()
         .unwrap()
         .handle(Intent::OpenObject { object });
+
+    // Assert
     wait_for(&mut h, "alice@example.com");
     h.get_by_label("users"); // tab strip entry
 }
 
 #[test]
 fn run_query_shows_result_and_messages() {
+    // Arrange
     let (mut h, _app, _dir) = start();
     h.run();
     h.get_by_label("Connect").click();
@@ -145,7 +151,11 @@ fn run_query_shows_result_and_messages() {
     h.get_by_role(eframe::egui::accesskit::Role::MultilineTextInput)
         .type_text("select email from users");
     h.run();
+
+    // Act
     h.get_by_label("Run (Ctrl+Enter)").click();
+
+    // Assert
     wait_for(&mut h, "alice@example.com");
     let end = Instant::now() + Duration::from_secs(10);
     while h.query_by_label_contains("#1").is_none() {

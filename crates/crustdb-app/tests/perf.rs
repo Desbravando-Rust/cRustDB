@@ -104,6 +104,7 @@ fn scroll_frames(h: &mut Harness<'_>, n: usize) -> Vec<Duration> {
 #[test]
 #[ignore = "perf"]
 fn startup_first_frame_under_300ms() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -148,6 +149,7 @@ fn startup_first_frame_under_300ms() {
 #[test]
 #[ignore = "perf"]
 fn decode_and_render_1000x20_under_20ms() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -174,6 +176,7 @@ fn decode_and_render_1000x20_under_20ms() {
 #[test]
 #[ignore = "perf"]
 fn scroll_100k_rows_frame_under_16ms() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -187,6 +190,7 @@ fn scroll_100k_rows_frame_under_16ms() {
 #[test]
 #[ignore = "perf"]
 fn rss_100k_rows_under_200mb() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -205,6 +209,7 @@ fn rss_100k_rows_under_200mb() {
 #[test]
 #[ignore = "perf"]
 fn export_100k_rows_per_second() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -262,6 +267,7 @@ fn typing_mean_ms(lines: usize) -> f64 {
 #[test]
 #[ignore = "perf"]
 fn typing_700_lines_with_highlight_under_16ms() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -276,6 +282,7 @@ fn typing_700_lines_with_highlight_under_16ms() {
 #[test]
 #[ignore = "perf"]
 fn typing_5000_lines_stays_under_known_ceiling() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;
@@ -288,6 +295,7 @@ fn typing_5000_lines_stays_under_known_ceiling() {
 #[test]
 #[ignore = "perf"]
 fn wide_table_frame_time() {
+    // Act & Assert
     // Budgets assume a --release build (see module docs).
     if cfg!(debug_assertions) {
         return;

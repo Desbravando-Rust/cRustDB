@@ -83,13 +83,18 @@ mod tests {
 
     #[test]
     fn row_detail_pretty_prints_json_and_hex_dumps_binary() {
+        // Arrange
         let cols = [col("j", TypeCategory::Json), col("b", TypeCategory::Binary)];
         let row: Row = vec![
             Cell::text_capped(r#"{"k":1}"#),
             Cell::bytes_capped(&[0x41; 5000]),
         ]
         .into();
+
+        // Act
         let l = row_detail_lines(&cols, &row);
+
+        // Assert
         assert_eq!(l[0].value, "{\n  \"k\": 1\n}");
         assert_eq!((l[0].column.as_str(), l[0].type_name.as_str()), ("j", "t"));
         assert!(l[1].value.starts_with("5000 bytes\n00000000  41 41 "));
@@ -97,6 +102,7 @@ mod tests {
 
     #[test]
     fn row_detail_marks_truncated() {
+        // Arrange
         let cols = [col("a", TypeCategory::Text), col("b", TypeCategory::Binary)];
         let n = crustdb_core::model::CELL_MEMORY_CAP + 1;
         let row: Row = vec![
@@ -104,7 +110,11 @@ mod tests {
             Cell::bytes_capped(&vec![0; n]),
         ]
         .into();
+
+        // Act
         let l = row_detail_lines(&cols, &row);
+
+        // Assert
         assert!(l[0].value.ends_with("truncated at 1 MiB"));
         assert!(l[1].value.ends_with("truncated at 1 MiB"));
         assert_eq!(l[0].value.len(), 1_048_576 + "\n… truncated at 1 MiB".len());

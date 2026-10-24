@@ -139,11 +139,14 @@ async fn export_table(
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "docker"]
 async fn export_full_table_streams_csv_postgres() {
+    // Arrange
     let pg = crustdb_testkit::start_postgres(None, None).await;
     let seed = [
         "CREATE TABLE public.export_t (id int PRIMARY KEY, v text)".to_string(),
         format!("INSERT INTO public.export_t SELECT g, 'v' || g FROM generate_series(1, {ROWS}) g"),
     ];
+
+    // Act & Assert
     export_table(
         Arc::new(crustdb_postgres::PostgresDriver),
         DriverKind::Postgres,
@@ -161,6 +164,7 @@ async fn export_full_table_streams_csv_postgres() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "docker"]
 async fn export_full_table_streams_csv_mysql() {
+    // Arrange
     let my = crustdb_testkit::start_mysql(None, None).await;
     let seed = [
         "CREATE DATABASE exp".to_string(),
@@ -172,6 +176,8 @@ async fn export_full_table_streams_csv_mysql() {
             "INSERT INTO exp.export_t SELECT n, CONCAT('v', n) FROM (SELECT 1 + a.i + 10 * b.i + 100 * c.i + 1000 * d.i + 10000 * e.i AS n FROM exp.d a, exp.d b, exp.d c, exp.d d, exp.d e) s WHERE n <= {ROWS}"
         ),
     ];
+
+    // Act & Assert
     export_table(
         Arc::new(crustdb_mysql::MysqlDriver),
         DriverKind::Mysql,
