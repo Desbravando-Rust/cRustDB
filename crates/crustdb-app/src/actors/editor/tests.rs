@@ -118,11 +118,16 @@ fn row_counts(ev: &[Event]) -> Vec<(usize, bool)> {
 
 #[tokio::test(start_paused = true)]
 async fn evaluate_finishes_paused_cursor_before_explain() {
+    // Arrange
     let mut h = harness(script(1500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
+
+    // Act
     evaluate(&mut h, 2, &["DELETE FROM t WHERE id = 1"]);
     let ev = settle(&h).await;
+
+    // Assert
     assert!(matches!(ev.last(), Some(Event::Evaluated { .. })));
     let o = ops(&h);
     let fin = o.iter().rposition(|x| x == "finish").unwrap();
@@ -132,18 +137,26 @@ async fn evaluate_finishes_paused_cursor_before_explain() {
 
 #[tokio::test(start_paused = true)]
 async fn evaluate_of_plain_select_keeps_paused_cursor() {
+    // Arrange
     let mut h = harness(script(1500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
+
+    // Act
     evaluate(&mut h, 2, &["SELECT 2"]);
     settle(&h).await;
+
+    // Assert
     assert!(!ops(&h).iter().any(|x| x == "finish"));
 }
 
 #[tokio::test(start_paused = true)]
 async fn execute_rejects_unknown_evaluation_id() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
+
+    // Act & Assert
     execute(&mut h, 9, 5);
     let ev = settle(&h).await;
     assert_eq!(notices(&ev).len(), 1);
@@ -160,22 +173,32 @@ async fn execute_rejects_unknown_evaluation_id() {
 
 #[tokio::test(start_paused = true)]
 async fn execute_runs_only_the_evaluated_statements() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
+
+    // Act
     evaluate(&mut h, 1, &["SELECT 1"]);
     evaluate(&mut h, 2, &["SELECT 2"]);
     execute(&mut h, 3, 1); // superseded by the newer Evaluate
     execute(&mut h, 4, 2);
     settle(&h).await;
+
+    // Assert
     assert_eq!(starts(&h), ["SELECT 2"]);
 }
 
 #[tokio::test(start_paused = true)]
 async fn confirm_flow_cancel_executes_nothing() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
+
+    // Act
     evaluate(&mut h, 1, &["DELETE FROM t"]);
     let ev = settle(&h).await;
+
+    // Assert
     assert!(matches!(
         ev.last(),
         Some(Event::Evaluated {
@@ -188,6 +211,7 @@ async fn confirm_flow_cancel_executes_nothing() {
 
 #[tokio::test(start_paused = true)]
 async fn run_all_stops_at_first_error() {
+    // Arrange
     let mut h = harness(script(1));
     h.drv.log.fail_sql.lock().unwrap().push((
         "bad".into(),
@@ -200,7 +224,11 @@ async fn run_all_stops_at_first_error() {
         },
     ));
     open(&mut h).await;
+
+    // Act
     let ev = run(&mut h, 1, &["SELECT 1", "SELECT bad", "SELECT 3"]).await;
+
+    // Assert
     assert_eq!(starts(&h).len(), 2);
     let err = ev.iter().find_map(|e| match e {
         Event::ExecError { index, history, .. } => Some((*index, history.ok)),
@@ -211,9 +239,14 @@ async fn run_all_stops_at_first_error() {
 
 #[tokio::test(start_paused = true)]
 async fn only_last_statement_keeps_cursor() {
+    // Arrange
     let mut h = harness(script(1500));
     open(&mut h).await;
+
+    // Act
     let ev = run(&mut h, 1, &["SELECT a", "SELECT b"]).await;
+
+    // Assert
     // Statement a: read to the limit, then closed; statement b: left paused.
     let o = ops(&h);
     assert_eq!(o.iter().filter(|x| *x == "finish").count(), 1, "{o:?}");
@@ -226,8 +259,11 @@ async fn only_last_statement_keeps_cursor() {
 
 #[tokio::test(start_paused = true)]
 async fn load_more_fetches_editor_row_limit() {
+    // Arrange
     let mut h = harness(script(2500));
     open(&mut h).await;
+
+    // Act & Assert
     let ev = run(&mut h, 1, &["SELECT 1"]).await;
     assert_eq!(row_counts(&ev), [(500, false), (500, false)]);
     cmd(
@@ -262,9 +298,12 @@ async fn load_more_fetches_editor_row_limit() {
 
 #[tokio::test(start_paused = true)]
 async fn idle_paused_cursor_auto_closed() {
+    // Arrange
     let mut h = harness(script(1500));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
+
+    // Act & Assert
     tokio::time::sleep(Duration::from_secs(299)).await;
     assert!(notices(&drain(&h.rx)).is_empty()); // pings are not notices
     assert!(!ops(&h).iter().any(|x| x == "finish"));
@@ -276,9 +315,12 @@ async fn idle_paused_cursor_auto_closed() {
 
 #[tokio::test(start_paused = true)]
 async fn tx_state_follows_buttons_and_statements() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     let tx = |h: &mut H, op| cmd(h, Command::Tx { tab: TAB, op });
+
+    // Act & Assert
     tx(&mut h, TxOp::Begin);
     assert_eq!(tx_states(&settle(&h).await), [TxState::Open]);
     h.drv.log.fail_sql.lock().unwrap().push((
@@ -305,6 +347,7 @@ async fn tx_state_follows_buttons_and_statements() {
 
 #[tokio::test(start_paused = true)]
 async fn mysql_ddl_in_open_tx_is_implicit_commit() {
+    // Arrange
     let mut h = harness_with(FakeDriver::with_kind(script(0), DriverKind::Mysql));
     let mut cfg = config(Some("d"));
     cfg.driver = DriverKind::Mysql;
@@ -316,6 +359,8 @@ async fn mysql_ddl_in_open_tx_is_implicit_commit() {
     assert!(matches!(next(&h.rx).await, Event::Connected { .. }));
     open_editor(&mut h);
     run(&mut h, 1, &["BEGIN"]).await;
+
+    // Act & Assert
     let ev = run(&mut h, 2, &["CREATE TABLE x (a int)"]).await;
     assert_eq!(tx_states(&ev), [TxState::Idle]);
     assert!(notices(&ev).iter().any(|n| n.contains("implicit commit")));
@@ -337,10 +382,13 @@ async fn mysql_ddl_in_open_tx_is_implicit_commit() {
 
 #[tokio::test(start_paused = true)]
 async fn use_database_blocked_with_open_tx_on_pg() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["BEGIN"]).await;
     let before = h.drv.log.connects.lock().unwrap().len();
+
+    // Act & Assert
     cmd(
         &mut h,
         Command::UseDatabase {
@@ -366,9 +414,12 @@ async fn use_database_blocked_with_open_tx_on_pg() {
 
 #[tokio::test(start_paused = true)]
 async fn close_tab_with_open_tx_requires_resolution() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["BEGIN"]).await;
+
+    // Act & Assert
     cmd(
         &mut h,
         Command::CloseTab {
@@ -399,9 +450,12 @@ async fn close_tab_with_open_tx_requires_resolution() {
 
 #[tokio::test(start_paused = true)]
 async fn close_idle_tab_just_closes() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["SELECT 1"]).await;
+
+    // Act
     cmd(
         &mut h,
         Command::CloseTab {
@@ -410,6 +464,8 @@ async fn close_idle_tab_just_closes() {
         },
     );
     settle(&h).await;
+
+    // Assert
     assert!(
         h.actors
             .dispatch(Command::CloseTab {
@@ -422,9 +478,14 @@ async fn close_idle_tab_just_closes() {
 
 #[tokio::test(start_paused = true)]
 async fn history_entry_emitted_per_statement() {
+    // Arrange
     let mut h = harness(script(3));
     open(&mut h).await;
+
+    // Act
     let ev = run(&mut h, 1, &["SELECT 1", "SELECT 2"]).await;
+
+    // Assert
     let hist: Vec<_> = ev
         .iter()
         .filter_map(|e| match e {
@@ -442,10 +503,13 @@ async fn history_entry_emitted_per_statement() {
 
 #[tokio::test(start_paused = true)]
 async fn editor_connection_lost_reports_and_reconnects_on_next_run() {
+    // Arrange
     let mut h = harness(script(1));
     open(&mut h).await;
     run(&mut h, 1, &["BEGIN"]).await;
     h.drv.log.drop_next.store(true, Ordering::SeqCst);
+
+    // Act & Assert
     let ev = run(&mut h, 2, &["SELECT 1"]).await;
     assert!(
         notices(&ev).contains(&"Connection lost — open transaction was rolled back by the server")
@@ -463,16 +527,21 @@ async fn editor_connection_lost_reports_and_reconnects_on_next_run() {
 
 #[tokio::test(start_paused = true)]
 async fn cancel_tab_cancels_running_statement() {
+    // Arrange
     let mut h = harness(FakeScript {
         delay: Duration::from_secs(60),
         ..script(1)
     });
     open(&mut h).await;
+
+    // Act
     evaluate(&mut h, 1, &["SELECT 1"]);
     execute(&mut h, 2, 1);
     tokio::time::sleep(Duration::from_secs(1)).await;
     cmd(&mut h, Command::CancelTab { tab: TAB });
     let ev = settle(&h).await;
+
+    // Assert
     assert!(ev.iter().any(|e| matches!(
         e,
         Event::ExecError { error, .. } if error.kind == ErrorKind::Cancelled
