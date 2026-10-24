@@ -213,6 +213,10 @@ impl CrustApp {
                 }
             }
             Intent::SwitchWorkspace(id) => self.state.active = Some(id),
+            Intent::Disconnect(ws) => {
+                self.state.close_workspace(ws);
+                self.send(Command::Disconnect { ws });
+            }
             Intent::ToggleNode(n) => {
                 if let Some(cmd) = self.tree_mut().and_then(|t| t.toggle(n)) {
                     self.send(cmd);

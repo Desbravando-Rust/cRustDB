@@ -39,6 +39,7 @@ pub enum Intent {
     FormConnect,
     FormCancel,
     SwitchWorkspace(WorkspaceId),
+    Disconnect(WorkspaceId),
     ToggleNode(NodePath),
     SelectNode(NodePath),
     RefreshNode(NodePath),

@@ -69,7 +69,10 @@ fn main() -> anyhow::Result<()> {
         .with(Arc::new(crustdb_mysql::MysqlDriver))
         .with(Arc::new(crustdb_sqlite::SqliteDriver));
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default().with_title(APP_NAME),
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_title(APP_NAME)
+            .with_inner_size([1024.0, 768.0])
+            .with_min_inner_size([640.0, 480.0]),
         ..Default::default()
     };
     eframe::run_native(
