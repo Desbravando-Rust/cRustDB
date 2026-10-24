@@ -371,4 +371,28 @@ mod tests {
         // Assert
         assert!(intents.contains(&Intent::FormBrowseSqlite));
     }
+
+    #[test]
+    fn buttons_reachable_in_small_window() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
+        f.set_ssh(true);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(400.0, 240.0))
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+        h.run();
+
+        // Act
+        h.get_by_label("Save").scroll_to_me();
+        h.run();
+
+        // Assert
+        for label in ["Save", "Cancel"] {
+            let max_y = h.get_by_label(label).rect().max.y;
+            assert!(max_y <= 240.0, "{label} cut off at y={max_y}");
+        }
+    }
 }
