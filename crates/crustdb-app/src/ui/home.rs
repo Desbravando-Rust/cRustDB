@@ -123,7 +123,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
@@ -136,7 +136,7 @@ mod tests {
     /// Installs theme fonts and image loaders on the first pass and returns
     /// `false` then: fonts apply on the next pass, and without loaders the
     /// logo renders egui's "⚠️" error glyph, which no installed font draws.
-    fn ready(ui: &egui::Ui, done: &mut bool) -> bool {
+    pub(crate) fn ready(ui: &egui::Ui, done: &mut bool) -> bool {
         if std::mem::replace(done, true) {
             return true;
         }
@@ -312,6 +312,33 @@ mod tests {
         h.run();
         drop(h);
         assert!(intents.contains(&Intent::SwitchWorkspace(ws)));
+    }
+
+    #[test]
+    fn home_hides_logo_when_connection_active() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].status = Status::Online(ServerVersion {
+            product: Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        });
+        s.active = Some(ws);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label("cRustDB logo").is_none());
     }
 
     #[test]

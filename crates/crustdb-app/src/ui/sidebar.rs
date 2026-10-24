@@ -81,3 +81,46 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     });
     out
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    use crustdb_core::model::{Product, ServerVersion};
+
+    use super::*;
+    use crate::state::Status;
+    use crate::state::workspace::tests::state;
+    use crate::ui::home::tests::ready;
+
+    #[test]
+    fn sidebar_shows_logo_above_selector() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].status = Status::Online(ServerVersion {
+            product: Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        });
+        s.active = Some(ws);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        let logo = h.get_by_label("cRustDB logo").rect();
+        let combo = h.get_by_label("alpha").rect();
+        assert!(logo.top() < combo.top());
+    }
+}
