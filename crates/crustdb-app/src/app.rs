@@ -239,30 +239,37 @@ impl CrustApp {
             }
             Intent::OpenObject { object } => self.open_object(object),
             Intent::SortHeader { tab, column, shift } => {
-                self.table_op(tab, |t| {
-                    t.click_header(&column, shift);
-                    true
-                });
+                self.table_op(tab, |t| t.click_header(&column, shift));
             }
             Intent::NextPage(tab) => self.table_op(tab, |t| t.next_page()),
             Intent::PrevPage(tab) => self.table_op(tab, |t| t.prev_page()),
             Intent::Retry(tab) => {
-                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) {
-                    rt.send(t.retry(rt.next_request_id()));
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.retry(rt.next_request_id())
+                {
+                    rt.send(c);
                 }
             }
             Intent::CommitEdit(tab) => {
+                if let Some(t) = self.state.table_mut(tab) {
+                    t.commit_edit();
+                }
+            }
+            Intent::SetNull { tab, row, col } => {
+                if let Some(t) = self.state.table_mut(tab) {
+                    t.set_null(row, col);
+                }
+            }
+            Intent::SavePending(tab) => {
                 if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
-                    && let Some(c) = t.commit_edit(rt.next_request_id())
+                    && let Some(c) = t.save_pending(rt.next_request_id())
                 {
                     rt.send(c);
                 }
             }
-            Intent::SetNull { tab, row, col } => {
-                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
-                    && let Some(c) = t.set_null(row, col, rt.next_request_id())
-                {
-                    rt.send(c);
+            Intent::DiscardPending(tab) => {
+                if let Some(t) = self.state.table_mut(tab) {
+                    t.discard_pending();
                 }
             }
             Intent::ApplyFilters(tab) => {
@@ -273,8 +280,10 @@ impl CrustApp {
                 }
             }
             Intent::ClearFilters(tab) => {
-                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab)) {
-                    rt.send(t.clear_filters(rt.next_request_id()));
+                if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
+                    && let Some(c) = t.clear_filters(rt.next_request_id())
+                {
+                    rt.send(c);
                 }
             }
             Intent::SetView(tab, view) => {

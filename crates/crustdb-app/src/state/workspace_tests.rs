@@ -230,10 +230,10 @@ fn ddl_retry_reemits_load_ddl_and_event_fills_text() {
     assert!(!t.is_loading());
     assert!(matches!(
         t.retry(RequestId(2)),
-        Command::LoadDdl {
+        Some(Command::LoadDdl {
             req: RequestId(2),
             ..
-        }
+        })
     ));
     assert!(t.is_loading());
     s.apply(Event::Ddl {

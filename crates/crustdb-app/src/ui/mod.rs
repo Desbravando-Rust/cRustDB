@@ -56,8 +56,11 @@ pub enum Intent {
     PrevPage(TabId),
     StopTab(TabId),
     Retry(TabId),
-    /// Sends the inline grid edit of the table tab.
+    /// Stages the inline grid edit of the table tab.
     CommitEdit(TabId),
+    /// Sends the staged row changes as one `UPDATE`.
+    SavePending(TabId),
+    DiscardPending(TabId),
     SetNull {
         tab: TabId,
         row: usize,
