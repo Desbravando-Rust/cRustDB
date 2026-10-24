@@ -187,6 +187,45 @@ fn load_more_hidden_when_exhausted() {
 }
 
 #[test]
+fn load_more_stays_busy_until_fetch_done() {
+    // Arrange
+    let mut t = tab("");
+    started(&mut t, 7);
+    let r = RequestId(7);
+    t.apply(&Event::ResultStarted {
+        req: r,
+        header: header(),
+    });
+    t.apply(&Event::Rows {
+        req: r,
+        rows: rows(1),
+        exhausted: false,
+    });
+    t.apply(&done(7, 1, None, Some(1)));
+    assert!(t.load_more().is_some());
+
+    // Act
+    t.apply(&Event::Rows {
+        req: r,
+        rows: rows(2),
+        exhausted: false,
+    });
+    let busy_after_first = t.running.is_some();
+    t.apply(&Event::Rows {
+        req: r,
+        rows: rows(2),
+        exhausted: false,
+    });
+    let busy_after_second = t.running.is_some();
+    t.apply(&Event::FetchDone { req: r });
+
+    // Assert
+    assert!(busy_after_first && busy_after_second);
+    assert_eq!(t.pane.rows.len(), 5);
+    assert_eq!(t.running, None);
+}
+
+#[test]
 fn error_position_is_offset_by_statement_start() {
     // Arrange
     let mut t = tab("select 1;\nselect x");
