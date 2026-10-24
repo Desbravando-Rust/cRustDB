@@ -14,12 +14,46 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  check-files:
+    runs-on: ubuntu-latest
+    outputs:
+      has_extension: ${{ steps.filter.outputs.match }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files
+        id: filter
+        env:
+          EXT_LIST: ${{ vars.CHECK_TARGET_EXTENSION }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -f # keep patterns like *.rs from globbing against the checkout
+          # Tags and new branches (no usable base) always run everything.
+          if [[ "$GITHUB_REF" == refs/tags/* || -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            echo "match=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          pats=$(echo "${EXT_LIST:-*.rs}" | tr ',' ' ')
+          match=false
+          while IFS= read -r f; do
+            for pat in $pats; do
+              case "$f" in $pat) echo "relevant: $f"; match=true ;; esac
+            done
+          done < <(git diff --name-only "$BASE" "$GITHUB_SHA")
+          echo "match=$match" >> "$GITHUB_OUTPUT"
+
   fmt:
+    needs: check-files
+    if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: cargo fmt --all --check
+
   clippy:
+    needs: check-files
+    if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,8 +62,10 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
   test:
-    needs: [fmt, clippy, deny]
+    needs: [check-files, fmt, clippy, deny]
+    if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,6 +79,8 @@ jobs:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --fail-fast
   deny:
+    needs: [check-files]
+    if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,7 +93,8 @@ jobs:
           cache-targets: false
       - run: cargo deny check
   coverage:
-    needs: [fmt, clippy, deny]
+    needs: [check-files, fmt, clippy, deny]
+    if: needs.check-files.outputs.has_extension == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
