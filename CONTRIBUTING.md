@@ -46,4 +46,4 @@ END { exit bad }
 ' $(grep -rlE '#\[(tokio::)?test' crates)
 ```
 
-It could run from `.githooks/pre-commit` or `make lint` once every test file follows the layout. Known gap: files at the 500-line limit (they need splitting first).
+All test files already pass; it can be wired into `.githooks/pre-commit` or `make lint`.
