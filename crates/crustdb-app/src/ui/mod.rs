@@ -18,6 +18,7 @@ pub mod status_bar;
 pub mod structure;
 pub mod tab_bar;
 pub mod theme;
+pub mod workspace_home;
 
 use crustdb_core::model::{ConnectionId, ObjectRef};
 
