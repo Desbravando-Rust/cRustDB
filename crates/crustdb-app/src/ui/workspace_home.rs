@@ -11,8 +11,12 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
     };
     ui.heading(db);
     ui.weak("Tables - double-click to open");
+    let tables = w.tree.loaded_tables(db);
+    if tables.is_empty() {
+        ui.weak("No tables");
+    }
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for t in w.tree.loaded_tables(db) {
+        for t in tables {
             if ui.selectable_label(false, &t.name).double_clicked() {
                 out.push(Intent::OpenObject { object: t.clone() });
             }
@@ -76,6 +80,24 @@ mod tests {
         // Assert
         h.get_by_label("users");
         h.get_by_label("orders");
+    }
+
+    #[test]
+    fn workspace_home_without_tables_says_so() {
+        // Arrange
+        let w = loaded(&[]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &w);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("No tables");
     }
 
     #[test]
