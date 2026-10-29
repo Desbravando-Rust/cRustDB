@@ -43,9 +43,29 @@ impl AppState {
                 resolve: Some(op),
             })
             .collect();
-        self.close_workspace(ws);
-        cmds.push(Command::Disconnect { ws });
+        if cmds.is_empty() {
+            self.close_workspace(ws);
+            cmds.push(Command::Disconnect { ws });
+        } else {
+            // The real Disconnect waits for every TxChanged{Idle} (see `tx_resolved`).
+            self.disconnecting
+                .insert(ws, cmds.iter().filter_map(close_tab).collect());
+        }
         cmds
+    }
+
+    /// An editor finished its transaction; once the last one of a disconnecting workspace did,
+    /// the workspace goes away and `Disconnect` is queued.
+    pub(super) fn tx_resolved(&mut self, tab: TabId) {
+        let Some((&ws, _)) = self.disconnecting.iter().find(|(_, t)| t.contains(&tab)) else {
+            return;
+        };
+        let tabs = self.disconnecting.entry(ws).or_default();
+        tabs.remove(&tab);
+        if tabs.is_empty() {
+            self.close_workspace(ws);
+            self.outbox.push(Command::Disconnect { ws });
+        }
     }
 
     fn tx_tabs(&self, ws: WorkspaceId) -> Vec<TabId> {
@@ -73,16 +93,33 @@ impl AppState {
             self.active = None;
         }
         self.evaluating.retain(|_, (w, _)| *w != ws);
+        self.disconnecting.remove(&ws);
+    }
+}
+
+fn close_tab(c: &Command) -> Option<TabId> {
+    match c {
+        Command::CloseTab { tab, .. } => Some(*tab),
+        _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crate::runtime::{Command, RequestId, TxOp, TxState};
+    use crate::runtime::{Command, Event, RequestId, TxOp, TxState};
     use crate::state::workspace::tests::state;
     use crate::state::{Dialog, Tab};
     use crustdb_core::model::{ObjectKind, ObjectRef};
+
+    fn table_ref() -> ObjectRef {
+        ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        }
+    }
 
     /// Workspace with one query tab holding an open transaction.
     fn with_tx() -> (
@@ -166,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_disconnect_closes_tx_tabs_then_disconnects() {
+    fn resolve_disconnect_closes_tx_tabs_and_waits_for_idle() {
         for op in [TxOp::Commit, TxOp::Rollback] {
             // Arrange
             let (mut s, ws, tab) = with_tx();
@@ -178,30 +215,85 @@ mod tests {
             // Assert
             assert!(matches!(
                 cmds.as_slice(),
-                [
-                    Command::CloseTab { tab: t, resolve: Some(o) },
-                    Command::Disconnect { ws: w },
-                ] if *t == tab && *o == op && *w == ws
+                [Command::CloseTab { tab: t, resolve: Some(o) }] if *t == tab && *o == op
             ));
+            assert_eq!(s.workspaces.len(), 1);
+            assert!(s.take_commands().is_empty());
+
+            // Act
+            s.apply(Event::TxChanged {
+                tab,
+                state: TxState::Idle,
+            });
+
+            // Assert
             assert!(s.workspaces.is_empty());
-            assert!(s.dialogs.top().is_none());
+            assert!(
+                matches!(s.take_commands().as_slice(), [Command::Disconnect { ws: w }] if *w == ws)
+            );
         }
     }
 
     #[test]
-    fn resolve_disconnect_rejects_savepoint_and_cancel_keeps_workspace() {
+    fn failed_commit_keeps_workspace_connected() {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+        s.request_disconnect(ws);
+        s.resolve_disconnect(TxOp::Commit);
+
+        // Act
+        s.apply(Event::Notice {
+            tab,
+            text: "commit failed".into(),
+        });
+        s.apply(Event::TxChanged {
+            tab,
+            state: TxState::Idle,
+        });
+
+        // Assert
+        assert_eq!(s.workspaces.len(), 1);
+        assert!(s.take_commands().is_empty());
+        assert_eq!(s.workspaces[0].queries[0].pane.messages.len(), 1);
+    }
+
+    #[test]
+    fn resolve_disconnect_rejects_savepoint() {
         // Arrange
         let (mut s, ws, _) = with_tx();
         s.request_disconnect(ws);
 
         // Act
         let rejected = s.resolve_disconnect(TxOp::Savepoint);
-        let cancelled = s.dialogs.cancel();
 
         // Assert
         assert!(rejected.is_empty());
+        assert!(s.dialogs.top().is_some());
+    }
+
+    #[test]
+    fn cancel_disconnect_keeps_tx_and_pending_edit() {
+        // Arrange
+        let (mut s, ws, _) = with_tx();
+        s.open_table(ws, table_ref(), RequestId(1));
+        let Some(Tab::Table(t)) = s.workspaces[0].tabs.first_mut() else {
+            panic!("expected table tab");
+        };
+        t.pending.push((0, Some("x".into())));
+        s.request_disconnect(ws);
+
+        // Act
+        let cancelled = s.dialogs.cancel();
+
+        // Assert
         assert!(cancelled.is_none());
+        assert!(s.dialogs.top().is_none());
         assert_eq!(s.workspaces.len(), 1);
+        assert_eq!(s.workspaces[0].queries[0].tx, TxState::Open);
+        let Some(Tab::Table(t)) = s.workspaces[0].tabs.first() else {
+            panic!("expected table tab");
+        };
+        assert!(!t.pending.is_empty());
     }
 
     #[test]

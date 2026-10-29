@@ -2,8 +2,9 @@
 use crustdb_testkit::fake_driver::FakeScript;
 
 use super::editor::tests::open;
+use super::editor::tests::{settle, tx_states};
 use super::tests::{TAB, WS, harness};
-use crate::runtime::{Command, RequestId};
+use crate::runtime::{Command, RequestId, TxOp, TxState};
 
 #[tokio::test(start_paused = true)]
 async fn disconnect_drops_export_sender_of_the_editor_tab() {
@@ -23,4 +24,36 @@ async fn disconnect_drops_export_sender_of_the_editor_tab() {
 
     // Assert
     assert!(h.actors.exports.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn close_tab_commit_resolves_open_tx_before_disconnect() {
+    // Arrange
+    let mut h = harness(FakeScript::default());
+    open(&mut h).await;
+    h.actors.dispatch(Command::Tx {
+        tab: TAB,
+        op: TxOp::Begin,
+    });
+    settle(&h).await;
+
+    // Act
+    h.actors.dispatch(Command::CloseTab {
+        tab: TAB,
+        resolve: Some(TxOp::Commit),
+    });
+    let ev = settle(&h).await;
+    h.actors.dispatch(Command::Disconnect { ws: WS });
+
+    // Assert
+    assert_eq!(tx_states(&ev), [TxState::Idle]);
+    assert!(
+        h.drv
+            .log
+            .ops
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|q| q.starts_with("start:") && q.contains("COMMIT"))
+    );
 }
