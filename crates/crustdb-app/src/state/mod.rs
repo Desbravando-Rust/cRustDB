@@ -12,6 +12,7 @@ pub mod tabs;
 pub mod tree;
 pub mod workspace;
 mod workspace_close;
+mod workspace_fk;
 
 pub use dialogs::{Dialog, DialogStack};
 pub use workspace::{AppState, Status, Tab, WorkspaceState};
