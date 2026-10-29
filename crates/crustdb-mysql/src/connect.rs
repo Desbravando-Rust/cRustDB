@@ -54,7 +54,12 @@ fn opts(t: &ConnectTarget) -> Opts {
 
 pub(crate) fn map_err(e: mysql_async::Error) -> DriverError {
     use mysql_async::Error::{Io, Server};
-    let message = e.to_string();
+    // Display of `Error::Io` and `IoError::Io` both prefix "Input/output error: ".
+    let message = match &e {
+        Io(IoError::Io(io)) => io.to_string(),
+        Io(i) => i.to_string(),
+        _ => e.to_string(),
+    };
     match &e {
         Server(s) => {
             let kind = match s.code {
@@ -155,6 +160,20 @@ mod tests {
 
         // Act & Assert
         assert!(!opts(&t).prefer_socket());
+    }
+
+    #[test]
+    fn io_error_message_is_not_duplicated() {
+        // Arrange
+        let io = std::io::Error::from(std::io::ErrorKind::ConnectionRefused);
+        let expected = io.to_string();
+
+        // Act
+        let d = map_err(mysql_async::Error::Io(IoError::Io(io)));
+
+        // Assert
+        assert_eq!(d.kind, ErrorKind::Connect);
+        assert_eq!(d.message, expected);
     }
 
     #[test]
