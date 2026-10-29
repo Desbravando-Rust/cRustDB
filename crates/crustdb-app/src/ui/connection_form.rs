@@ -188,13 +188,13 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
                     error_for(ui, f, "page_size");
                     ui.end_row();
                     ui.label("Editor row limit")
-                        .on_hover_text("Maximum rows returned for queries run from the SQL editor.");
+                        .on_hover_text("Rows fetched per batch for SQL editor queries; use Load more to fetch the next batch.");
                     ui.add(egui::DragValue::new(&mut f.draft.editor_row_limit));
                     ui.end_row();
                     error_for(ui, f, "editor_row_limit");
                     ui.end_row();
                     ui.label("Safety threshold").on_hover_text(
-                        "Row count above which DML asks for password confirmation.",
+                        "Estimated affected rows above which DML, TRUNCATE or DROP TABLE require password confirmation.",
                     );
                     ui.add(egui::DragValue::new(&mut f.draft.safety_threshold));
                     ui.end_row();
@@ -435,8 +435,8 @@ mod tests {
             ("TLS mode", "VerifyFull: VerifyCa plus"),
             ("CA file", "PEM file with the CA certificate"),
             ("Page size", "Rows fetched per page"),
-            ("Editor row limit", "Maximum rows returned"),
-            ("Safety threshold", "asks for password confirmation"),
+            ("Editor row limit", "Rows fetched per batch"),
+            ("Safety threshold", "require password confirmation"),
             ("SSH tunnel", "Connect through an SSH server"),
         ] {
             // Act
