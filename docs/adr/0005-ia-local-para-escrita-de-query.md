@@ -1,11 +1,11 @@
 # IA local para escrita de query (spike)
 
-* **Status:** Aceito
+* **Status:** Proposto
 * **Data:** 2026-10-29
 * **Issue Relacionada:** #125
 
 ## Contexto e Problema
-A issue #125 pede um spike: quanto custa introduzir IA na escrita de query usando um modelo local. A spec v1 lista IA como fora do escopo (§10). Este ADR registra a avaliação e a recomendação. Ele não autoriza implementação: cada passo do plano abaixo vira uma issue própria.
+A issue #125 pede um spike: quanto custa introduzir IA na escrita de query usando um modelo local. A spec v1 lista IA como fora do escopo (§10). Este ADR registra a avaliação e a recomendação. Ele é uma decisão de avaliação do spike e não autoriza implementação, que não está agendada. Aceitar este ADR é pré-requisito para abrir as issues de implementação (uma por passo do plano abaixo). Até lá nada na §10 da spec é revogado.
 
 Requisitos que qualquer solução precisa respeitar:
 
@@ -63,8 +63,8 @@ Motivos:
 * **Opção 6 descartada** porque o custo da opção 1 é baixo e isolado (ver "Esforço").
 
 ### Desenho mínimo
-* **`crustdb-core` (puro, testável sem IO):** módulo `ai` com `build_prompt(dialect, schema_ctx, request) -> String` e `extract_sql(response) -> Option<String>` (pega o primeiro bloco ```` ```sql ```` ou o texto inteiro). `schema_ctx` sai do cache de metadata que a sidebar e o autocomplete já usam (`Introspector`), limitado às tabelas citadas pelo usuário ou às N primeiras, para caber em ~2–4k tokens. Sem tipos novos na API de `Driver`/`Session`.
-* **`crustdb-app`:** actor `actors/ai` que recebe `Generate { tab, prompt }` por `tokio::sync::mpsc` e devolve `Chunk`/`Done`/`Error` para o estado da aba. Usa streaming SSE para mostrar progresso e um botão Stop (drop da task = cancelamento). Timeout configurável.
+* **`crustdb-core` (puro, testável sem IO):** módulo `ai` com `build_prompt(dialect, schema_ctx, request) -> String` e `extract_sql(response) -> Option<String>` (pega o primeiro bloco ```` ```sql ```` ou o texto inteiro). `schema_ctx` parte do `ObjectTree` e do `ColumnCache` (`crates/crustdb-app/src/state/autocomplete.rs`), que guardam só nomes de tabela e de coluna (`Vec<String>`), carregados sob demanda. Tipos, PK e FK exigem buscar via `Introspector` sob demanda, o que acrescenta round trips e um passo de montagem no app. O contexto é limitado às tabelas citadas pelo usuário ou às N primeiras, para caber em ~2–4k tokens. Sem tipos novos na API de `Driver`/`Session`.
+* **`crustdb-app`:** actor `actors/ai` que recebe `Generate { tab, prompt }` por `tokio::sync::mpsc` e devolve `Chunk`/`Done`/`Error` para o estado da aba. Usa streaming SSE para mostrar progresso e um botão Stop. Stop sinaliza uma flag de cancelamento (`AtomicBool` ou `CancellationToken`) checada entre chunks SSE: o loop sai e fecha a resposta. Drop do `JoinHandle` não serve, pois não interrompe a leitura bloqueante do `ureq`. O timeout do `ureq` (configurável) é o limite superior de espera. Cancelamento imediato de verdade exigiria cliente async; reavaliar no PoC.
 * **Cliente HTTP:** reaproveitar uma dependência que já está no grafo. O `ureq` já entra via `sentry`, e o `tokio` com `net` já está no app. Rodar `ureq` em `spawn_blocking` evita uma dependência nova pesada (`reqwest`/`hyper`). Decidir com `cargo tree` na implementação.
 * **UI:** campo de prompt (Ctrl+K) acima do editor da aba. A resposta é inserida como seleção no buffer e o usuário revisa antes de executar. Nenhum caminho executa direto.
 * **Configuração (persistência existente do app):** `ai.enabled` (false), `ai.endpoint` (`http://127.0.0.1:11434/v1`), `ai.model` (`qwen2.5-coder:7b`), `ai.timeout_secs`. Sem segredo, a menos que o endpoint exija token. Nesse caso, `SecretString` + keyring, como as senhas de conexão.
@@ -74,13 +74,13 @@ Estimativa em dias de dev, já contando os testes AAA e os gates.
 
 | Passo | Crates | Esforço |
 |---|---|---|
-| `ai::build_prompt` + `extract_sql` com testes unitários | core | 1 d |
+| `ai::build_prompt` + `extract_sql` com testes unitários, mais carga sob demanda de tipos/PK/FK para o `schema_ctx` (risco: pode crescer) | core/app | 1,5 d |
 | Settings `ai.*` + persistência + tela de configuração | app/ui | 1 d |
 | Actor `ai` com HTTP/SSE, cancelamento, timeout, erros (`thiserror`) | app | 2 d |
 | UI do prompt (Ctrl+K), inserção no buffer, estado de loading/erro | ui | 1,5 d |
 | Teste de integração do actor contra um servidor HTTP fake (sem modelo) | app | 0,5 d |
 | PoC de medição (ver abaixo) + documentação do setup do Ollama | docs | 1 d |
-| **Total** | | **~7 d** |
+| **Total** | | **~7,5 d** |
 
 Para comparar: a opção 2 (llama.cpp embutido) soma, por estimativa não medida (a confirmar no PoC), de +5 a +10 d de build/CI/empacotamento e matriz de GPU, além de manutenção contínua a cada atualização do llama.cpp.
 
@@ -113,7 +113,7 @@ Conclusões:
 ### Consequências Negativas / Trade-offs
 * Exige que o usuário instale e mantenha um runtime separado (Ollama etc.). É fricção de setup, a ser mitigada com uma mensagem clara quando o endpoint não responder.
 * A qualidade depende do modelo escolhido. Modelos de 1.5B erram consultas não triviais, e o usuário precisa revisar sempre.
-* Prompt injection pelo conteúdo do schema (por exemplo, um comentário de tabela malicioso) pode gerar SQL destrutivo. Mitigação: nunca autoexecutar, e a classificação de DML/DDL continua exigindo confirmação.
+* Prompt injection pelo conteúdo do schema (por exemplo, um comentário de tabela malicioso) pode gerar SQL destrutivo. Mitigação principal: nunca autoexecutar, e o usuário revisa o buffer antes de executar. A política da §4.7 vale como de costume: só os casos que ela sinaliza pedem confirmação (por exemplo, DML com WHERE de estimativa baixa e INSERT de uma tupla têm veredito Run).
 * Variação de API entre runtimes (SSE, nomes de campo). Mitigação: usar só o subconjunto OpenAI-compatível.
 * Mais uma superfície de configuração e de rede (endpoint arbitrário). Validar a URL e avisar quando o host não for loopback.
 
