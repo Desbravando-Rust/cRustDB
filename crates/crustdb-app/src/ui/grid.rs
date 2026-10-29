@@ -180,6 +180,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::NextPage(id));
             }
             ui.label(tab.footer_label());
+            let refresh = egui::Button::new("Refresh");
+            if ui
+                .add_enabled(!tab.is_loading(), refresh)
+                .on_hover_text("Reload page (F5)")
+                .clicked()
+            {
+                out.push(Intent::Retry(id));
+            }
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
