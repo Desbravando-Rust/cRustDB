@@ -10,6 +10,7 @@ pub mod result_pane;
 pub mod status;
 pub mod tabs;
 pub mod tree;
+mod tree_home;
 pub mod workspace;
 mod workspace_close;
 
