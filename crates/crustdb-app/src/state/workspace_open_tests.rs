@@ -102,3 +102,39 @@ fn reconnect_after_online_failure_keeps_tabs_and_reopens_their_actors() {
         )
     );
 }
+
+#[test]
+fn connected_with_database_queues_tables_load_and_without_queues_nothing() {
+    // Arrange
+    let mut s = state(&["a"]);
+    let mut c = super::tests::conn("b");
+    c.database = Some("d".into());
+    let plain = s.open_workspace(s.config.connections[0].clone());
+    let with_db = s.open_workspace(c);
+    let server = ServerVersion {
+        product: Product::Postgres,
+        major: 16,
+        minor: 0,
+        patch: 0,
+        raw: "16.0".into(),
+    };
+
+    // Act
+    s.apply(Event::Connected {
+        ws: plain,
+        server: server.clone(),
+    });
+    let none = s.take_commands();
+    s.apply(Event::Connected {
+        ws: with_db,
+        server,
+    });
+
+    // Assert
+    assert!(none.is_empty());
+    assert!(s.take_commands().iter().any(|c| matches!(
+        c,
+        Command::LoadChildren { database, schema, kind: Some(ObjectKind::Table), .. }
+            if database == "d" && schema.as_deref() == Some("public")
+    )));
+}
