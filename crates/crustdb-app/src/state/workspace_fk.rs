@@ -3,6 +3,7 @@ use crustdb_core::model::{Cell, ObjectRef};
 use crustdb_core::query::{Filter, Operator};
 
 use super::filter_draft::FilterDraft;
+use super::table_tab::TableView;
 use super::workspace::{AppState, Tab};
 use crate::runtime::{Command, RequestId, TabId, WorkspaceId};
 
@@ -29,21 +30,25 @@ impl AppState {
         }) else {
             return cmds;
         };
+        if !created && t.pending_blocks() {
+            return vec![];
+        }
+        t.view = TableView::Data;
         t.filter_open = true;
-        if created {
-            // The first page is fetched once the structure arrives, already filtered.
-            t.filters = drafts
-                .iter()
-                .map(|d| Filter {
-                    column: d.column.clone(),
-                    op: d.op,
-                    values: vec![d.input.clone()],
-                })
-                .collect();
-            t.drafts = drafts;
-        } else {
-            t.drafts = drafts;
-            cmds = t.apply_filters(req).into_iter().collect();
+        t.filters = drafts
+            .iter()
+            .map(|d| Filter {
+                column: d.column.clone(),
+                op: d.op,
+                values: vec![d.input.clone()],
+            })
+            .collect();
+        t.drafts = drafts;
+        // Without structure the first page is fetched on arrival, already filtered.
+        if !created && t.structure.is_some() {
+            t.filter_error = None;
+            t.page = 0;
+            cmds = vec![t.fetch(req)];
         }
         cmds
     }

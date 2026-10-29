@@ -3,8 +3,9 @@ use crustdb_core::model::{Cell, ColumnMeta, ForeignKeyInfo, ObjectKind, ObjectRe
 use crustdb_core::query::{Filter, Operator};
 
 use crate::runtime::{Command, RequestId, TabId, WorkspaceId};
+use crate::state::filter_draft::FilterDraft;
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Structure, Tab, TableTab};
+use crate::state::{AppState, Structure, Tab, TableTab, TableView};
 
 fn obj(name: &str) -> ObjectRef {
     ObjectRef {
@@ -103,7 +104,10 @@ fn follow_fk_focuses_open_tab_and_refetches_filtered() {
     let row = vec![text("1"), text("7"), text("eu")];
     let (mut s, ws, orders) = setup(vec![fk(&["customer_id"], "customers", &["id"])], row);
     s.open_table(ws, obj("customers"), RequestId(2));
-    table(&mut s, ws, "customers").columns = vec![col("id")];
+    let t = table(&mut s, ws, "customers");
+    t.columns = vec![col("id")];
+    t.structure = Some(Structure::default());
+    t.view = TableView::Ddl;
     s.workspace_mut(ws).unwrap().active_tab = Some(orders);
 
     // Act
@@ -117,6 +121,7 @@ fn follow_fk_focuses_open_tab_and_refetches_filtered() {
     let t = table(&mut s, ws, "customers");
     let id = t.id;
     assert!(t.filter_open);
+    assert_eq!(t.view, TableView::Data);
     assert_eq!(s.workspace_mut(ws).unwrap().active_tab, Some(id));
 }
 
@@ -144,10 +149,29 @@ fn follow_fk_ignores_non_fk_column_and_null_cell() {
     // Act
     let on_plain_column = s.follow_fk(orders, 0, 0, RequestId(5));
     let on_null = s.follow_fk(orders, 0, 1, RequestId(6));
+    let truncated = Cell::Text {
+        value: "7".into(),
+        truncated: true,
+    };
+    let bytes = Cell::Bytes {
+        value: Box::new([7]),
+        total_len: 1,
+        truncated: false,
+    };
+    let (mut other_rows, mut bytes_row) = (vec![], vec![]);
+    for (cell, rows) in [(truncated, &mut other_rows), (bytes, &mut bytes_row)] {
+        rows.push(vec![text("1"), cell, text("eu")]);
+    }
+    table(&mut s, ws, "orders").rows =
+        vec![other_rows.remove(0).into(), bytes_row.remove(0).into()];
+    let on_truncated = s.follow_fk(orders, 0, 1, RequestId(7));
+    let on_bytes = s.follow_fk(orders, 1, 1, RequestId(8));
 
     // Assert
     assert!(on_plain_column.is_empty());
     assert!(on_null.is_empty());
+    assert!(on_truncated.is_empty());
+    assert!(on_bytes.is_empty());
     assert_eq!(s.workspace_mut(ws).unwrap().tabs.len(), 1);
 }
 
@@ -159,12 +183,35 @@ fn follow_fk_blocked_by_pending_changes_in_target() {
     s.open_table(ws, obj("customers"), RequestId(2));
     let t = table(&mut s, ws, "customers");
     t.columns = vec![col("id")];
+    t.structure = Some(Structure::default());
     t.pending = vec![(0, Some("9".into()))];
+    t.drafts = vec![FilterDraft::new(&t.columns)];
+    let before = t.drafts.clone();
 
     // Act
     let cmds = s.follow_fk(orders, 0, 1, RequestId(6));
 
     // Assert
     assert!(cmds.is_empty());
-    assert!(table(&mut s, ws, "customers").notice.is_some());
+    let t = table(&mut s, ws, "customers");
+    assert!(t.notice.is_some());
+    assert_eq!(t.drafts, before);
+    assert!(!t.filter_open);
+}
+
+#[test]
+fn follow_fk_on_open_tab_without_structure_sets_filters_for_the_first_page() {
+    // Arrange
+    let row = vec![text("1"), text("7"), text("eu")];
+    let (mut s, ws, orders) = setup(vec![fk(&["customer_id"], "customers", &["id"])], row);
+    s.open_table(ws, obj("customers"), RequestId(2));
+
+    // Act
+    let cmds = s.follow_fk(orders, 0, 1, RequestId(6));
+
+    // Assert
+    assert!(cmds.is_empty());
+    let t = table(&mut s, ws, "customers");
+    assert_eq!(t.filters, vec![eq("id", "7")]);
+    assert!(t.filter_error.is_none());
 }
