@@ -44,6 +44,7 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
         Dialog::DirtyFile { .. } => "Unsaved changes",
         Dialog::HostKey { .. } => "Unknown SSH host key",
         Dialog::DeleteConnection { .. } => "Delete connection",
+        Dialog::Disconnect { .. } => "Disconnect",
     };
     egui::Window::new(title)
         .collapsible(false)
@@ -122,6 +123,31 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
                         out.push(Intent::AcceptHostKey);
                     }
                     if ui.button("Reject").clicked() {
+                        out.push(Intent::CancelDialog);
+                    }
+                });
+            }
+            Dialog::Disconnect {
+                has_tx,
+                pending_rows,
+                ..
+            } => {
+                if *has_tx {
+                    ui.label("This workspace has an open transaction.");
+                }
+                if *pending_rows > 0 {
+                    ui.label(format!(
+                        "{pending_rows} pending row edit(s) will be discarded."
+                    ));
+                }
+                ui.horizontal(|ui| {
+                    if *has_tx && ui.button("Commit and disconnect").clicked() {
+                        out.push(Intent::DisconnectResolve(TxOp::Commit));
+                    }
+                    if ui.button("Rollback and disconnect").clicked() {
+                        out.push(Intent::DisconnectResolve(TxOp::Rollback));
+                    }
+                    if ui.button("Cancel").clicked() {
                         out.push(Intent::CancelDialog);
                     }
                 });
