@@ -83,8 +83,11 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if state.config.connections.is_empty() {
             ui.weak("No saved connections. Create one with New.");
         }
-        let shown =
-            (state.config.connections.iter()).filter(|c| labels::matches(c, filter.as_deref()));
+        let shown = crate::state::home_filter::filter_connections(
+            &state.config.connections,
+            "",
+            filter.as_deref(),
+        );
         for c in shown {
             let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
             let live = state

@@ -2,7 +2,7 @@
 use eframe::egui;
 
 use super::Intent;
-use crate::storage::config::{ConnectionConfig, Label};
+use crate::storage::config::Label;
 
 /// One edit of the label catalog; the app applies it, propagates it and saves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,10 +61,6 @@ pub fn filter_options<'a>(labels: &'a [Label], query: &str) -> Vec<&'a Label> {
         .iter()
         .filter(|l| l.name.to_lowercase().contains(&q))
         .collect()
-}
-
-pub fn matches(c: &ConnectionConfig, selected: Option<&str>) -> bool {
-    selected.is_none_or(|s| c.label.as_deref() == Some(s))
 }
 
 /// Memory id of the selected filter label (`Option<String>`); session-only, never persisted.
