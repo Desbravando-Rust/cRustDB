@@ -66,6 +66,7 @@ impl CrustApp {
     pub(super) fn apply_label_op(&mut self, op: LabelOp) {
         let cfg = &mut self.state.config;
         let (mut conns, mut cat) = (cfg.connections.clone(), cfg.labels.clone());
+        let mut renamed = None;
         match op {
             LabelOp::Add(name) => match validate_label(name.trim(), &cat) {
                 Ok(()) => cat.push(Label {
@@ -80,7 +81,7 @@ impl CrustApp {
                 match validate_label(&new, &others) {
                     Ok(()) => {
                         rename_label(&mut conns, &mut cat, &old, &new);
-                        crate::ui::labels::rename_filter(&self.ctx, &old, &new);
+                        renamed = Some((old, new));
                     }
                     Err(e) => return cfg.warning = Some(format!("label: {e}")),
                 }
@@ -100,8 +101,64 @@ impl CrustApp {
             Ok(()) => {
                 cfg.connections = conns;
                 cfg.labels = cat;
+                // Only after a successful save, so the filter never points at an unsaved name.
+                if let Some((old, new)) = renamed {
+                    crate::ui::labels::rename_filter(&self.ctx, &old, &new);
+                }
             }
             Err(e) => cfg.warning = Some(format!("could not save labels: {e}")),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::runtime::DriverRegistry;
+    use crate::storage::config::{ConfigStore, LoadedConfig};
+    use crate::storage::secrets::MemoryStore;
+    use eframe::egui;
+
+    #[test]
+    fn rename_keeps_filter_when_save_fails() {
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        // A future version makes the store read-only, so every save fails.
+        std::fs::write(&path, r#"{"version":99,"connections":[]}"#).unwrap();
+        let ctx = egui::Context::default();
+        let config = LoadedConfig {
+            connections: vec![],
+            labels: vec![Label {
+                name: "prod".into(),
+                color: [1, 2, 3],
+            }],
+            read_only: true,
+            warning: None,
+        };
+        let mut app = CrustApp::with_ctx(
+            &ctx,
+            config,
+            ConfigStore { path },
+            Box::<MemoryStore>::default(),
+            DriverRegistry::default(),
+            dir.path().join("history"),
+        );
+        ctx.data_mut(|d| d.insert_temp(crate::ui::labels::filter_id(), Some("prod".to_string())));
+
+        // Act
+        app.apply_label_op(LabelOp::Rename {
+            old: "prod".into(),
+            new: "production".into(),
+        });
+
+        // Assert
+        let sel: Option<String> = ctx
+            .data(|d| d.get_temp(crate::ui::labels::filter_id()))
+            .flatten();
+        assert_eq!(sel.as_deref(), Some("prod"));
+        assert_eq!(app.state.config.labels[0].name, "prod");
+        assert!(app.state.config.warning.is_some());
     }
 }
