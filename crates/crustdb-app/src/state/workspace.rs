@@ -275,10 +275,15 @@ impl AppState {
     pub fn apply(&mut self, e: Event) {
         match e {
             Event::Connected { ws, server } => {
+                let mut cmds = vec![];
                 if let Some(w) = self.workspace_mut(ws) {
                     w.status = Status::Online(server);
                     w.tree.reset();
+                    if let Some(db) = w.config.database.clone() {
+                        cmds = w.tree.expand_tables_of(&db);
+                    }
                 }
+                self.outbox.extend(cmds);
             }
             Event::ConnectFailed { ws, error } => {
                 if let Some(w) = self.workspace_mut(ws) {
