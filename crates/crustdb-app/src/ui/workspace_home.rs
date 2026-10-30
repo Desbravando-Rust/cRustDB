@@ -11,7 +11,10 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
     };
     ui.heading(db);
     ui.weak("Tables - double-click to open");
-    let tables = w.tree.loaded_tables(db);
+    let Some(tables) = w.tree.loaded_tables(db) else {
+        ui.label("Loading…");
+        return out;
+    };
     if tables.is_empty() {
         ui.weak("No tables");
     }
@@ -47,7 +50,8 @@ mod tests {
         }
     }
 
-    fn loaded(names: &[&str]) -> WorkspaceState {
+    /// Workspace whose tables folder load was requested but not answered yet.
+    fn pending() -> (WorkspaceState, crate::runtime::RequestId) {
         let mut s = state(&[]);
         let mut c = crate::state::workspace::tests::conn("a");
         c.database = Some("d".into());
@@ -58,9 +62,34 @@ mod tests {
         let Some(Command::LoadChildren { req, .. }) = cmds.last() else {
             panic!("no load command");
         };
+        let req = *req;
+        (w, req)
+    }
+
+    fn loaded(names: &[&str]) -> WorkspaceState {
+        let (mut w, req) = pending();
         w.tree
-            .apply_children(*req, names.iter().map(|n| table(n)).collect());
+            .apply_children(req, names.iter().map(|n| table(n)).collect());
         w
+    }
+
+    #[test]
+    fn workspace_home_while_loading_shows_loading() {
+        // Arrange
+        let (w, _) = pending();
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &w);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("Loading…");
+        assert!(h.query_by_label("No tables").is_none());
     }
 
     #[test]
