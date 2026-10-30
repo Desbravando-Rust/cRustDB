@@ -26,6 +26,8 @@ fn engine_name(kind: DriverKind) -> &'static str {
     }
 }
 
+const BANNER_MIN: egui::Vec2 = egui::vec2(420.0, 430.0);
+const WATERMARK_MIN: egui::Vec2 = egui::vec2(240.0, 300.0);
 const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
 pub(crate) fn logo(ui: &mut egui::Ui) {
@@ -37,8 +39,35 @@ pub(crate) fn logo(ui: &mut egui::Ui) {
     ui.add_space(8.0);
 }
 
-pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
-    let mut out = vec![];
+/// Central-panel empty state: watermark, hint and book banner. The banner
+/// yields first on small windows, then the watermark.
+pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
+    let (w, h) = (ui.available_width(), ui.available_height());
+    if w >= BANNER_MIN.x && h >= BANNER_MIN.y {
+        book_promo(ui);
+    }
+    let watermark = w >= WATERMARK_MIN.x && h >= WATERMARK_MIN.y;
+    ui.vertical_centered(|ui| {
+        let content = if watermark { 200.0 + 60.0 } else { 40.0 };
+        ui.add_space(((ui.available_height() - content) / 2.0).max(0.0));
+        if watermark {
+            ui.add(
+                egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
+                    .fit_to_exact_size(egui::vec2(200.0, 200.0))
+                    .tint(egui::Color32::WHITE.gamma_multiply(0.1))
+                    .alt_text("cRustDB watermark"),
+            );
+        }
+        if state.config.connections.is_empty() {
+            ui.label("Create a connection to get started");
+        } else {
+            ui.label("Select a connection");
+            ui.weak("Double-click to connect · Right-click for options");
+        }
+    });
+}
+
+fn book_promo(ui: &mut egui::Ui) {
     egui::Panel::bottom("home_book_promo")
         .resizable(false)
         .show(ui, |ui| {
@@ -58,10 +87,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 });
             });
         });
+}
+
+/// Saved connections: label filter, `New` and the list (sidebar content).
+pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
+    let mut out = vec![];
     egui::ScrollArea::vertical().show(ui, |ui| {
-        if state.active_online().is_none() {
-            logo(ui);
-        }
         let mut filter = None;
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -91,21 +122,25 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 .live_workspace(c.id)
                 .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
             let connecting = live.is_some_and(|w| w.status == Status::Connecting);
-            ui.horizontal(|ui| {
-                let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
-                ui.label(engine).on_hover_text(engine_name(c.driver));
-                let name = egui::RichText::new(&c.name).strong();
-                if ui.selectable_label(false, name).double_clicked() && !connecting {
-                    out.push(Intent::Connect(c.id));
-                }
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
+                    ui.label(engine).on_hover_text(engine_name(c.driver));
+                    let name = egui::RichText::new(&c.name).strong();
+                    if ui.selectable_label(false, name).double_clicked() && !connecting {
+                        out.push(Intent::Connect(c.id));
+                    }
+                });
                 ui.label(
                     egui::RichText::new(format!("{}@{}:{}", c.user, c.host, c.port))
                         .color(egui::Color32::GRAY),
                 );
-                for n in &c.labels {
-                    labels::chip(ui, n, &state.config.labels);
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for n in &c.labels {
+                        labels::chip(ui, n, &state.config.labels);
+                    }
+                });
+                ui.horizontal(|ui| {
                     if ui
                         .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
                         .on_hover_text("Delete")
@@ -140,6 +175,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     }
                 });
             });
+            ui.separator();
             if let Some(Status::Failed(e)) = ws.map(|w| &w.status) {
                 ui.colored_label(ui.visuals().error_fg_color, e);
             }

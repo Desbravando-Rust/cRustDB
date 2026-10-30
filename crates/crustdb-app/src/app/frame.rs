@@ -59,10 +59,16 @@ impl CrustApp {
             egui::Panel::bottom("status_bar").show(ui, |ui| ui::status_bar::show(ui, m));
         }
         self.sidebar_rect = None;
-        if self.state.active_online().is_some() {
-            let r = egui::Panel::left("sidebar").show(ui, |ui| {
+        // Same panel id on both screens: the width carries over on connect.
+        let online = self.state.active_online().is_some();
+        let r = egui::Panel::left("sidebar").show(ui, |ui| {
+            if online {
                 intents.extend(ui::sidebar::show(ui, &self.state));
-            });
+            } else {
+                intents.extend(ui::home::show(ui, &self.state));
+            }
+        });
+        if online {
             self.sidebar_rect = Some(r.response.rect);
         }
         egui::CentralPanel::default().show(ui, |ui| {
@@ -111,7 +117,7 @@ impl CrustApp {
                     Some(w) if w.config.database.is_some() => {
                         intents.extend(ui::workspace_home::show(ui, w));
                     }
-                    _ => intents.extend(ui::home::show(ui, &self.state)),
+                    _ => ui::home::empty_state(ui, &self.state),
                 },
             }
         });
