@@ -1,6 +1,4 @@
 //! Pure decoding of Redis replies into store types.
-// Consumed by the session (part B).
-#![allow(dead_code)]
 
 use std::time::Duration;
 

@@ -2,8 +2,8 @@
 
 use crustdb_core::driver::{ConnectTarget, SessionPurpose};
 use crustdb_core::error::{DriverError, ErrorKind};
-use redis::AsyncConnectionConfig;
 use redis::aio::MultiplexedConnection;
+use redis::{AsyncConnectionConfig, FromRedisValue};
 use redis::{RedisConnectionInfo, RedisError};
 use rustls::pki_types::ServerName;
 use secrecy::ExposeSecret;
@@ -82,6 +82,10 @@ pub(crate) fn map_err(e: RedisError) -> DriverError {
     err(kind, message)
 }
 
+pub(crate) fn from_value<T: FromRedisValue>(v: redis::Value) -> Result<T, DriverError> {
+    T::from_redis_value(v).map_err(|e| map_err(e.into()))
+}
+
 /// A failed handshake carries the `rustls::Error` inside an `io::Error`.
 fn handshake_error(e: std::io::Error) -> DriverError {
     let message = format!("TLS handshake failed: {e}");
@@ -122,13 +126,11 @@ pub(crate) async fn connect(
         let (conn, driver) = MultiplexedConnection::new_with_config(&info, stream, config)
             .await
             .map_err(map_err)?;
-        let mut session = RedisSession::new(conn, tokio::spawn(driver), purpose, info.db() as u32);
-        let raw: String = redis::cmd("INFO")
-            .arg("server")
-            .query_async(&mut session.conn)
-            .await
-            .map_err(map_err)?;
-        session.version = decode::parse_info_version(&raw);
+        let mut session =
+            RedisSession::new(conn, tokio::spawn(driver), purpose, database_index(t)?);
+        let raw = session.call(["INFO", "server"]).await?;
+        let raw: String = from_value(raw)?;
+        session.set_version(decode::parse_info_version(&raw));
         Ok(session)
     };
     tokio::time::timeout(t.connect_timeout, work)

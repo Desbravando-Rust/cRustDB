@@ -235,7 +235,6 @@ pub fn classify(argv: &[Vec<u8>]) -> Result<(Verdict, String), Refused> {
 }
 
 /// Only the editor may run arbitrary commands; refusals from `classify` still apply.
-#[allow(dead_code)] // consumed by the session (part B)
 pub(crate) fn guard_run(purpose: SessionPurpose, argv: &[Vec<u8>]) -> Result<(), Refused> {
     if purpose != SessionPurpose::Editor {
         return refuse("only editor sessions can run commands");
