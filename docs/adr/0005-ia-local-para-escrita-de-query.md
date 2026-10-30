@@ -7,12 +7,13 @@
 ## Contexto e Problema
 A issue #125 pede um spike: quanto custa introduzir IA na escrita de query usando um modelo local. A spec v1 lista IA como fora do escopo (§10). Este ADR registra a avaliação e a recomendação. Ele é uma decisão de avaliação do spike e não autoriza implementação, que não está agendada. Aceitar este ADR é pré-requisito para abrir as issues de implementação (uma por passo do plano abaixo). Até lá nada na §10 da spec é revogado.
 
+Esforço e latência citados neste ADR são estimativas. A medição fica para a issue do PoC e é condição para aceitar o ADR. 
 Requisitos que qualquer solução precisa respeitar:
 
 * **Local e privado.** Nomes de schema, tabela e coluna, e o texto da query, não saem da máquina por padrão. Nada de API em nuvem como caminho padrão.
 * **UI nunca bloqueia.** Inferência leva segundos. Ela roda fora da thread do `egui`, no mesmo padrão de actors do `crustdb-app` (`actors/editor`, `actors/workspace`).
 * **`crustdb-core` sem IO.** Montar o prompt e extrair o SQL da resposta são funções puras e podem morar no core. A chamada ao modelo fica no app.
-* **Segurança do editor intacta.** O SQL gerado vai para o buffer do editor e nunca é executado automaticamente. A classificação de statements e as confirmações existentes (§4.7, D25) continuam valendo sem exceção.
+* **Segurança do editor intacta.** O SQL gerado vai para o buffer do editor e nunca é executado automaticamente. A classificação de statements e as confirmações existentes (§4.7) continuam valendo sem exceção.
 * **Custo zero com a feature desligada.** Sem thread, sem modelo em memória, sem impacto no binário além do código HTTP.
 * **Licenças.** `cargo deny` aceita só a lista de `deny.toml`. O binário é BUSL-1.1. Pesos de modelo não são distribuídos com o app.
 * **Linux x86_64**, empacotamento `.deb`/`.rpm` (e o trabalho de Windows em `docs/windows.md`) não pode ganhar dependência nativa pesada.
@@ -113,7 +114,7 @@ Conclusões:
 ### Consequências Negativas / Trade-offs
 * Exige que o usuário instale e mantenha um runtime separado (Ollama etc.). É fricção de setup, a ser mitigada com uma mensagem clara quando o endpoint não responder.
 * A qualidade depende do modelo escolhido. Modelos de 1.5B erram consultas não triviais, e o usuário precisa revisar sempre.
-* Prompt injection pelo conteúdo do schema (por exemplo, um comentário de tabela malicioso) pode gerar SQL destrutivo. Mitigação principal: nunca autoexecutar, e o usuário revisa o buffer antes de executar. A política da §4.7 vale como de costume: só os casos que ela sinaliza pedem confirmação (por exemplo, DML com WHERE de estimativa baixa e INSERT de uma tupla têm veredito Run).
+* Prompt injection pelo conteúdo do schema (por exemplo, um nome de tabela ou de coluna malicioso) pode gerar SQL destrutivo. Mitigação principal: nunca autoexecutar, e o usuário revisa o buffer antes de executar. A política da §4.7 vale como de costume: só os casos que ela sinaliza pedem confirmação (por exemplo, DML com WHERE de estimativa baixa e INSERT de uma tupla têm veredito Run).
 * Variação de API entre runtimes (SSE, nomes de campo). Mitigação: usar só o subconjunto OpenAI-compatível.
 * Mais uma superfície de configuração e de rede (endpoint arbitrário). Validar a URL e avisar quando o host não for loopback.
 
