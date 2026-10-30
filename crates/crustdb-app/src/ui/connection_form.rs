@@ -277,7 +277,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
             }
 
             ui.separator();
-            super::labels::picker(ui, &mut f.draft.labels, labels);
+            super::labels::picker(ui, &mut f.draft.label, labels);
             match &f.test {
                 TestResult::Idle => {}
                 TestResult::Running(_) => {

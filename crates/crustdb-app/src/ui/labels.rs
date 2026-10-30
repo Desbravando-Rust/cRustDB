@@ -64,7 +64,7 @@ pub fn filter_options<'a>(labels: &'a [Label], query: &str) -> Vec<&'a Label> {
 }
 
 pub fn matches(c: &ConnectionConfig, selected: Option<&str>) -> bool {
-    selected.is_none_or(|s| c.labels.iter().any(|n| n == s))
+    selected.is_none_or(|s| c.label.as_deref() == Some(s))
 }
 
 /// Memory id of the selected filter label (`Option<String>`); session-only, never persisted.
@@ -116,28 +116,20 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
     sel
 }
 
-/// Multi-select of catalog labels for the connection form.
-pub fn picker(ui: &mut egui::Ui, selected: &mut Vec<String>, labels: &[Label]) {
-    if labels.is_empty() && selected.is_empty() {
+/// Single-select of a catalog label for the connection form.
+pub fn picker(ui: &mut egui::Ui, selected: &mut Option<String>, labels: &[Label]) {
+    if labels.is_empty() && selected.is_none() {
         return;
     }
-    ui.label("Labels");
-    // Names no longer in the catalog stay listed (checked) so they can be removed.
-    let orphans: Vec<String> = selected
-        .iter()
-        .filter(|n| !labels.iter().any(|l| &l.name == *n))
-        .cloned()
-        .collect();
-    let names = labels.iter().map(|l| &l.name).chain(orphans.iter());
+    ui.label("Label");
     ui.horizontal_wrapped(|ui| {
-        for name in names {
-            let mut on = selected.contains(name);
-            if ui.checkbox(&mut on, name).changed() {
-                if on {
-                    selected.push(name.clone());
-                } else {
-                    selected.retain(|n| n != name);
-                }
+        if ui.selectable_label(selected.is_none(), "None").clicked() {
+            *selected = None;
+        }
+        for l in labels {
+            let on = selected.as_deref() == Some(l.name.as_str());
+            if ui.selectable_label(on, &l.name).clicked() {
+                *selected = Some(l.name.clone());
             }
         }
     });

@@ -102,7 +102,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     egui::RichText::new(format!("{}@{}:{}", c.user, c.host, c.port))
                         .color(egui::Color32::GRAY),
                 );
-                for n in &c.labels {
+                if let Some(n) = &c.label {
                     labels::chip(ui, n, &state.config.labels);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

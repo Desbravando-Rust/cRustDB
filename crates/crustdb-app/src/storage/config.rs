@@ -61,8 +61,25 @@ pub struct ConnectionConfig {
     pub page_size: u32,
     pub editor_row_limit: u32,
     pub safety_threshold: u64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub labels: Vec<String>,
+    #[serde(
+        default,
+        alias = "labels",
+        deserialize_with = "lenient_label",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub label: Option<String>,
+}
+
+/// Accepts `label` (string) and legacy `labels` (array -> first string); anything else is `None`.
+fn lenient_label<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    Ok(match serde_json::Value::deserialize(d)? {
+        serde_json::Value::String(s) => Some(s),
+        serde_json::Value::Array(a) => a.into_iter().find_map(|v| match v {
+            serde_json::Value::String(s) => Some(s),
+            _ => None,
+        }),
+        _ => None,
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -205,17 +222,18 @@ pub fn rename_label(conns: &mut [ConnectionConfig], cat: &mut [Label], old: &str
     for l in cat.iter_mut().filter(|l| l.name == old) {
         l.name = new.into();
     }
-    for n in conns.iter_mut().flat_map(|c| c.labels.iter_mut()) {
-        if n == old {
-            *n = new.into();
-        }
+    for c in conns.iter_mut().filter(|c| c.label.as_deref() == Some(old)) {
+        c.label = Some(new.into());
     }
 }
 
 pub fn delete_label(conns: &mut [ConnectionConfig], cat: &mut Vec<Label>, name: &str) {
     cat.retain(|l| l.name != name);
-    for c in conns {
-        c.labels.retain(|n| n != name);
+    for c in conns
+        .iter_mut()
+        .filter(|c| c.label.as_deref() == Some(name))
+    {
+        c.label = None;
     }
 }
 

@@ -242,8 +242,8 @@ fn home_hides_logo_when_connection_active() {
 fn home_filter_by_label_hides_others() {
     // Arrange
     let mut s = state(&["alpha", "beta"]);
-    s.config.connections[0].labels = vec!["dev".into()];
-    s.config.connections[1].labels = vec!["prod".into()];
+    s.config.connections[0].label = Some("dev".into());
+    s.config.connections[1].label = Some("prod".into());
     s.config.labels = ["dev", "prod"]
         .map(|n| crate::storage::config::Label {
             name: n.into(),
