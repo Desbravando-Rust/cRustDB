@@ -154,11 +154,15 @@ mod tests {
         let mut tab = TableTab::new(TabId(1), obj("t"), 300);
         tab.apply_structure(Structure {
             columns: vec![
-                column("id", "int", true, false),
+                ColumnDetail {
+                    default: Some("0".into()),
+                    comment: Some("row id".into()),
+                    ..column("id", "int", true, false)
+                },
                 column("_deleted_at", "datetime(6)", false, true),
             ],
             indexes: vec![IndexInfo {
-                name: "PRIMARY".into(),
+                name: "pk_t".into(),
                 columns: vec!["id".into()],
                 unique: true,
                 primary: true,
@@ -187,8 +191,13 @@ mod tests {
             "Attributes",
             "id",
             "int",
-            "PK, NOT NULL",
+            "PK, NOT NULL, DEFAULT 0",
+            "Comment",
+            "row id",
+            "pk_t",
             "PRIMARY",
+            "On update",
+            "On delete",
             "_deleted_at",
             "datetime(6)",
             "-",

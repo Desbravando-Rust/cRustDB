@@ -146,9 +146,6 @@ fn follow_fk_ignores_non_fk_column_and_null_cell() {
     let row = vec![text("1"), Cell::Null, text("eu")];
     let (mut s, ws, orders) = setup(vec![fk(&["customer_id"], "customers", &["id"])], row);
 
-    // Act
-    let on_plain_column = s.follow_fk(orders, 0, 0, RequestId(5));
-    let on_null = s.follow_fk(orders, 0, 1, RequestId(6));
     let truncated = Cell::Text {
         value: "7".into(),
         truncated: true,
@@ -162,6 +159,10 @@ fn follow_fk_ignores_non_fk_column_and_null_cell() {
     for (cell, rows) in [(truncated, &mut other_rows), (bytes, &mut bytes_row)] {
         rows.push(vec![text("1"), cell, text("eu")]);
     }
+
+    // Act
+    let on_plain_column = s.follow_fk(orders, 0, 0, RequestId(5));
+    let on_null = s.follow_fk(orders, 0, 1, RequestId(6));
     table(&mut s, ws, "orders").rows =
         vec![other_rows.remove(0).into(), bytes_row.remove(0).into()];
     let on_truncated = s.follow_fk(orders, 0, 1, RequestId(7));
@@ -214,4 +215,35 @@ fn follow_fk_on_open_tab_without_structure_sets_filters_for_the_first_page() {
     let t = table(&mut s, ws, "customers");
     assert_eq!(t.filters, vec![eq("id", "7")]);
     assert!(t.filter_error.is_none());
+
+    // Act (structure arrives)
+    let t = table(&mut s, ws, "customers");
+    t.apply_structure(Structure::default());
+    let mut n = 10;
+    let fetches = s.take_fetches(|| {
+        n += 1;
+        RequestId(n)
+    });
+
+    // Assert
+    let [Command::FetchPage { query, .. }] = &fetches[..] else {
+        panic!("expected one FetchPage");
+    };
+    assert_eq!(query.filters, vec![eq("id", "7")]);
+    assert_eq!(query.offset, 0);
+}
+
+#[test]
+fn follow_fk_on_open_tab_without_structure_clears_filter_error() {
+    // Arrange
+    let row = vec![text("1"), text("7"), text("eu")];
+    let (mut s, ws, orders) = setup(vec![fk(&["customer_id"], "customers", &["id"])], row);
+    s.open_table(ws, obj("customers"), RequestId(2));
+    table(&mut s, ws, "customers").filter_error = Some("bad".into());
+
+    // Act
+    s.follow_fk(orders, 0, 1, RequestId(6));
+
+    // Assert
+    assert!(table(&mut s, ws, "customers").filter_error.is_none());
 }

@@ -212,12 +212,20 @@ fn refresh_button_refetches_open_table() {
     // Act
     h.get_by_label("Refresh").click();
     let end = Instant::now() + Duration::from_secs(10);
-    while driver.log.ops().len() <= before {
+    while !driver.log.ops()[before..]
+        .iter()
+        .any(|o| o.starts_with("start:SELECT"))
+    {
         assert!(Instant::now() < end, "timed out waiting for refetch");
         std::thread::sleep(Duration::from_millis(20));
         h.step();
     }
 
     // Assert
+    assert!(
+        driver.log.ops()[before..]
+            .iter()
+            .any(|o| o.starts_with("start:SELECT"))
+    );
     wait_for(&mut h, "alice@example.com");
 }
