@@ -34,6 +34,7 @@ impl AppState {
             return vec![];
         }
         t.view = TableView::Data;
+        t.filter_error = None;
         t.filter_open = true;
         t.filters = drafts
             .iter()
@@ -46,7 +47,6 @@ impl AppState {
         t.drafts = drafts;
         // Without structure the first page is fetched on arrival, already filtered.
         if !created && t.structure.is_some() {
-            t.filter_error = None;
             t.page = 0;
             cmds = vec![t.fetch(req)];
         }
