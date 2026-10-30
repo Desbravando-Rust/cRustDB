@@ -190,7 +190,7 @@ fn legacy_v1_without_labels_loads_default_catalog() {
     let names: Vec<_> = l.labels.iter().map(|x| x.name.as_str()).collect();
     assert_eq!(names, ["local", "dev", "staging", "production"]);
     assert!(l.warning.is_none() && !l.read_only);
-    assert!(l.connections[0].labels.is_empty());
+    assert!(l.connections[0].label.is_none());
     assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
 }
 
@@ -199,7 +199,7 @@ fn labels_roundtrip() {
     // Arrange
     let (_t, s) = store();
     let mut c = sample();
-    c.labels = vec!["prod".into()];
+    c.label = Some("prod".into());
     let cat = vec![Label {
         name: "prod".into(),
         color: [1, 2, 3],
@@ -238,7 +238,7 @@ fn lab(n: &str) -> Label {
 fn rename_label_updates_connections() {
     // Arrange
     let mut c = sample();
-    c.labels = vec!["a".into(), "b".into()];
+    c.label = Some("a".into());
     let mut conns = [c];
     let mut cat = [lab("a"), lab("b")];
 
@@ -246,15 +246,15 @@ fn rename_label_updates_connections() {
     rename_label(&mut conns, &mut cat, "a", "z");
 
     // Assert
-    assert_eq!(conns[0].labels, ["z", "b"]);
+    assert_eq!(conns[0].label.as_deref(), Some("z"));
     assert_eq!(cat[0].name, "z");
 }
 
 #[test]
-fn delete_label_removes_from_connections() {
+fn delete_label_clears_connection_label() {
     // Arrange
     let mut c = sample();
-    c.labels = vec!["a".into(), "b".into()];
+    c.label = Some("a".into());
     let mut conns = vec![c];
     let mut cat = vec![lab("a"), lab("b")];
 
@@ -262,7 +262,7 @@ fn delete_label_removes_from_connections() {
     delete_label(&mut conns, &mut cat, "a");
 
     // Assert
-    assert_eq!(conns[0].labels, ["b"]);
+    assert_eq!(conns[0].label, None);
     assert_eq!(cat, [lab("b")]);
 }
 
@@ -316,4 +316,87 @@ fn corrupt_labels_keep_connections_and_warn() {
     assert_eq!(l.labels.len(), 4);
     assert!(l.warning.is_some() && !l.read_only);
     assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
+}
+
+/// SPEC document with `extra` spliced into the first connection.
+fn spec_with(extra: serde_json::Value) -> String {
+    let mut v: serde_json::Value = serde_json::from_str(SPEC).unwrap();
+    v["connections"][0]
+        .as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    v.to_string()
+}
+
+fn load_with(extra: serde_json::Value) -> (tempfile::TempDir, LoadedConfig) {
+    let (t, s) = store();
+    fs::write(&s.path, spec_with(extra)).unwrap();
+    let l = s.load().unwrap();
+    (t, l)
+}
+
+#[test]
+fn legacy_labels_array_keeps_first() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"labels": ["dev", "prod"]}));
+
+    // Assert
+    assert_eq!(l.connections[0].label.as_deref(), Some("dev"));
+    assert!(l.warning.is_none());
+}
+
+#[test]
+fn legacy_empty_labels_is_none() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"labels": []}));
+
+    // Assert
+    assert_eq!(l.connections[0].label, None);
+}
+
+#[test]
+fn legacy_null_label_is_none() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"label": null}));
+
+    // Assert
+    assert_eq!(l.connections[0].label, None);
+    assert!(l.warning.is_none());
+}
+
+#[test]
+fn plain_string_label_is_kept() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"label": "prod"}));
+
+    // Assert
+    assert_eq!(l.connections[0].label.as_deref(), Some("prod"));
+}
+
+#[test]
+fn legacy_labels_wrong_type_does_not_reset() {
+    // Arrange & Act
+    let (t, l) = load_with(serde_json::json!({"labels": 7}));
+
+    // Assert
+    assert_eq!(l.connections.len(), 1);
+    assert_eq!(l.connections[0].label, None);
+    assert!(l.warning.is_none());
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn label_roundtrip_writes_label_not_labels() {
+    // Arrange
+    let (_t, s) = store();
+    let mut c = sample();
+    c.label = Some("prod".into());
+
+    // Act
+    s.save(&[c], &[]).unwrap();
+
+    // Assert
+    let v: serde_json::Value = serde_json::from_slice(&fs::read(&s.path).unwrap()).unwrap();
+    assert_eq!(v["connections"][0]["label"], "prod");
+    assert!(v["connections"][0].get("labels").is_none());
 }

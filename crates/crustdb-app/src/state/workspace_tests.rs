@@ -31,7 +31,7 @@ pub(crate) fn conn(name: &str) -> ConnectionConfig {
         page_size: 300,
         editor_row_limit: 1000,
         safety_threshold: 1000,
-        labels: vec![],
+        label: None,
     }
 }
 

@@ -277,7 +277,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
             }
 
             ui.separator();
-            super::labels::picker(ui, &mut f.draft.labels, labels);
+            super::labels::picker(ui, &mut f.draft.label, labels);
             match &f.test {
                 TestResult::Idle => {}
                 TestResult::Running(_) => {
@@ -447,5 +447,44 @@ mod tests {
             // Assert
             h.get_by_label_contains(help);
         }
+    }
+
+    #[test]
+    fn label_picker_selects_one_or_none() {
+        // Arrange
+        let cat = ["dev", "prod"].map(|n| Label {
+            name: n.into(),
+            color: [1, 2, 3],
+        });
+        let mut f = ConnectionForm::new(DriverKind::Postgres, false);
+        f.draft.label = Some("dev".into());
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f, &cat);
+            });
+        h.run();
+
+        // Act
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
+            .scroll_to_me();
+        h.run();
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
+            .click();
+        h.run();
+        h.get_by_label("None").click();
+        h.run();
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
+            .scroll_to_me();
+        h.run();
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
+            .click();
+        h.run();
+        h.get_by_label("prod").click();
+        h.run();
+        drop(h);
+
+        // Assert
+        assert_eq!(f.draft.label.as_deref(), Some("prod"));
     }
 }
