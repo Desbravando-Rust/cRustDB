@@ -119,11 +119,13 @@ mod tests {
         let tree = group(std::slice::from_ref(&key), ":");
 
         // Assert
-        assert!(depth(&tree) <= MAX_DEPTH);
+        assert_eq!(depth(&tree), MAX_DEPTH);
         let mut node = &tree[0];
         while let Some(child) = node.children.first() {
             node = child;
         }
+        assert_eq!(node.segment.len(), 100_000 - (MAX_DEPTH - 1));
+        assert!(node.segment.iter().all(|&b| b == b':'));
         assert_eq!(node.key, Some(key));
     }
 

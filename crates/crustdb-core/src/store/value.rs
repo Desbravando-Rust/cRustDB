@@ -89,7 +89,7 @@ impl ValueBody {
     }
 }
 
-// ponytail: stream é só exibição com perda; bytes não-UTF-8 viram U+FFFD. Cap por CELL_MEMORY_CAP se streams grandes importarem
+// ponytail: lossy display only (non-UTF-8 -> U+FFFD); joined string is built before the cell cap, bounded by the read limit
 fn join_fields(fields: &[(Vec<u8>, Vec<u8>)]) -> String {
     let parts: Vec<String> = fields
         .iter()
