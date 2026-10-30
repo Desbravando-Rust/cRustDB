@@ -50,6 +50,14 @@ impl Tab {
 }
 
 impl WorkspaceState {
+    /// Commands that (re)load the tables folder of the configured database; idempotent.
+    pub fn expand_home(&mut self) -> Vec<Command> {
+        match self.config.database.clone() {
+            Some(db) => self.tree.expand_tables_of(&db),
+            None => vec![],
+        }
+    }
+
     /// Opens a table tab; the first page is fetched after the catalog structure arrives.
     pub fn open_table(&mut self, id: TabId, object: ObjectRef, req: RequestId) -> [Command; 2] {
         let mut tab = TableTab::new(id, object.clone(), self.config.page_size);
@@ -279,9 +287,7 @@ impl AppState {
                 if let Some(w) = self.workspace_mut(ws) {
                     w.status = Status::Online(server);
                     w.tree.reset();
-                    if let Some(db) = w.config.database.clone() {
-                        cmds = w.tree.expand_tables_of(&db);
-                    }
+                    cmds = w.expand_home();
                 }
                 self.outbox.extend(cmds);
             }

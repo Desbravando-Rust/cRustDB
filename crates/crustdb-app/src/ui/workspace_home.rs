@@ -74,6 +74,26 @@ mod tests {
     }
 
     #[test]
+    fn refresh_root_then_expand_home_requests_tables_folder() {
+        // Arrange
+        let (mut w, _) = pending();
+        w.tree.refresh_root();
+
+        // Act
+        let cmds = w.expand_home();
+
+        // Assert
+        assert!(matches!(
+            cmds.last(),
+            Some(Command::LoadChildren {
+                kind: Some(ObjectKind::Table),
+                ..
+            })
+        ));
+        assert!(w.tree.loaded_tables("d").is_none());
+    }
+
+    #[test]
     fn workspace_home_while_loading_shows_loading() {
         // Arrange
         let (w, _) = pending();

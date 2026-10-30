@@ -35,7 +35,8 @@ impl ObjectTree {
     }
 
     /// Loaded tables of the configured database (same addressing as `expand_tables_of`).
-    /// `None` while the load is not finished (idle, pending or not requested yet).
+    /// `None` until the load finishes; callers must request it (`expand_tables_of`) after a connect
+    /// or refresh, otherwise it stays `None`.
     pub fn loaded_tables(&self, db: &str) -> Option<&[ObjectRef]> {
         let (db, schema) = self.tables_home(db);
         match &self.entries.get(&Self::tables_folder(db, schema))?.load {
