@@ -238,11 +238,13 @@ impl CrustApp {
                 if let Some(cmd) = self.tree_mut().and_then(|t| t.refresh(n)) {
                     self.send(cmd);
                 }
+                self.reload_home();
             }
             Intent::RefreshRoot => {
                 if let Some(cmd) = self.tree_mut().and_then(|t| t.refresh_root()) {
                     self.send(cmd);
                 }
+                self.reload_home();
             }
             Intent::Filter(q) => {
                 if let Some(t) = self.tree_mut() {
@@ -409,6 +411,20 @@ impl CrustApp {
     fn tree_mut(&mut self) -> Option<&mut crate::state::tree::ObjectTree> {
         let id = self.state.active?;
         self.state.workspace_mut(id).map(|w| &mut w.tree)
+    }
+
+    /// A refresh may drop the home's tables folder; request it again.
+    fn reload_home(&mut self) {
+        let Some(w) = self
+            .state
+            .active
+            .and_then(|id| self.state.workspace_mut(id))
+        else {
+            return;
+        };
+        for c in w.expand_home() {
+            self.send(c);
+        }
     }
 
     fn open_object(&mut self, object: crustdb_core::model::ObjectRef) {
