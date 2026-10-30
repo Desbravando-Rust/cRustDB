@@ -58,18 +58,18 @@ fn home_has_single_new_button() {
 }
 
 #[test]
-fn home_shows_logo() {
+fn home_empty_state_shows_watermark() {
     // Arrange
     let s = state(&[]);
     let mut done = false;
     let mut h = Harness::new_ui(|ui| {
         if ready(ui, &mut done) {
-            show(ui, &s);
+            empty_state(ui, &s);
         }
     });
     // `run` waits for pending images, so the decode must be done by now.
     h.run();
-    h.get_by_label("cRustDB logo");
+    h.get_by_label("cRustDB watermark");
 
     // Act
     let poll = h.ctx.try_load_image(
@@ -88,7 +88,7 @@ fn home_shows_book_promo() {
     let mut done = false;
     let mut h = Harness::new_ui(|ui| {
         if ready(ui, &mut done) {
-            show(ui, &s);
+            empty_state(ui, &s);
         }
     });
     h.run();
@@ -113,7 +113,7 @@ fn book_promo_links_to_site() {
     let mut done = false;
     let mut h = Harness::new_ui(|ui| {
         if ready(ui, &mut done) {
-            show(ui, &s);
+            empty_state(ui, &s);
         }
     });
     h.run();
@@ -131,17 +131,15 @@ fn book_promo_links_to_site() {
 }
 
 #[test]
-fn book_promo_stays_visible_when_list_overflows() {
+fn book_promo_stays_inside_window_at_min_height() {
     // Arrange
-    let names: Vec<String> = (0..15).map(|i| format!("conn{i}")).collect();
-    let names: Vec<&str> = names.iter().map(String::as_str).collect();
-    let s = state(&names);
+    let s = state(&[]);
     let mut done = false;
     let mut h = Harness::builder()
-        .with_size(egui::vec2(800.0, 300.0))
+        .with_size(egui::vec2(800.0, 480.0))
         .build_ui(|ui| {
             if ready(ui, &mut done) {
-                show(ui, &s);
+                empty_state(ui, &s);
             }
         });
     h.run();
@@ -152,7 +150,7 @@ fn book_promo_stays_visible_when_list_overflows() {
         .rect();
 
     // Assert
-    assert!(r.max.y <= 300.0, "promo cut off: {r:?}");
+    assert!(r.max.y <= 480.0, "promo cut off: {r:?}");
 }
 
 #[test]
@@ -370,21 +368,15 @@ fn size_of(label: &str) -> egui::Vec2 {
     let s = state(&[]);
     let mut done = false;
     let mut h = Harness::builder()
-        .with_size(egui::vec2(800.0, 600.0))
+        .with_size(egui::vec2(1000.0, 800.0))
         .with_accessibility_check(false)
         .build_ui(|ui| {
             if ready(ui, &mut done) {
-                show(ui, &s);
+                empty_state(ui, &s);
             }
         });
     h.run();
     h.get_by_label(label).rect().size()
-}
-
-#[test]
-fn home_logo_is_150_square() {
-    // Act & Assert
-    assert_eq!(size_of("cRustDB logo"), egui::vec2(150.0, 150.0));
 }
 
 #[test]
@@ -442,4 +434,23 @@ fn engine_colors_differ() {
         engine_color(DriverKind::Postgres),
         engine_color(DriverKind::Mysql)
     );
+}
+
+#[test]
+fn home_list_has_no_logo_or_banner() {
+    // Arrange
+    let s = state(&["alpha"]);
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("cRustDB logo").is_none());
+    assert!(h.query_by_label("Desbravando Rust book cover").is_none());
 }

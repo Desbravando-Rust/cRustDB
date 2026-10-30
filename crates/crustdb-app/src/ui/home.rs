@@ -28,6 +28,9 @@ fn engine_name(kind: DriverKind) -> &'static str {
     }
 }
 
+const BANNER_MIN: egui::Vec2 = egui::vec2(420.0, 430.0);
+const WATERMARK_MIN: egui::Vec2 = egui::vec2(240.0, 300.0);
+
 /// Memory id of the home search text; session-only.
 fn search_id() -> egui::Id {
     egui::Id::unique("home_search")
@@ -44,8 +47,35 @@ pub(crate) fn logo(ui: &mut egui::Ui) {
     ui.add_space(8.0);
 }
 
-pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
-    let mut out = vec![];
+/// Central-panel empty state: watermark, hint and book banner. The banner
+/// yields first on small windows, then the watermark.
+pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
+    let (w, h) = (ui.available_width(), ui.available_height());
+    if w >= BANNER_MIN.x && h >= BANNER_MIN.y {
+        book_promo(ui);
+    }
+    let watermark = w >= WATERMARK_MIN.x && h >= WATERMARK_MIN.y;
+    ui.vertical_centered(|ui| {
+        let content = if watermark { 200.0 + 60.0 } else { 40.0 };
+        ui.add_space(((ui.available_height() - content) / 2.0).max(0.0));
+        if watermark {
+            ui.add(
+                egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
+                    .fit_to_exact_size(egui::vec2(200.0, 200.0))
+                    .tint(egui::Color32::WHITE.gamma_multiply(0.1))
+                    .alt_text("cRustDB watermark"),
+            );
+        }
+        if state.config.connections.is_empty() {
+            ui.label("Create a connection to get started");
+        } else {
+            ui.label("Select a connection");
+            ui.weak("Double-click to connect");
+        }
+    });
+}
+
+fn book_promo(ui: &mut egui::Ui) {
     egui::Panel::bottom("home_book_promo")
         .resizable(false)
         .show(ui, |ui| {
@@ -65,12 +95,19 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 });
             });
         });
+}
+
+/// Saved connections: label filter, `New` and the list (sidebar content).
+pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
+    let mut out = vec![];
     egui::ScrollArea::vertical().show(ui, |ui| {
-        if state.active_online().is_none() {
-            logo(ui);
-        }
         let mut filter = None;
         let mut query: String = ui.data(|d| d.get_temp(search_id())).unwrap_or_default();
+        ui.add(
+            egui::TextEdit::singleline(&mut query)
+                .hint_text("Search name, host, label...")
+                .desired_width(ui.available_width()),
+        );
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(format!("{} New", icon::PLUS)).clicked() {
@@ -82,11 +119,6 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     state.config.read_only,
                 ));
                 filter = labels::filter_combo(ui, &state.config.labels);
-                ui.add(
-                    egui::TextEdit::singleline(&mut query)
-                        .hint_text("Search...")
-                        .desired_width(160.0),
-                );
             });
         });
         if let Some(w) = &state.config.warning {
@@ -120,27 +152,41 @@ fn row(ui: &mut egui::Ui, state: &AppState, c: &ConnectionConfig, out: &mut Vec<
         .live_workspace(c.id)
         .and_then(|id| state.workspaces.iter().find(|w| w.id == id));
     let connecting = live.is_some_and(|w| w.status == Status::Connecting);
-    let top = ui.horizontal(|ui| {
-        let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
-        ui.label(engine).on_hover_text(engine_name(c.driver));
-        let name = egui::RichText::new(&c.name).strong();
-        if ui.selectable_label(false, name).double_clicked() && !connecting {
-            out.push(Intent::Connect(c.id));
-        }
+    let top = ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            let engine = egui::RichText::new(icon::DATABASE).color(engine_color(c.driver));
+            ui.label(engine).on_hover_text(engine_name(c.driver));
+            let name = egui::RichText::new(&c.name).strong();
+            if ui.selectable_label(false, name).double_clicked() && !connecting {
+                out.push(Intent::Connect(c.id));
+            }
+            if let Some(n) = &c.label {
+                labels::chip(ui, n, &state.config.labels);
+            }
+        });
         ui.label(
             egui::RichText::new(format!("{}@{}:{}", c.user, c.host, c.port))
                 .color(egui::Color32::GRAY),
         );
-        if let Some(n) = &c.label {
-            labels::chip(ui, n, &state.config.labels);
-        }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
-                .on_hover_text("Delete")
-                .clicked()
-            {
-                out.push(Intent::DeleteConnection(c.id));
+        // Same visual order as #20: Active/Open or Connect, edit, delete.
+        ui.horizontal(|ui| {
+            if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
+                ui.colored_label(ACTIVE, "Active");
+                if ui.button("Open").clicked() {
+                    out.push(Intent::SwitchWorkspace(w.id));
+                }
+            } else {
+                let label = if connecting {
+                    "Connecting..."
+                } else {
+                    "Connect"
+                };
+                if ui
+                    .add_enabled(!connecting, egui::Button::new(label))
+                    .clicked()
+                {
+                    out.push(Intent::Connect(c.id));
+                }
             }
             if ui
                 .button(icon::PENCIL_SIMPLE)
@@ -149,23 +195,12 @@ fn row(ui: &mut egui::Ui, state: &AppState, c: &ConnectionConfig, out: &mut Vec<
             {
                 out.push(Intent::EditConnection(c.id));
             }
-            if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
-                if ui.button("Open").clicked() {
-                    out.push(Intent::SwitchWorkspace(w.id));
-                }
-                ui.colored_label(ACTIVE, "Active");
-                return;
-            }
-            let label = if connecting {
-                "Connecting..."
-            } else {
-                "Connect"
-            };
             if ui
-                .add_enabled(!connecting, egui::Button::new(label))
+                .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
+                .on_hover_text("Delete")
                 .clicked()
             {
-                out.push(Intent::Connect(c.id));
+                out.push(Intent::DeleteConnection(c.id));
             }
         });
     });
@@ -186,3 +221,7 @@ fn row(ui: &mut egui::Ui, state: &AppState, c: &ConnectionConfig, out: &mut Vec<
 #[cfg(test)]
 #[path = "home_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "home_empty_tests.rs"]
+mod empty_tests;
