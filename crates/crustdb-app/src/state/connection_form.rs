@@ -2,7 +2,7 @@
 use std::path::Path;
 
 use crustdb_core::driver::{TlsConfig, TlsMode};
-use crustdb_core::model::{ConnectionId, DriverKind};
+use crustdb_core::model::{ConnectionId, DataModel, DriverKind};
 use crustdb_core::url::{ParsedUrl, UrlError, UrlWarning, parse_connection_url};
 use secrecy::zeroize::Zeroizing;
 use secrecy::{ExposeSecret, SecretString};
@@ -43,6 +43,7 @@ pub fn default_port(driver: DriverKind) -> u16 {
         DriverKind::Postgres => 5432,
         DriverKind::Mysql => 3306,
         DriverKind::Sqlite => 0,
+        DriverKind::Redis => 6379,
     }
 }
 
@@ -124,6 +125,11 @@ impl ConnectionForm {
             tls_mode,
             warnings,
         } = parse_connection_url(s.trim())?;
+        // ponytail: blocks non-relational URLs until the Store backend lands (#166)
+        if driver.data_model() != DataModel::Relational {
+            let scheme = s.trim().split_once(':').map_or("", |(x, _)| x);
+            return Err(UrlError::UnsupportedScheme(scheme.to_owned()));
+        }
         self.set_driver(driver);
         if self.draft.name.trim().is_empty() {
             // SQLite has no host: name it after the file.

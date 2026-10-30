@@ -134,6 +134,8 @@ pub fn operators_for(cat: TypeCategory, kind: DriverKind) -> &'static [Operator]
         (Text | Uuid | Json | Other, DriverKind::Postgres) => TEXT_PG,
         // SQLite has no ILIKE either.
         (Text | Uuid | Json | Other, DriverKind::Mysql | DriverKind::Sqlite) => TEXT_MYSQL,
+        // unreachable: no Redis driver is registered; the Capabilities gate (#166) takes over
+        (Text | Uuid | Json | Other, DriverKind::Redis) => COMPARE,
         (Bool, _) => BOOL,
         (Binary, _) => BINARY,
     }

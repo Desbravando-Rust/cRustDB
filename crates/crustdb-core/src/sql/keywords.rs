@@ -166,5 +166,7 @@ pub fn keywords(kind: DriverKind) -> &'static [&'static str] {
         DriverKind::Mysql => &MY,
         // ponytail: SQLite borrows the PostgreSQL list; own list when completion feels off.
         DriverKind::Sqlite => &PG,
+        // unreachable: no Redis driver is registered; the Capabilities gate (#166) takes over
+        DriverKind::Redis => &[],
     }
 }

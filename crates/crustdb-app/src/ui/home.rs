@@ -10,6 +10,7 @@ use crate::storage::config::ConnectionConfig;
 const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
 const POSTGRES_BLUE: egui::Color32 = egui::Color32::from_rgb(80, 140, 210);
 const MYSQL_ORANGE: egui::Color32 = egui::Color32::from_rgb(230, 140, 40);
+const REDIS_RED: egui::Color32 = egui::Color32::from_rgb(210, 60, 50);
 const SQLITE_TEAL: egui::Color32 = egui::Color32::from_rgb(60, 170, 180);
 
 fn engine_color(kind: DriverKind) -> egui::Color32 {
@@ -17,6 +18,7 @@ fn engine_color(kind: DriverKind) -> egui::Color32 {
         DriverKind::Postgres => POSTGRES_BLUE,
         DriverKind::Mysql => MYSQL_ORANGE,
         DriverKind::Sqlite => SQLITE_TEAL,
+        DriverKind::Redis => REDIS_RED,
     }
 }
 
@@ -25,6 +27,7 @@ fn engine_name(kind: DriverKind) -> &'static str {
         DriverKind::Postgres => "PostgreSQL",
         DriverKind::Mysql => "MySQL",
         DriverKind::Sqlite => "SQLite",
+        DriverKind::Redis => "Redis",
     }
 }
 

@@ -70,5 +70,7 @@ pub(crate) fn dialect(kind: crate::model::DriverKind) -> &'static dyn sqlparser:
         crate::model::DriverKind::Postgres => &sqlparser::dialect::PostgreSqlDialect {},
         crate::model::DriverKind::Mysql => &sqlparser::dialect::MySqlDialect {},
         crate::model::DriverKind::Sqlite => &sqlparser::dialect::SQLiteDialect {},
+        // unreachable: no Redis driver is registered; the Capabilities gate (#166) takes over
+        crate::model::DriverKind::Redis => &sqlparser::dialect::GenericDialect {},
     }
 }

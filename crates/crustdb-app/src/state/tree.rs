@@ -62,6 +62,7 @@ pub fn folder_kinds(driver: DriverKind) -> &'static [ObjectKind] {
         ],
         DriverKind::Mysql => &[Table, View, Function, Procedure, Trigger],
         DriverKind::Sqlite => &[Table, View, Trigger],
+        DriverKind::Redis => &[],
     }
 }
 

@@ -9,6 +9,16 @@ pub enum DriverKind {
     Postgres,
     Mysql,
     Sqlite,
+    Redis,
+}
+
+impl DriverKind {
+    pub const fn data_model(self) -> DataModel {
+        match self {
+            DriverKind::Postgres | DriverKind::Mysql | DriverKind::Sqlite => DataModel::Relational,
+            DriverKind::Redis => DataModel::KeyValue,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +27,7 @@ pub enum Product {
     Mysql,
     Mariadb,
     Sqlite,
+    Redis,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +235,12 @@ mod tests {
                 command_editor: true,
             }
         );
+    }
+
+    #[test]
+    fn redis_kind_never_reaches_sql_helpers() {
+        // Act & Assert
+        assert_eq!(DriverKind::Redis.data_model(), DataModel::KeyValue);
     }
 
     #[test]

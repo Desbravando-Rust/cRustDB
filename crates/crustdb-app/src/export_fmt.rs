@@ -40,6 +40,8 @@ pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
         DriverKind::Postgres => &PgDialect,
         DriverKind::Mysql => &MysqlDialect,
         DriverKind::Sqlite => &SqliteDialect,
+        // unreachable: no Redis driver is registered; the Capabilities gate (#166) takes over
+        DriverKind::Redis => &PgDialect,
     }
 }
 
@@ -141,7 +143,7 @@ pub fn sql_literal(kind: DriverKind, c: &Cell) -> String {
         (Cell::Bytes { value, .. }, DriverKind::Postgres) => {
             format!("'\\x{}'::bytea", hex_preview(value, usize::MAX))
         }
-        (Cell::Bytes { value, .. }, DriverKind::Mysql | DriverKind::Sqlite) => {
+        (Cell::Bytes { value, .. }, DriverKind::Mysql | DriverKind::Sqlite | DriverKind::Redis) => {
             format!("X'{}'", hex_preview(value, usize::MAX))
         }
     }

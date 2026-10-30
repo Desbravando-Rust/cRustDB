@@ -147,3 +147,11 @@ Apenas listadas, não criadas aqui.
 5. TTL é `Option<Duration>` (`None` = sem expiração), sem tipo `Ttl`.
 6. `ScanPage.entries` é `Vec<KeyEntry { key, kind, ttl }>`; `EntryView` não tem `kind`.
 7. Sem `ValueKind::Document` nem `ValueBody::Document/Other` (YAGNI): `ValueBody` tem `Text, Map, List, Set, SortedSet, Stream`. Tipo desconhecido na leitura vira `DriverError` `Unsupported` no driver.
+
+## Ajustes da fase de código (#164)
+
+* D-a. O seletor de driver do formulário não ganha `selectable_value` para Redis; só `selected_text` ganha o braço "Redis". A opção entra com o driver (fase 2b).
+* D-b. `ConnectionForm::import_url` recusa URL de modelo não relacional (`UnsupportedScheme`) até o backend `Store` existir. Esse gate sai na #166.
+* D-c. `redis://` puro usa `Disable` e ignora `sslmode`. `rediss://` usa `Require` com `sslmode=require` (e `prefer`/`allow`, com aviso) e `VerifyFull` em qualquer outro caso (ausente, `verify-ca`, `verify-full`, `disable`, valor desconhecido).
+* D-d. `VerifyCa` vira `VerifyFull` só no parser. O driver da fase 2b também deve tratar `VerifyCa` escolhido à mão no formulário (como o MySQL em `tls_notes`).
+* D-e. Braços inertes nos helpers SQL (`sql::dialect`, `keywords`, `operators_for`, `export_fmt::dialect`, árvore) e no `FakeDriver`: hoje são inalcançáveis só porque nenhum driver Redis está registrado; nada na UI usa `capabilities()` ainda. O gate de `Capabilities` (#166) precisa entrar antes ou junto com o registro do driver Redis no `DriverRegistry` (#165/#166).
