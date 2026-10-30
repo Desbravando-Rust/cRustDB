@@ -78,7 +78,12 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     }
     ui.end_row();
 
-    ui.label("TLS mode");
+    ui.label("TLS mode").on_hover_text(
+        "Disable: no encryption.\n\
+         Require: encrypt, don't verify the server certificate.\n\
+         VerifyCa: encrypt and verify the certificate is signed by a trusted CA.\n\
+         VerifyFull: VerifyCa plus check the host name matches the certificate.",
+    );
     egui::ComboBox::from_id_salt("tls")
         .selected_text(format!("{:?}", f.draft.tls.mode))
         .show_ui(ui, |ui| {
@@ -98,7 +103,9 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    ui.label("CA file");
+    ui.label("CA file").on_hover_text(
+        "PEM file with the CA certificate used to verify the server (VerifyCa/VerifyFull). Empty = system roots.",
+    );
     path_edit(ui, &mut f.draft.tls.ca_path);
     ui.end_row();
     ui.label("");
@@ -174,17 +181,21 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                         network_fields(ui, f);
                     }
 
-                    ui.label("Page size");
+                    ui.label("Page size")
+                        .on_hover_text("Rows fetched per page when browsing table data.");
                     ui.add(egui::DragValue::new(&mut f.draft.page_size));
                     ui.end_row();
                     error_for(ui, f, "page_size");
                     ui.end_row();
-                    ui.label("Editor row limit");
+                    ui.label("Editor row limit")
+                        .on_hover_text("Rows fetched per batch for SQL editor queries; use Load more to fetch the next batch.");
                     ui.add(egui::DragValue::new(&mut f.draft.editor_row_limit));
                     ui.end_row();
                     error_for(ui, f, "editor_row_limit");
                     ui.end_row();
-                    ui.label("Safety threshold");
+                    ui.label("Safety threshold").on_hover_text(
+                        "Estimated affected rows above which DML, TRUNCATE or DROP TABLE require password confirmation.",
+                    );
                     ui.add(egui::DragValue::new(&mut f.draft.safety_threshold));
                     ui.end_row();
                     error_for(ui, f, "safety_threshold");
@@ -193,7 +204,14 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
 
             let sqlite = f.draft.driver == DriverKind::Sqlite;
             let mut ssh_on = f.draft.ssh.is_some();
-            if !sqlite && ui.checkbox(&mut ssh_on, "SSH tunnel").changed() {
+            if !sqlite
+                && ui
+                    .checkbox(&mut ssh_on, "SSH tunnel")
+                    .on_hover_text(
+                        "Connect through an SSH server (bastion) that forwards traffic to the database.",
+                    )
+                    .changed()
+            {
                 f.set_ssh(ssh_on);
             }
             if let Some(ssh) = f.draft.ssh.as_mut().filter(|_| !sqlite) {
@@ -398,6 +416,36 @@ mod tests {
         for label in ["Save", "Cancel"] {
             let max_y = h.get_by_label(label).rect().max.y;
             assert!(max_y <= 240.0, "{label} cut off at y={max_y}");
+        }
+    }
+
+    #[test]
+    fn field_labels_show_help_on_hover() {
+        // Arrange
+        let mut f = ConnectionForm::new(DriverKind::Postgres, false);
+        f.set_ssh(false);
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                show(ui, &mut f);
+            });
+        h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
+        h.run();
+
+        for (label, help) in [
+            ("TLS mode", "VerifyFull: VerifyCa plus"),
+            ("CA file", "PEM file with the CA certificate"),
+            ("Page size", "Rows fetched per page"),
+            ("Editor row limit", "Rows fetched per batch"),
+            ("Safety threshold", "require password confirmation"),
+            ("SSH tunnel", "Connect through an SSH server"),
+        ] {
+            // Act
+            h.get_by_label(label).hover();
+            h.run();
+
+            // Assert
+            h.get_by_label_contains(help);
         }
     }
 }

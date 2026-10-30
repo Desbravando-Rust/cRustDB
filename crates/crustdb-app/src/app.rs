@@ -266,6 +266,13 @@ impl CrustApp {
                     t.set_null(row, col);
                 }
             }
+            Intent::FollowFk { tab, row, col } => {
+                if let Some(rt) = &self.runtime {
+                    for c in self.state.follow_fk(tab, row, col, rt.next_request_id()) {
+                        self.send(c);
+                    }
+                }
+            }
             Intent::SavePending(tab) => {
                 if let (Some(rt), Some(t)) = (&self.runtime, self.state.table_mut(tab))
                     && let Some(c) = t.save_pending(rt.next_request_id())
