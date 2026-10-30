@@ -67,7 +67,9 @@ fn start() -> Started {
             page_size: 300,
             editor_row_limit: 1000,
             safety_threshold: 1000,
+            labels: vec![],
         }],
+        labels: vec![],
         read_only: false,
         warning: None,
     };

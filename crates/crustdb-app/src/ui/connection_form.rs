@@ -9,7 +9,7 @@ use secrecy::{ExposeSecret, SecretString};
 
 use super::Intent;
 use crate::state::connection_form::{ConnectionForm, TestResult};
-use crate::storage::config::SshAuth;
+use crate::storage::config::{Label, SshAuth};
 
 fn secret_edit(ui: &mut egui::Ui, v: &mut SecretString) {
     let mut s = Zeroizing::new(v.expose_secret().to_owned());
@@ -115,7 +115,7 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     ui.end_row();
 }
 
-pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
+pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<Intent> {
     let mut out = vec![];
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -277,6 +277,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm) -> Vec<Intent> {
             }
 
             ui.separator();
+            super::labels::picker(ui, &mut f.draft.labels, labels);
             match &f.test {
                 TestResult::Idle => {}
                 TestResult::Running(_) => {
@@ -324,7 +325,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
 
         // Act
@@ -343,7 +344,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
 
         // Act
@@ -361,7 +362,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
         h.run();
         h.get_by_label("Database file");
@@ -381,7 +382,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                intents.extend(show(ui, &mut f));
+                intents.extend(show(ui, &mut f, &[]));
             });
         h.run();
 
@@ -403,7 +404,7 @@ mod tests {
             .with_size(egui::vec2(400.0, 240.0))
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
         h.run();
 
@@ -426,7 +427,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
         h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
         h.run();

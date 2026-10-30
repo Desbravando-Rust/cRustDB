@@ -122,6 +122,7 @@ impl CrustApp {
                 let secrets = self.stored_secrets(id);
                 self.connect(config, secrets);
             }
+            Intent::Label(op) => self.apply_label_op(op),
             Intent::DeleteConnection(id) => self.state.request_delete(id),
             Intent::CancelDialog => {
                 let cmd = self.state.dialogs.cancel();

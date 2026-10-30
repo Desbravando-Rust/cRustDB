@@ -57,7 +57,8 @@ impl CrustApp {
 
     pub(super) fn confirm_delete(&mut self) {
         let store = &self.store;
-        match self.state.confirm_delete(|rest| store.save(rest)) {
+        let labels = self.state.config.labels.clone();
+        match self.state.confirm_delete(|rest| store.save(rest, &labels)) {
             Ok(Some(id)) => {
                 for kind in [
                     SecretKind::Db,

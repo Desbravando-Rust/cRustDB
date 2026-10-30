@@ -67,7 +67,7 @@ impl CrustApp {
         }
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
-                intents.extend(ui::connection_form::show(ui, f));
+                intents.extend(ui::connection_form::show(ui, f, &self.state.config.labels));
                 return;
             }
             if let Some(w) = self.state.active_online() {
