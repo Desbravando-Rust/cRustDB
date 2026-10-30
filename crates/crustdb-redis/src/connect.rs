@@ -264,4 +264,32 @@ mod tests {
         assert!(is_server_error(&server_error("-NOPERM denied\r\n")));
         assert!(!is_server_error(&io));
     }
+
+    #[test]
+    fn ipv6_host_is_bracketed_when_dialled() {
+        // Arrange
+        let mut t = target();
+        t.host = "::1".into();
+
+        // Act & Assert
+        assert_eq!(dial_addr(&t), "[::1]:6379");
+    }
+
+    #[test]
+    fn io_and_protocol_failures_map_to_their_kinds() {
+        // Arrange
+        let io = |k| RedisError::from(std::io::Error::from(k));
+        let odd = RedisError::from((redis::ErrorKind::UnexpectedReturnType, "bad reply"));
+
+        // Act & Assert
+        assert_eq!(
+            map_err(io(std::io::ErrorKind::TimedOut)).kind,
+            ErrorKind::Timeout
+        );
+        assert_eq!(
+            map_err(io(std::io::ErrorKind::ConnectionRefused)).kind,
+            ErrorKind::Connect
+        );
+        assert_eq!(map_err(odd).kind, ErrorKind::Protocol);
+    }
 }

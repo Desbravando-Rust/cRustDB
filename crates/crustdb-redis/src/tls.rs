@@ -154,18 +154,38 @@ mod tests {
     }
 
     #[test]
-    fn require_builds_config_without_verification() {
+    fn only_verifying_modes_need_trust_anchors() {
+        // Arrange: a CA file without any certificate.
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("empty.pem");
+        std::fs::write(&empty, "").unwrap();
+        let with_ca = |mode| TlsConfig {
+            mode,
+            ca_path: Some(empty.clone()),
+        };
+
+        // Act
+        let verify_full = client_config(&with_ca(TlsMode::VerifyFull));
+        let verify_ca = client_config(&with_ca(TlsMode::VerifyCa));
+        let require = client_config(&with_ca(TlsMode::Require));
+
+        // Assert
+        assert_eq!(verify_full.err().map(|e| e.kind), Some(ErrorKind::Tls));
+        assert_eq!(verify_ca.err().map(|e| e.kind), Some(ErrorKind::Tls));
+        assert!(require.unwrap().is_some());
+    }
+
+    #[test]
+    fn require_accepts_any_certificate() {
         // Arrange
         let garbage = CertificateDer::from(vec![0u8; 8]);
         let name = ServerName::try_from("localhost").unwrap();
         let verifier = NoVerify(Arc::new(aws_lc_rs::default_provider()));
 
         // Act
-        let built = client_config(&cfg(TlsMode::Require)).unwrap();
         let verdict = verifier.verify_server_cert(&garbage, &[], &name, &[], UnixTime::now());
 
         // Assert
-        assert!(built.is_some());
         assert!(verdict.is_ok());
     }
 
