@@ -157,3 +157,92 @@ pub struct ServerVersion {
 pub struct Completion {
     pub affected_rows: Option<u64>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataModel {
+    Relational,
+    KeyValue,
+}
+
+/// Which UI surfaces a data model supports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Capabilities {
+    pub table_tab: bool,
+    pub er_diagram: bool,
+    pub table_export_csv: bool,
+    pub sql_editor: bool,
+    pub row_edit: bool,
+    pub ai_query: bool,
+    pub command_editor: bool,
+}
+
+impl DataModel {
+    pub const fn capabilities(self) -> Capabilities {
+        match self {
+            DataModel::Relational => Capabilities {
+                table_tab: true,
+                er_diagram: true,
+                table_export_csv: true,
+                sql_editor: true,
+                row_edit: true,
+                ai_query: true,
+                command_editor: false,
+            },
+            DataModel::KeyValue => Capabilities {
+                table_tab: false,
+                er_diagram: false,
+                table_export_csv: false,
+                sql_editor: false,
+                row_edit: false,
+                ai_query: false,
+                command_editor: true,
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_value_model_disables_sql_screens() {
+        // Act
+        let caps = DataModel::KeyValue.capabilities();
+
+        // Assert
+        assert_eq!(
+            caps,
+            Capabilities {
+                table_tab: false,
+                er_diagram: false,
+                table_export_csv: false,
+                sql_editor: false,
+                row_edit: false,
+                ai_query: false,
+                command_editor: true,
+            }
+        );
+    }
+
+    #[test]
+    fn relational_model_keeps_sql_screens() {
+        // Act
+        let caps = DataModel::Relational.capabilities();
+
+        // Assert
+        assert_eq!(
+            caps,
+            Capabilities {
+                table_tab: true,
+                er_diagram: true,
+                table_export_csv: true,
+                sql_editor: true,
+                row_edit: true,
+                ai_query: true,
+                command_editor: false,
+            }
+        );
+    }
+}
