@@ -289,6 +289,75 @@ fn home_filter_resets_when_label_deleted() {
     h.get_by_label("alpha");
 }
 
+fn size_of(label: &str) -> egui::Vec2 {
+    let s = state(&[]);
+    let mut done = false;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(800.0, 600.0))
+        .with_accessibility_check(false)
+        .build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+    h.run();
+    h.get_by_label(label).rect().size()
+}
+
+#[test]
+fn home_logo_is_150_square() {
+    // Act & Assert
+    assert_eq!(size_of("cRustDB logo"), egui::vec2(150.0, 150.0));
+}
+
+#[test]
+fn book_cover_is_80x122() {
+    // Act & Assert
+    // The image keeps its aspect ratio (300x456 -> 80x121.6).
+    let size = size_of("Desbravando Rust book cover");
+    assert_eq!(size.x, 80.0);
+    assert!((size.y - 122.0).abs() < 0.5);
+}
+
+#[test]
+fn home_has_no_title_heading() {
+    // Arrange
+    let s = state(&[]);
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("cRustDB").is_none());
+}
+
+#[test]
+fn new_button_is_right_aligned() {
+    // Arrange
+    let s = state(&[]);
+    let mut done = false;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(800.0, 600.0))
+        .build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+    // Act
+    h.run();
+
+    // Assert
+    let new = h.get_by_label(&format!("{} New", icon::PLUS)).rect();
+    assert!(new.right() > 400.0);
+}
+
 #[test]
 fn engine_colors_differ() {
     // Act & Assert

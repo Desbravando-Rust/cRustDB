@@ -28,12 +28,13 @@ fn engine_name(kind: DriverKind) -> &'static str {
 
 const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
-pub(crate) fn logo(ui: &mut egui::Ui, max_height: f32) {
+pub(crate) fn logo(ui: &mut egui::Ui) {
     ui.add(
         egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
-            .max_height(max_height)
+            .fit_to_exact_size(egui::vec2(150.0, 150.0))
             .alt_text("cRustDB logo"),
     );
+    ui.add_space(8.0);
 }
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
@@ -46,7 +47,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     egui::Image::new(egui::include_image!(
                         "../../../../assets/imgs/book-cover.png"
                     ))
-                    .max_height(48.0)
+                    .fit_to_exact_size(egui::vec2(80.0, 122.0))
                     .alt_text("Desbravando Rust book cover"),
                 );
                 ui.vertical(|ui| {
@@ -59,20 +60,21 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         });
     egui::ScrollArea::vertical().show(ui, |ui| {
         if state.active_online().is_none() {
-            logo(ui, 96.0);
+            logo(ui);
         }
         let mut filter = None;
         ui.horizontal(|ui| {
-            ui.heading("cRustDB");
-            if ui.button(format!("{} New", icon::PLUS)).clicked() {
-                out.push(Intent::NewConnection);
-            }
-            out.extend(labels::editor(
-                ui,
-                &state.config.labels,
-                state.config.read_only,
-            ));
-            filter = labels::filter_combo(ui, &state.config.labels);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(format!("{} New", icon::PLUS)).clicked() {
+                    out.push(Intent::NewConnection);
+                }
+                out.extend(labels::editor(
+                    ui,
+                    &state.config.labels,
+                    state.config.read_only,
+                ));
+                filter = labels::filter_combo(ui, &state.config.labels);
+            });
         });
         if let Some(w) = &state.config.warning {
             ui.colored_label(ui.visuals().warn_fg_color, w);
@@ -96,7 +98,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 if ui.selectable_label(false, name).double_clicked() && !connecting {
                     out.push(Intent::Connect(c.id));
                 }
-                ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
+                ui.label(
+                    egui::RichText::new(format!("{}@{}:{}", c.user, c.host, c.port))
+                        .color(egui::Color32::GRAY),
+                );
                 for n in &c.labels {
                     labels::chip(ui, n, &state.config.labels);
                 }
