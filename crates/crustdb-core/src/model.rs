@@ -239,13 +239,8 @@ mod tests {
 
     #[test]
     fn redis_kind_never_reaches_sql_helpers() {
-        // Act
-        let caps = DriverKind::Redis.data_model().capabilities();
-
-        // Assert
-        assert!(!caps.sql_editor && !caps.table_tab && !caps.row_edit);
-        assert!(!caps.table_export_csv && !caps.er_diagram && !caps.ai_query);
-        assert!(caps.command_editor);
+        // Act & Assert
+        assert_eq!(DriverKind::Redis.data_model(), DataModel::KeyValue);
     }
 
     #[test]

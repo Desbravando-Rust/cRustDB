@@ -106,7 +106,7 @@ fn redis_rules(p: &mut ParsedUrl, tls: bool) -> Result<(), UrlError> {
     p.user.get_or_insert_with(|| "default".to_owned());
     if p.database
         .as_ref()
-        .is_some_and(|d| d.parse::<u32>().is_err())
+        .is_some_and(|d| !d.bytes().all(|b| b.is_ascii_digit()) || d.parse::<u32>().is_err())
     {
         return Err(UrlError::Malformed);
     }
@@ -278,6 +278,7 @@ mod tests {
         for u in [
             "redis://h/abc",
             "redis://h/-1",
+            "redis://h/+3",
             "redis://h/3/4",
             "redis://h/4294967296",
         ] {

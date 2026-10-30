@@ -40,7 +40,7 @@ pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
         DriverKind::Postgres => &PgDialect,
         DriverKind::Mysql => &MysqlDialect,
         DriverKind::Sqlite => &SqliteDialect,
-        // inert: Capabilities gate keeps SQL screens off for key-value (ADR 0008 D2)
+        // unreachable: no Redis driver is registered; the Capabilities gate (#166) takes over
         DriverKind::Redis => &PgDialect,
     }
 }
