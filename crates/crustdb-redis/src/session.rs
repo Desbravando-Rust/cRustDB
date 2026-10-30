@@ -309,7 +309,10 @@ impl StoreSession for RedisSession {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+
+    use crustdb_core::driver::{ConnectTarget, TlsConfig, TlsMode};
+    use secrecy::SecretString;
 
     use super::*;
 
@@ -366,5 +369,59 @@ mod tests {
         assert!(scan_done("0", 0, 10));
         assert!(scan_done("17", 10, 10));
         assert!(!scan_done("17", 9, 10));
+    }
+
+    async fn open(redis: &crustdb_testkit::RedisContainer) -> RedisSession {
+        let t = ConnectTarget {
+            host: redis.host.clone(),
+            port: redis.port,
+            connect_addr: None,
+            user: String::new(),
+            password: Some(SecretString::from(redis.password.clone())),
+            database: None,
+            tls: TlsConfig {
+                mode: TlsMode::Disable,
+                ca_path: None,
+            },
+            connect_timeout: Duration::from_secs(10),
+        };
+        crate::connect::connect(&t, SessionPurpose::Editor)
+            .await
+            .unwrap()
+    }
+
+    /// Needs the crate-internal `call`: `run` refuses blocking commands such as `WAIT`, and a
+    /// command that blocks the whole server (`DEBUG SLEEP`) would also stall the observer.
+    #[tokio::test]
+    #[ignore = "docker"]
+    async fn dropping_session_with_command_in_flight_closes_client() {
+        // Arrange
+        let redis = crustdb_testkit::start_redis(None).await;
+        let mut observer = open(&redis).await;
+        let mut busy = open(&redis).await;
+        let id: i64 = from_value(busy.call(["CLIENT", "ID"]).await.unwrap()).unwrap();
+
+        // Act: WAIT blocks this client for 5 s; abandon it mid-flight.
+        let in_flight =
+            tokio::time::timeout(Duration::from_millis(200), busy.call(["WAIT", "1", "5000"]))
+                .await;
+        drop(busy);
+
+        // Assert: the client vanishes well before the 5 s WAIT would end.
+        assert!(in_flight.is_err(), "WAIT must still be running");
+        let marker = format!("id={id} ");
+        let start = Instant::now();
+        loop {
+            let list: String =
+                from_value(observer.call(["CLIENT", "LIST"]).await.unwrap()).unwrap();
+            if !list.contains(&marker) {
+                break;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(3),
+                "client {id} still connected"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 }

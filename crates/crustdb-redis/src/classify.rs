@@ -104,8 +104,8 @@ const PASSWORD: &[&str] = &[
     "FCALL_RO",
 ];
 
-/// Blocking, transactional, pub/sub or connection-state commands cannot work on a shared
-/// multiplexed connection.
+/// Blocking, transactional, pub/sub, replication or connection-state commands cannot work on a
+/// shared multiplexed connection.
 const REFUSED: &[&str] = &[
     "MULTI",
     "EXEC",
@@ -124,6 +124,11 @@ const REFUSED: &[&str] = &[
     "BZPOPMAX",
     "BLMPOP",
     "BZMPOP",
+    "WAIT",
+    "WAITAOF",
+    "SYNC",
+    "PSYNC",
+    "REPLCONF",
     "HELLO",
     "RESET",
     "QUIT",
@@ -201,6 +206,12 @@ pub fn classify(argv: &[Vec<u8>]) -> Result<(Verdict, String), Refused> {
         return ok(
             Verdict::Password,
             &format!("{n} can wipe data or run arbitrary scripts"),
+        );
+    }
+    if n == "MODULE" && matches!(sub.as_str(), "LOAD" | "LOADEX") {
+        return ok(
+            Verdict::Password,
+            "MODULE LOAD runs native code on the server",
         );
     }
     if matches!(n, "DEL" | "UNLINK") {
@@ -407,5 +418,27 @@ mod tests {
         }
         assert!(guard_run(SessionPurpose::Editor, &get).is_ok());
         assert!(guard_run(SessionPurpose::Editor, &argv(&["MULTI"])).is_err());
+    }
+
+    #[test]
+    fn replication_and_blocking_waits_rejected() {
+        // Act & Assert
+        for cmd in ["SYNC", "PSYNC", "REPLCONF", "WAIT", "WAITAOF", "wait"] {
+            assert!(classify(&argv(&[cmd, "1", "0"])).is_err(), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn module_load_requires_password_other_module_commands_confirm() {
+        // Act & Assert
+        for sub in ["LOAD", "loadex"] {
+            assert_eq!(
+                verdict(&["MODULE", sub, "/x.so"]),
+                Verdict::Password,
+                "{sub}"
+            );
+        }
+        assert_eq!(verdict(&["MODULE", "LIST"]), Verdict::Confirm);
+        assert_eq!(verdict(&["MODULE", "UNLOAD", "m"]), Verdict::Confirm);
     }
 }

@@ -340,22 +340,13 @@ async fn dropping_session_closes_server_client() {
     let redis = start_redis(None).await;
     let mut observer = editor(&redis, None).await;
     let mut idle = editor(&redis, None).await;
-    let mut busy = editor(&redis, None).await;
-    let (idle_id, busy_id) = (client_id(&mut idle).await, client_id(&mut busy).await);
+    let idle_id = client_id(&mut idle).await;
 
-    // Act: one idle session, one with WAIT (blocks the server side for 5 s) abandoned mid-flight.
+    // Act
     drop(idle);
-    let in_flight = tokio::time::timeout(
-        Duration::from_millis(200),
-        busy.run(&argv(&["WAIT", "1", "5000"])),
-    )
-    .await;
-    drop(busy);
 
-    // Assert: both clients vanish well before the 5 s WAIT would end.
-    assert!(in_flight.is_err(), "WAIT must still be running");
+    // Assert
     assert_client_gone(&mut observer, idle_id, Duration::from_secs(2)).await;
-    assert_client_gone(&mut observer, busy_id, Duration::from_secs(3)).await;
 }
 
 #[tokio::test]
