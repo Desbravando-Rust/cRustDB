@@ -36,30 +36,30 @@ Fatos do código (verificados):
 Escolhemos a **Opção 2**. O `Driver` SQL fica inalterado (OCP). O core ganha um módulo de armazenamento chave-valor, e a UI passa a depender de `Capabilities` em vez de `match` espalhado por `DriverKind` (DIP).
 
 ### D1. Um só `DriverKind`, com modelo de dados
-Adicionar `DriverKind::Redis` (serde `"redis"`) e `Product::Redis`. No core, `pub enum DataModel { Relational, KeyValue }` e `DriverKind::data_model()` com `match` exaustivo, sem braço `_`. Variantes `Document` e `WideColumn` só entram nos ADRs de #121/#122/#123 (YAGNI).
+Adicionar `DriverKind::Redis` (serde `"redis"`) e `Product::Redis`. No core, `pub enum DataModel { Relational, KeyValue }` e `DriverKind::data_model()` (na #164) com `match` exaustivo, sem braço `_`. Variantes `Document` e `WideColumn` só entram nos ADRs de #121/#122/#123 (YAGNI).
 
 ### D2. A UI decide por capacidade
-`pub struct Capabilities` só com `bool`s, obtida por `const fn DriverKind::capabilities()`:
+`pub struct Capabilities` só com `bool`s, obtida por `const fn DataModel::capabilities()`:
 
 * `table_tab` (Data/Structure/DDL), `er_diagram`, `table_export_csv`;
 * `sql_editor` (beautify, completion, explain, transação);
 * `row_edit` (ADRs 0003/0004), `ai_query` (ADR 0005);
 * `command_editor`.
 
-Para `KeyValue` tudo é `false`, exceto `command_editor`. A UI desabilita a ação com tooltip "Not supported for Redis". Nunca usa `unreachable!`/`panic!`. Os `match` existentes ganham um braço `Redis` explícito. Nos helpers SQL do core (`sql::dialect`, `keywords`, `operators_for`) o braço Redis devolve um valor inerte (`GenericDialect`, lista de palavras-chave vazia, `COMPARE`). Ele é **inalcançável** em produção, pois `Capabilities` desliga `sql_editor`, `table_tab` e `row_edit`, de modo que nenhum caminho SQL é aberto para Redis. A diferença para o stub da Opção 1: aqui o valor inerte é só o braço total de um `match` sobre enum fechado, sem implementar `Driver` nem prometer contrato SQL. O `fake_driver` do testkit é só de `Driver` SQL e recebe um braço equivalente (`GenericDialect`). Um teste (`redis_kind_never_reaches_sql_helpers`) garante que `capabilities()` de Redis desliga todas as telas que os usam.
+Para `KeyValue` tudo é `false`, exceto `command_editor`. A UI desabilita a ação com tooltip "Not supported for Redis". Nunca usa `unreachable!`/`panic!`. Os `match` existentes ganham um braço `Redis` explícito. Nos helpers SQL do core (`sql::dialect`, `keywords`, `operators_for`) o braço Redis devolve um valor inerte (`GenericDialect`, lista de palavras-chave vazia, `COMPARE`). Ele é **inalcançável** em produção, pois `Capabilities` desliga `sql_editor`, `table_tab` e `row_edit`, de modo que nenhum caminho SQL é aberto para Redis. A diferença para o stub da Opção 1: aqui o valor inerte é só o braço total de um `match` sobre enum fechado, sem implementar `Driver` nem prometer contrato SQL. O `fake_driver` do testkit é só de `Driver` SQL e recebe um braço equivalente (`GenericDialect`). Um teste (`redis_kind_never_reaches_sql_helpers`) garante que `capabilities()` de `KeyValue` desliga todas as telas que os usam.
 
 ### D3. Traits `store` (ISP + DIP)
 Novo módulo `crustdb-core::store`, sem IO, com `async_trait` como o resto do core:
 
 * `StoreDriver { kind(); connect(&ConnectTarget, SessionPurpose) -> Box<dyn StoreSession>; assess(&[Vec<u8>]) -> Result<(Verdict, String), Refused> }`. `Refused` é um erro tipado (`thiserror`) com o motivo (ver D9)
-* `StoreSession { server_version(); ping(); namespaces(); scan(ns, &ScanRequest) -> ScanPage; read(ns, &EntryKey, limit) -> EntryView; run(&[Vec<u8>]) -> Reply; close() }`
+* `StoreSession { server_version(); ping(); namespaces(); scan(&ScanRequest) -> ScanPage; read(&EntryKey, limit) -> EntryView; run(&[Vec<u8>]) -> Reply; close() }`
 
 Tipos neutros, reaproveitáveis por outros NoSQL:
 
 * `EntryKey(Vec<u8>)`, binary-safe. A exibição usa `String::from_utf8_lossy`.
-* `ScanRequest { cursor: Option<String> opaco, pattern, count }` e `ScanPage { entries, next }`.
-* `ValueKind { Text, Map, List, Set, SortedSet, Stream, Document, Other(String) }`.
-* `EntryView { kind, ttl: Ttl, size_bytes: Option<u64>, body: ValueBody, truncated: bool }`.
+* `ScanRequest { cursor: Option<String> opaco, pattern, count }` e `ScanPage { entries: Vec<KeyEntry>, next }`, com `KeyEntry { key, kind, ttl }`.
+* `ValueKind { Text, Map, List, Set, SortedSet, Stream, Other(String) }`.
+* `EntryView { ttl: Option<Duration>, size_bytes: Option<u64>, body: ValueBody, truncated: bool }`.
 * `Reply`: árvore estilo RESP3.
 
 Não há `CancelHandle` (ver D8). No app, `DriverRegistry::get(kind)` devolve `enum Backend { Sql(Arc<dyn Driver>), Store(Arc<dyn StoreDriver>) }`. Os atores SQL seguem com `Arc<dyn Driver>`, e um ator novo atende `Store`. Dependências: `app -> crustdb-redis -> core`, e o core continua sem `tokio` e sem `egui`.
@@ -120,7 +120,7 @@ Cluster, Sentinel, Pub/Sub, `MULTI`/`EXEC`, edição de valores, mTLS e `SCRIPT 
 ## Plano de Testes
 Só comportamento do domínio. Proibido testar apenas redis-rs ou serde sem regra do CrustDB. Testes seguem AAA.
 
-**Core (unit):** `parses_rediss_with_acl_user_and_db` (`rediss://alice:p%40ss@h:6380/3` -> Redis, `alice`, `p@ss`, db `"3"`, `VerifyFull`); `redis_password_only_url_uses_default_user`; `redis_db_path_must_be_number`; `redis_verify_ca_is_treated_as_verify_full`; `redis_require_skips_verification`; `redis_kind_never_reaches_sql_helpers`; `unknown_scheme_rejected` (agora com `mongodb://h`); `key_value_kind_disables_sql_screens`; `groups_keys_by_separator_prefix`; `custom_separator_groups_by_it`; `key_without_separator_is_leaf`; `non_utf8_key_keeps_raw_bytes`; `hash_body_maps_to_field_value_rows`; `zset_rows_keep_score_order`.
+**Core (unit):** `parses_rediss_with_acl_user_and_db` (`rediss://alice:p%40ss@h:6380/3` -> Redis, `alice`, `p@ss`, db `"3"`, `VerifyFull`); `redis_password_only_url_uses_default_user`; `redis_db_path_must_be_number`; `redis_verify_ca_is_treated_as_verify_full`; `redis_require_skips_verification`; `redis_kind_never_reaches_sql_helpers`; `unknown_scheme_rejected` (agora com `mongodb://h`); `key_value_model_disables_sql_screens`; `groups_keys_by_separator_prefix`; `custom_separator_groups_by_it`; `key_without_separator_is_leaf`; `non_utf8_key_keeps_raw_bytes`; `hash_body_maps_to_field_value_rows`; `zset_rows_keep_score_order`.
 
 **`crustdb-redis` (unit, sem Docker):** `flushall_requires_password`; `config_get_runs_but_config_set_confirms`; `del_over_key_limit_confirms`; `unknown_command_confirms`; `command_name_is_case_insensitive`; `subscribe_monitor_multi_rejected`; `eval_cannot_bypass_flushall_password` (`EVAL`, `EVALSHA`, `FCALL` e variantes `_RO` dão Password); `script_load_and_function_load_confirm`; `connection_state_commands_rejected` (`CLIENT REPLY`, `HELLO`, `RESET`, `QUIT`, `SELECT`, `AUTH`; e `run()` também recusa); `tokenizer_keeps_quoted_crlf_as_single_arg` (`SET k "v\r\nFLUSHALL"` resulta em exatamente 3 argumentos); `unterminated_quote_errors`.
 
@@ -137,3 +137,13 @@ Apenas listadas, não criadas aqui.
 4. `feat(ui)`: árvore de keyspace lazy e visualizador somente leitura.
 5. `feat(ui)`: editor de comandos e diálogo de confirmação/senha.
 6. Depois: edição de valores, Cluster/Sentinel, e ADRs de #121/#122/#123 reaproveitando `store`.
+
+## Ajustes da fase de código (#163)
+
+1. `Capabilities` é por `DataModel` (`DataModel::capabilities()`), não por `DriverKind`. A #164 acrescenta `DriverKind::data_model()`. O teste é `key_value_model_disables_sql_screens` (mais `relational_model_keeps_sql_screens`).
+2. `scan` e `read` não recebem `ns`: a sessão fica presa a `ConnectTarget.database`, coerente com D9 (namespace só muda por connect).
+3. `server_version()` segue devolvendo `&ServerVersion`; `Product::Redis` vem na #164.
+4. `impl From<Refused> for DriverError` (`ErrorKind::Unsupported`) fica no core, pela regra de órfãos.
+5. TTL é `Option<Duration>` (`None` = sem expiração), sem tipo `Ttl`.
+6. `ScanPage.entries` é `Vec<KeyEntry { key, kind, ttl }>`; `EntryView` não tem `kind`.
+7. Sem `ValueKind::Document` nem `ValueBody::Document/Other` (YAGNI): `ValueBody` tem `Text, Map, List, Set, SortedSet, Stream`. Tipo desconhecido na leitura vira `DriverError` `Unsupported` no driver.
