@@ -2,7 +2,7 @@ use crustdb_core::model::DriverKind;
 use eframe::egui;
 use egui_phosphor::regular as icon;
 
-use super::Intent;
+use super::{Intent, labels};
 use crate::state::{AppState, Status};
 
 const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
@@ -61,11 +61,18 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if state.active_online().is_none() {
             logo(ui, 96.0);
         }
+        let mut filter = None;
         ui.horizontal(|ui| {
             ui.heading("cRustDB");
             if ui.button(format!("{} New", icon::PLUS)).clicked() {
                 out.push(Intent::NewConnection);
             }
+            out.extend(labels::editor(
+                ui,
+                &state.config.labels,
+                state.config.read_only,
+            ));
+            filter = labels::filter_combo(ui, &state.config.labels);
         });
         if let Some(w) = &state.config.warning {
             ui.colored_label(ui.visuals().warn_fg_color, w);
@@ -74,7 +81,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if state.config.connections.is_empty() {
             ui.weak("No saved connections. Create one with New.");
         }
-        for c in &state.config.connections {
+        let shown =
+            (state.config.connections.iter()).filter(|c| labels::matches(c, filter.as_deref()));
+        for c in shown {
             let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
             let live = state
                 .live_workspace(c.id)
@@ -88,6 +97,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     out.push(Intent::Connect(c.id));
                 }
                 ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
+                for n in &c.labels {
+                    labels::chip(ui, n, &state.config.labels);
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
@@ -373,6 +385,35 @@ pub(crate) mod tests {
 
         // Assert
         assert!(h.query_by_label("cRustDB logo").is_none());
+    }
+
+    #[test]
+    fn home_filter_by_label_hides_others() {
+        // Arrange
+        let mut s = state(&["alpha", "beta"]);
+        s.config.connections[0].labels = vec!["dev".into()];
+        s.config.connections[1].labels = vec!["prod".into()];
+        s.config.labels = ["dev", "prod"]
+            .map(|n| crate::storage::config::Label {
+                name: n.into(),
+                color: [1, 2, 3],
+            })
+            .to_vec();
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+        h.ctx
+            .data_mut(|d| d.insert_temp(labels::filter_id(), Some("dev".to_string())));
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("alpha");
+        assert!(h.query_by_label("beta").is_none());
     }
 
     #[test]

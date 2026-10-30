@@ -1,8 +1,11 @@
 //! Connection form persistence for `CrustApp`.
 use super::CrustApp;
 use crate::runtime::ResolvedSecrets;
-use crate::storage::config::{ConnectionConfig, FieldError};
+use crate::storage::config::{
+    ConnectionConfig, FieldError, Label, delete_label, rename_label, validate_label,
+};
 use crate::storage::secrets::{SecretKind, account};
+use crate::ui::labels::LabelOp;
 
 impl CrustApp {
     /// Validates, persists the config and keyring secrets; the form stays open on any failure.
@@ -57,5 +60,37 @@ impl CrustApp {
         }
         self.close_form();
         Some((config, typed))
+    }
+
+    /// Applies a catalog edit (propagating to connections) and saves; keeps the old state on failure.
+    pub(super) fn apply_label_op(&mut self, op: LabelOp) {
+        let cfg = &mut self.state.config;
+        let (mut conns, mut cat) = (cfg.connections.clone(), cfg.labels.clone());
+        match op {
+            LabelOp::Add(name) => match validate_label(&name, &cat) {
+                Ok(()) => cat.push(Label {
+                    name,
+                    color: [128, 128, 128],
+                }),
+                Err(e) => return cfg.warning = Some(format!("label: {e}")),
+            },
+            LabelOp::Rename { old, new } => match validate_label(&new, &cat) {
+                Ok(()) => rename_label(&mut conns, &mut cat, &old, &new),
+                Err(e) => return cfg.warning = Some(format!("label: {e}")),
+            },
+            LabelOp::Color { name, color } => {
+                cat.iter_mut()
+                    .filter(|l| l.name == name)
+                    .for_each(|l| l.color = color);
+            }
+            LabelOp::Delete(name) => delete_label(&mut conns, &mut cat, &name),
+        }
+        match self.store.save(&conns, &cat) {
+            Ok(()) => {
+                cfg.connections = conns;
+                cfg.labels = cat;
+            }
+            Err(e) => cfg.warning = Some(format!("could not save labels: {e}")),
+        }
     }
 }

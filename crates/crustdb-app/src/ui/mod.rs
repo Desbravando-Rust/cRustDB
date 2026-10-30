@@ -10,6 +10,7 @@ pub mod grid;
 pub mod grid_copy;
 pub mod history_panel;
 pub mod home;
+pub mod labels;
 pub mod picker;
 pub mod results;
 pub mod row_detail;
@@ -28,6 +29,7 @@ use crate::state::tree::NodePath;
 pub enum Intent {
     Connect(ConnectionId),
     NewConnection,
+    Label(labels::LabelOp),
     EditConnection(ConnectionId),
     DeleteConnection(ConnectionId),
     ConfirmDelete,
