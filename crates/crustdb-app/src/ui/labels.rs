@@ -259,4 +259,20 @@ mod tests {
         assert_eq!(names, ["Production"]);
         assert_eq!(filter_options(&cat, "").len(), 3);
     }
+
+    #[test]
+    fn rename_filter_moves_only_matching_selection() {
+        // Arrange
+        let ctx = egui::Context::default();
+        let select = |v: &str| ctx.data_mut(|d| d.insert_temp(filter_id(), Some(v.to_string())));
+        let current = || -> Option<String> { ctx.data(|d| d.get_temp(filter_id())).flatten() };
+
+        // Act & Assert
+        select("a");
+        rename_filter(&ctx, "a", "b");
+        assert_eq!(current().as_deref(), Some("b"));
+        select("x");
+        rename_filter(&ctx, "a", "b");
+        assert_eq!(current().as_deref(), Some("x"));
+    }
 }
