@@ -27,7 +27,7 @@ async fn disconnect_drops_export_sender_of_the_editor_tab() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn close_tab_commit_resolves_open_tx_before_disconnect() {
+async fn tx_commit_resolves_open_tx_and_keeps_editor_alive() {
     // Arrange
     let mut h = harness(FakeScript::default());
     open(&mut h).await;
@@ -38,12 +38,11 @@ async fn close_tab_commit_resolves_open_tx_before_disconnect() {
     settle(&h).await;
 
     // Act
-    h.actors.dispatch(Command::CloseTab {
+    h.actors.dispatch(Command::Tx {
         tab: TAB,
-        resolve: Some(TxOp::Commit),
+        op: TxOp::Commit,
     });
     let ev = settle(&h).await;
-    h.actors.dispatch(Command::Disconnect { ws: WS });
 
     // Assert
     assert_eq!(tx_states(&ev), [TxState::Idle]);

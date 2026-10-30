@@ -5,7 +5,16 @@ use crate::runtime::{Command, TabId, TxOp, TxState, WorkspaceId};
 impl AppState {
     /// Disconnects straight away, or asks first when a transaction or row edits would be lost.
     pub fn request_disconnect(&mut self, ws: WorkspaceId) -> Vec<Command> {
-        let tx = self.tx_tabs(ws);
+        if self.ask_disconnect(ws) {
+            return vec![];
+        }
+        self.close_workspace(ws);
+        vec![Command::Disconnect { ws }]
+    }
+
+    /// Opens the disconnect dialog when something would be lost; returns whether it did.
+    fn ask_disconnect(&mut self, ws: WorkspaceId) -> bool {
+        let has_tx = !self.tx_tabs(ws).is_empty();
         let pending_rows = self
             .workspaces
             .iter()
@@ -13,16 +22,15 @@ impl AppState {
             .flat_map(|w| &w.tabs)
             .filter(|Tab::Table(t)| !t.pending.is_empty())
             .count();
-        if tx.is_empty() && pending_rows == 0 {
-            self.close_workspace(ws);
-            return vec![Command::Disconnect { ws }];
+        if !has_tx && pending_rows == 0 {
+            return false;
         }
         self.dialogs.push(Dialog::Disconnect {
             ws,
-            has_tx: !tx.is_empty(),
+            has_tx,
             pending_rows,
         });
-        vec![]
+        true
     }
 
     /// Commit or roll back every open transaction, then disconnect. `Commit`/`Rollback` only.
@@ -38,10 +46,7 @@ impl AppState {
         let mut cmds: Vec<Command> = self
             .tx_tabs(ws)
             .into_iter()
-            .map(|tab| Command::CloseTab {
-                tab,
-                resolve: Some(op),
-            })
+            .map(|tab| Command::Tx { tab, op })
             .collect();
         if cmds.is_empty() {
             self.close_workspace(ws);
@@ -49,7 +54,7 @@ impl AppState {
         } else {
             // The real Disconnect waits for every TxChanged{Idle} (see `tx_resolved`).
             self.disconnecting
-                .insert(ws, cmds.iter().filter_map(close_tab).collect());
+                .insert(ws, cmds.iter().filter_map(tx_tab).collect());
         }
         cmds
     }
@@ -62,7 +67,12 @@ impl AppState {
         };
         let tabs = self.disconnecting.entry(ws).or_default();
         tabs.remove(&tab);
-        if tabs.is_empty() {
+        if !tabs.is_empty() {
+            return;
+        }
+        self.disconnecting.remove(&ws);
+        // Something new may have appeared while resolving: ask again instead of dropping it.
+        if !self.ask_disconnect(ws) {
             self.close_workspace(ws);
             self.outbox.push(Command::Disconnect { ws });
         }
@@ -97,9 +107,9 @@ impl AppState {
     }
 }
 
-fn close_tab(c: &Command) -> Option<TabId> {
+fn tx_tab(c: &Command) -> Option<TabId> {
     match c {
-        Command::CloseTab { tab, .. } => Some(*tab),
+        Command::Tx { tab, .. } => Some(*tab),
         _ => None,
     }
 }
@@ -202,36 +212,103 @@ mod tests {
         );
     }
 
+    fn resolve_waits_for_idle(op: TxOp) {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+        s.request_disconnect(ws);
+
+        // Act
+        let cmds = s.resolve_disconnect(op);
+
+        // Assert
+        assert!(matches!(
+            cmds.as_slice(),
+            [Command::Tx { tab: t, op: o }] if *t == tab && *o == op
+        ));
+        assert_eq!(s.workspaces.len(), 1);
+        assert!(s.take_commands().is_empty());
+
+        // Act
+        s.apply(Event::TxChanged {
+            tab,
+            state: TxState::Idle,
+        });
+
+        // Assert
+        assert!(s.workspaces.is_empty());
+        assert!(
+            matches!(s.take_commands().as_slice(), [Command::Disconnect { ws: w }] if *w == ws)
+        );
+    }
+
     #[test]
-    fn resolve_disconnect_closes_tx_tabs_and_waits_for_idle() {
-        for op in [TxOp::Commit, TxOp::Rollback] {
-            // Arrange
-            let (mut s, ws, tab) = with_tx();
-            s.request_disconnect(ws);
+    fn resolve_disconnect_commit_waits_for_idle() {
+        resolve_waits_for_idle(TxOp::Commit);
+    }
 
-            // Act
-            let cmds = s.resolve_disconnect(op);
+    #[test]
+    fn resolve_disconnect_rollback_waits_for_idle() {
+        resolve_waits_for_idle(TxOp::Rollback);
+    }
 
-            // Assert
-            assert!(matches!(
-                cmds.as_slice(),
-                [Command::CloseTab { tab: t, resolve: Some(o) }] if *t == tab && *o == op
-            ));
-            assert_eq!(s.workspaces.len(), 1);
-            assert!(s.take_commands().is_empty());
+    #[test]
+    fn failed_commit_of_one_tab_keeps_workspace_connected_and_other_tab_alive() {
+        // Arrange
+        let (mut s, ws, a) = with_tx();
+        s.open_query(ws, None);
+        let b = s.workspaces[0].queries[1].id;
+        s.workspaces[0].queries[1].tx = TxState::Open;
+        s.request_disconnect(ws);
+        let cmds = s.resolve_disconnect(TxOp::Commit);
 
-            // Act
+        // Act
+        s.apply(Event::Notice {
+            tab: a,
+            text: "commit failed".into(),
+        });
+        for tab in [a, b] {
             s.apply(Event::TxChanged {
                 tab,
                 state: TxState::Idle,
             });
-
-            // Assert
-            assert!(s.workspaces.is_empty());
-            assert!(
-                matches!(s.take_commands().as_slice(), [Command::Disconnect { ws: w }] if *w == ws)
-            );
         }
+
+        // Assert
+        assert!(cmds.iter().all(|c| matches!(c, Command::Tx { .. })));
+        assert_eq!(s.workspaces.len(), 1);
+        assert_eq!(s.workspaces[0].queries.len(), 2);
+        assert!(s.take_commands().is_empty());
+    }
+
+    #[test]
+    fn new_pending_edit_during_resolve_reopens_dialog() {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+        s.request_disconnect(ws);
+        s.resolve_disconnect(TxOp::Commit);
+        s.open_table(ws, table_ref(), RequestId(1));
+        let Some(Tab::Table(t)) = s.workspaces[0].tabs.first_mut() else {
+            panic!("expected table tab");
+        };
+        t.pending.push((0, Some("x".into())));
+
+        // Act
+        s.apply(Event::TxChanged {
+            tab,
+            state: TxState::Idle,
+        });
+
+        // Assert
+        assert_eq!(s.workspaces.len(), 1);
+        assert!(s.take_commands().is_empty());
+        assert_eq!(
+            s.dialogs.top(),
+            Some(&Dialog::Disconnect {
+                ws,
+                has_tx: false,
+                pending_rows: 1
+            })
+        );
     }
 
     #[test]
