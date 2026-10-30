@@ -23,11 +23,11 @@ pub enum LabelOp {
 
 const FALLBACK: [u8; 3] = [128, 128, 128];
 
-fn color32(c: [u8; 3]) -> egui::Color32 {
+pub(crate) fn color32(c: [u8; 3]) -> egui::Color32 {
     egui::Color32::from_rgb(c[0], c[1], c[2])
 }
 
-fn color_of(labels: &[Label], name: &str) -> [u8; 3] {
+pub(crate) fn color_of(labels: &[Label], name: &str) -> [u8; 3] {
     labels
         .iter()
         .find(|l| l.name == name)

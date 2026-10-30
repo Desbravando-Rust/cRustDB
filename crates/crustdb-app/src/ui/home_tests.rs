@@ -238,10 +238,8 @@ fn home_hides_logo_when_connection_active() {
     assert!(h.query_by_label("cRustDB logo").is_none());
 }
 
-#[test]
-fn home_filter_by_label_hides_others() {
-    // Arrange
-    let mut s = state(&["alpha", "beta"]);
+/// alpha -> dev, beta -> prod, catalog [dev, prod].
+fn label_two(s: &mut AppState) {
     s.config.connections[0].label = Some("dev".into());
     s.config.connections[1].label = Some("prod".into());
     s.config.labels = ["dev", "prod"]
@@ -250,6 +248,87 @@ fn home_filter_by_label_hides_others() {
             color: [1, 2, 3],
         })
         .to_vec();
+}
+
+#[test]
+fn home_groups_connections_by_label() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    label_two(&mut s);
+    s.config.labels.reverse();
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    let y = |t: &str| {
+        (h.get_all_by_label(t))
+            .map(|n| n.rect().min.y)
+            .fold(f32::MAX, f32::min)
+    };
+    assert!(y("prod") < y("dev"), "folders follow catalog order");
+    assert!(y("beta") < y("alpha"));
+}
+
+#[test]
+fn home_ungrouped_section_last() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    label_two(&mut s);
+    s.config.connections[0].label = None;
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    let y = |t: &str| {
+        (h.get_all_by_label(t))
+            .map(|n| n.rect().min.y)
+            .fold(f32::MAX, f32::min)
+    };
+    assert!(y("prod") < y("Ungrouped"));
+    assert!(y("beta") < y("alpha"));
+}
+
+#[test]
+fn home_search_filters_by_host() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    s.config.connections[1].host = "db.special.io".into();
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+    h.ctx
+        .data_mut(|d| d.insert_temp(search_id(), "SPECIAL".to_string()));
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_label("beta");
+    assert!(h.query_by_label("alpha").is_none());
+}
+
+#[test]
+fn home_filter_by_label_hides_others() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    label_two(&mut s);
     let mut done = false;
     let mut h = Harness::new_ui(|ui| {
         if ready(ui, &mut done) {
