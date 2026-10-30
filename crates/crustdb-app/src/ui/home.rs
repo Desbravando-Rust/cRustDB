@@ -417,6 +417,26 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn home_filter_resets_when_label_deleted() {
+        // Arrange
+        let s = state(&["alpha"]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+        h.ctx
+            .data_mut(|d| d.insert_temp(labels::filter_id(), Some("gone".to_string())));
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("alpha");
+    }
+
+    #[test]
     fn engine_colors_differ() {
         // Act & Assert
         assert_ne!(

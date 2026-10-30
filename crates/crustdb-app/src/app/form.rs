@@ -67,22 +67,33 @@ impl CrustApp {
         let cfg = &mut self.state.config;
         let (mut conns, mut cat) = (cfg.connections.clone(), cfg.labels.clone());
         match op {
-            LabelOp::Add(name) => match validate_label(&name, &cat) {
+            LabelOp::Add(name) => match validate_label(name.trim(), &cat) {
                 Ok(()) => cat.push(Label {
-                    name,
+                    name: name.trim().to_string(),
                     color: [128, 128, 128],
                 }),
                 Err(e) => return cfg.warning = Some(format!("label: {e}")),
             },
-            LabelOp::Rename { old, new } => match validate_label(&new, &cat) {
-                Ok(()) => rename_label(&mut conns, &mut cat, &old, &new),
-                Err(e) => return cfg.warning = Some(format!("label: {e}")),
-            },
+            LabelOp::Rename { old, new } => {
+                let new = new.trim().to_string();
+                let others: Vec<Label> = cat.iter().filter(|l| l.name != old).cloned().collect();
+                match validate_label(&new, &others) {
+                    Ok(()) => {
+                        rename_label(&mut conns, &mut cat, &old, &new);
+                        crate::ui::labels::rename_filter(&self.ctx, &old, &new);
+                    }
+                    Err(e) => return cfg.warning = Some(format!("label: {e}")),
+                }
+            }
             LabelOp::Color { name, color } => {
-                cat.iter_mut()
+                // In memory only; `Persist` saves once the drag ends.
+                return cfg
+                    .labels
+                    .iter_mut()
                     .filter(|l| l.name == name)
                     .for_each(|l| l.color = color);
             }
+            LabelOp::Persist => {}
             LabelOp::Delete(name) => delete_label(&mut conns, &mut cat, &name),
         }
         match self.store.save(&conns, &cat) {

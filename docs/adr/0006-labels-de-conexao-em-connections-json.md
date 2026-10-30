@@ -25,3 +25,4 @@ Escolhemos a **Opção 1** porque é aditiva: `serde(default)` faz arquivos v1 a
 * Binário antigo que salvar o arquivo descarta labels silenciosamente (aceitável antes de v0.1.0).
 * Catálogo ausente vs. catálogo esvaziado pelo usuário: o default só se aplica quando o campo `labels` não existe; lista vazia salva continua vazia.
 * Rename/delete precisam propagar para as conexões (por nome), em vez de chave estável.
+* Binário antigo (pré-#128) que regravar o arquivo o salva sem `labels`: um downgrade perde o catálogo e as atribuições por conexão.

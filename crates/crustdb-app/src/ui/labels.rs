@@ -8,8 +8,16 @@ use crate::storage::config::{ConnectionConfig, Label};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LabelOp {
     Add(String),
-    Rename { old: String, new: String },
-    Color { name: String, color: [u8; 3] },
+    Rename {
+        old: String,
+        new: String,
+    },
+    /// In-memory only; `Persist` writes it once the drag ends.
+    Color {
+        name: String,
+        color: [u8; 3],
+    },
+    Persist,
     Delete(String),
 }
 
@@ -64,6 +72,16 @@ pub(crate) fn filter_id() -> egui::Id {
     egui::Id::unique("label_filter")
 }
 
+/// Keeps the filter on a label that was renamed.
+pub fn rename_filter(ctx: &egui::Context, old: &str, new: &str) {
+    ctx.data_mut(|d| {
+        let sel: Option<String> = d.get_temp(filter_id()).flatten();
+        if sel.as_deref() == Some(old) {
+            d.insert_temp(filter_id(), Some(new.to_string()));
+        }
+    });
+}
+
 /// Compact searchable select; returns the selected label name, if any.
 pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
     let mut sel: Option<String> = ui.data(|d| d.get_temp(filter_id())).flatten();
@@ -79,7 +97,8 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
         .width(110.0)
         .selected_text(sel.as_deref().unwrap_or("All"))
         .show_ui(ui, |ui| {
-            ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search..."));
+            ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search..."))
+                .on_hover_text("Search labels");
             if ui.selectable_label(sel.is_none(), "All").clicked() {
                 sel = None;
             }
@@ -99,22 +118,33 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
 
 /// Multi-select of catalog labels for the connection form.
 pub fn picker(ui: &mut egui::Ui, selected: &mut Vec<String>, labels: &[Label]) {
-    if labels.is_empty() {
+    if labels.is_empty() && selected.is_empty() {
         return;
     }
     ui.label("Labels");
+    // Names no longer in the catalog stay listed (checked) so they can be removed.
+    let orphans: Vec<String> = selected
+        .iter()
+        .filter(|n| !labels.iter().any(|l| &l.name == *n))
+        .cloned()
+        .collect();
+    let names = labels.iter().map(|l| &l.name).chain(orphans.iter());
     ui.horizontal_wrapped(|ui| {
-        for l in labels {
-            let mut on = selected.contains(&l.name);
-            if ui.checkbox(&mut on, &l.name).changed() {
+        for name in names {
+            let mut on = selected.contains(name);
+            if ui.checkbox(&mut on, name).changed() {
                 if on {
-                    selected.push(l.name.clone());
+                    selected.push(name.clone());
                 } else {
-                    selected.retain(|n| n != &l.name);
+                    selected.retain(|n| n != name);
                 }
             }
         }
     });
+}
+
+fn dirty_id() -> egui::Id {
+    egui::Id::unique("labels_color_dirty")
 }
 
 fn open_id() -> egui::Id {
@@ -137,6 +167,11 @@ pub fn editor(ui: &mut egui::Ui, labels: &[Label], read_only: bool) -> Vec<Inten
             ui.add_enabled_ui(!read_only, |ui| rows(ui, labels, &mut out));
         });
     ctx.data_mut(|d| d.insert_temp(open_id(), keep));
+    let dirty: bool = ctx.data(|d| d.get_temp(dirty_id())).unwrap_or(false);
+    if dirty && !ctx.input(|i| i.pointer.any_down()) {
+        ctx.data_mut(|d| d.insert_temp(dirty_id(), false));
+        out.push(Intent::Label(LabelOp::Persist));
+    }
     out
 }
 
@@ -147,7 +182,9 @@ fn rows(ui: &mut egui::Ui, labels: &[Label], out: &mut Vec<Intent>) {
             let mut buf: String = ui
                 .data(|d| d.get_temp(id))
                 .unwrap_or_else(|| l.name.clone());
-            let r = ui.add(egui::TextEdit::singleline(&mut buf).desired_width(120.0));
+            let r = ui
+                .add(egui::TextEdit::singleline(&mut buf).desired_width(120.0))
+                .on_hover_text(format!("Name of label {}", l.name));
             if r.lost_focus() {
                 ui.data_mut(|d| d.remove_temp::<String>(id));
                 if buf != l.name {
@@ -161,15 +198,22 @@ fn rows(ui: &mut egui::Ui, labels: &[Label], out: &mut Vec<Intent>) {
                 ui.data_mut(|d| d.insert_temp(id, buf));
             }
             let mut c = l.color;
-            // ponytail: one save per change while dragging; debounce if it hurts.
-            if ui.color_edit_button_srgb(&mut c).changed() {
+            let cr = ui
+                .color_edit_button_srgb(&mut c)
+                .on_hover_text(format!("Color of {}", l.name));
+            if cr.changed() {
+                ui.data_mut(|d| d.insert_temp(dirty_id(), true));
                 let op = LabelOp::Color {
                     name: l.name.clone(),
                     color: c,
                 };
                 out.push(Intent::Label(op));
             }
-            if ui.button("Delete").clicked() {
+            if ui
+                .button("Delete")
+                .on_hover_text(format!("Delete label {}", l.name))
+                .clicked()
+            {
                 out.push(Intent::Label(LabelOp::Delete(l.name.clone())));
             }
         });
