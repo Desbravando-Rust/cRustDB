@@ -66,6 +66,20 @@ fn import_url_fills_fields_and_keeps_password_out_of_config() {
 }
 
 #[test]
+fn redis_url_import_rejected_until_driver_exists() {
+    // Arrange
+    let mut f = form();
+
+    // Act
+    let r = f.import_url("redis://h");
+
+    // Assert
+    assert_eq!(r, Err(UrlError::UnsupportedScheme("redis".into())));
+    assert_eq!(f.draft.driver, DriverKind::Postgres);
+    assert_eq!(f.draft.port, 5432);
+}
+
+#[test]
 fn tls_below_verify_full_shows_warning() {
     // Arrange
     let mut f = form();

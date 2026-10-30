@@ -244,7 +244,7 @@
 **Interfaces:**
 - Produces: `struct ParsedUrl { driver: DriverKind, host: String, port: Option<u16>, user: Option<String>, password: Option<SecretString>, database: Option<String>, tls_mode: Option<TlsMode>, warnings: Vec<UrlWarning> }`; `enum UrlWarning { DowngradedToRequire(String) }`; `enum UrlError { UnsupportedScheme(String), MissingHost, InvalidPort, Malformed }`; `fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError>`
 
-- [ ] **Step 1: Testes que falham:** `parses_postgres_with_sslmode` (`postgres://u:p%40ss@h:6543/db?sslmode=verify-full` → user `u`, senha `p@ss` decodificada, porta 6543, `VerifyFull`); `postgresql_scheme_accepted`; `mariadb_maps_to_mysql`; `mysql_ssl_mode_verify_identity_maps_to_verify_full`; `prefer_downgrades_to_require_with_warning`; `unknown_scheme_rejected` (`redis://h`); `ipv6_host_parsed` (`postgres://[::1]:5432/db` → host `::1`).
+- [ ] **Step 1: Testes que falham:** `parses_postgres_with_sslmode` (`postgres://u:p%40ss@h:6543/db?sslmode=verify-full` → user `u`, senha `p@ss` decodificada, porta 6543, `VerifyFull`); `postgresql_scheme_accepted`; `mariadb_maps_to_mysql`; `mysql_ssl_mode_verify_identity_maps_to_verify_full`; `prefer_downgrades_to_require_with_warning`; `unknown_scheme_rejected` (`mongodb://h`); `ipv6_host_parsed` (`postgres://[::1]:5432/db` → host `::1`).
 - [ ] **Step 2:** `cargo test -p crustdb-core url`. Esperado: FAIL.
 - [ ] **Step 3:** Implementar com o crate `url`. Mapa de `sslmode` (PG) e `ssl-mode` (MySQL): `disable`/`DISABLED` → Disable; `allow`/`prefer`/`PREFERRED` → Require + aviso; `require`/`REQUIRED` → Require; `verify-ca`/`VERIFY_CA` → VerifyCa; `verify-full`/`VERIFY_IDENTITY` → VerifyFull.
 - [ ] **Step 4:** Mesmo comando. Esperado: PASS.

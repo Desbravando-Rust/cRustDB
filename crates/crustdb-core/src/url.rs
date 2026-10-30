@@ -42,6 +42,7 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
     let driver = match url.scheme() {
         "postgres" | "postgresql" => DriverKind::Postgres,
         "mysql" | "mariadb" => DriverKind::Mysql,
+        "redis" | "rediss" => DriverKind::Redis,
         "sqlite" => return sqlite(&url),
         other => return Err(UrlError::UnsupportedScheme(other.to_owned())),
     };
@@ -83,7 +84,7 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         };
     }
 
-    Ok(ParsedUrl {
+    let mut parsed = ParsedUrl {
         driver,
         host,
         port: url.port(),
@@ -92,7 +93,33 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         database,
         tls_mode,
         warnings,
-    })
+    };
+    if driver == DriverKind::Redis {
+        redis_rules(&mut parsed, url.scheme() == "rediss")?;
+    }
+    Ok(parsed)
+}
+
+/// Redis specifics: ACL user defaults to `default`, the path is a numeric db index,
+/// and TLS follows the scheme (`redis` plain, `rediss` verified unless `sslmode=require`).
+fn redis_rules(p: &mut ParsedUrl, tls: bool) -> Result<(), UrlError> {
+    p.user.get_or_insert_with(|| "default".to_owned());
+    if p.database
+        .as_ref()
+        .is_some_and(|d| d.parse::<u32>().is_err())
+    {
+        return Err(UrlError::Malformed);
+    }
+    if tls {
+        // VerifyCa is not offered here: the driver cannot verify the chain without the name.
+        if p.tls_mode != Some(TlsMode::Require) {
+            p.tls_mode = Some(TlsMode::VerifyFull);
+        }
+    } else {
+        p.tls_mode = Some(TlsMode::Disable);
+        p.warnings.clear();
+    }
+    Ok(())
 }
 
 /// `sqlite:///abs/path.db`: the decoded path is the database file; there is no host
@@ -216,9 +243,79 @@ mod tests {
     fn unknown_scheme_rejected() {
         // Act & Assert
         assert_eq!(
-            parse_connection_url("redis://h").unwrap_err(),
-            UrlError::UnsupportedScheme("redis".into())
+            parse_connection_url("mongodb://h").unwrap_err(),
+            UrlError::UnsupportedScheme("mongodb".into())
         );
+    }
+
+    #[test]
+    fn parses_rediss_with_acl_user_and_db() {
+        // Act
+        let p = parse_connection_url("rediss://alice:p%40ss@h:6380/3").unwrap();
+
+        // Assert
+        assert_eq!(p.driver, DriverKind::Redis);
+        assert_eq!(p.user.as_deref(), Some("alice"));
+        assert_eq!(p.password.as_ref().unwrap().expose_secret(), "p@ss");
+        assert_eq!(p.port, Some(6380));
+        assert_eq!(p.database.as_deref(), Some("3"));
+        assert_eq!(p.tls_mode, Some(TlsMode::VerifyFull));
+    }
+
+    #[test]
+    fn redis_password_only_url_uses_default_user() {
+        // Act
+        let p = parse_connection_url("redis://:p@h").unwrap();
+
+        // Assert
+        assert_eq!(p.user.as_deref(), Some("default"));
+        assert_eq!(p.password.as_ref().unwrap().expose_secret(), "p");
+    }
+
+    #[test]
+    fn redis_db_path_must_be_number() {
+        // Act & Assert
+        for u in [
+            "redis://h/abc",
+            "redis://h/-1",
+            "redis://h/3/4",
+            "redis://h/4294967296",
+        ] {
+            assert_eq!(
+                parse_connection_url(u).unwrap_err(),
+                UrlError::Malformed,
+                "{u}"
+            );
+        }
+        assert_eq!(parse_connection_url("redis://h/").unwrap().database, None);
+    }
+
+    #[test]
+    fn redis_verify_ca_is_treated_as_verify_full() {
+        // Act
+        let p = parse_connection_url("rediss://h?sslmode=verify-ca").unwrap();
+
+        // Assert
+        assert_eq!(p.tls_mode, Some(TlsMode::VerifyFull));
+    }
+
+    #[test]
+    fn redis_require_skips_verification() {
+        // Act
+        let p = parse_connection_url("rediss://h?sslmode=require").unwrap();
+
+        // Assert
+        assert_eq!(p.tls_mode, Some(TlsMode::Require));
+    }
+
+    #[test]
+    fn plain_redis_url_disables_tls() {
+        // Act
+        let p = parse_connection_url("redis://h?sslmode=prefer").unwrap();
+
+        // Assert
+        assert_eq!(p.tls_mode, Some(TlsMode::Disable));
+        assert!(p.warnings.is_empty());
     }
 
     #[test]
