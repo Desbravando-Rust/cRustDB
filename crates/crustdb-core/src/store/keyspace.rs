@@ -32,19 +32,26 @@ struct Builder {
 }
 
 impl Builder {
-    fn into_nodes(self) -> Vec<KeyNode> {
-        self.children
+    fn into_nodes(children: BTreeMap<Vec<u8>, Builder>) -> Vec<KeyNode> {
+        children
             .into_iter()
-            .map(|(segment, b)| KeyNode {
-                segment,
-                key: b.key.clone(),
-                children: b.into_nodes(),
+            .map(|(segment, b)| {
+                let Builder { key, children } = b;
+                KeyNode {
+                    segment,
+                    key,
+                    children: Builder::into_nodes(children),
+                }
             })
             .collect()
     }
 }
 
-/// Splits on raw bytes; an empty separator yields a flat list.
+/// Tree depth limit; the server controls key shape, so recursion must stay bounded.
+const MAX_DEPTH: usize = 64;
+
+/// Splits on raw bytes; an empty separator yields a flat list. At `MAX_DEPTH`
+/// parts the rest of the key, separators included, becomes the last part.
 fn split<'a>(key: &'a [u8], sep: &[u8]) -> Vec<&'a [u8]> {
     if sep.is_empty() {
         return vec![key];
@@ -52,7 +59,7 @@ fn split<'a>(key: &'a [u8], sep: &[u8]) -> Vec<&'a [u8]> {
     let mut parts = Vec::new();
     let mut start = 0;
     let mut i = 0;
-    while i + sep.len() <= key.len() {
+    while parts.len() + 1 < MAX_DEPTH && i + sep.len() <= key.len() {
         if &key[i..i + sep.len()] == sep {
             parts.push(&key[start..i]);
             i += sep.len();
@@ -74,7 +81,7 @@ pub fn group(keys: &[EntryKey], sep: &str) -> Vec<KeyNode> {
         }
         node.key = Some(key.clone());
     }
-    root.into_nodes()
+    Builder::into_nodes(root.children)
 }
 
 #[cfg(test)]
@@ -90,6 +97,34 @@ mod tests {
 
     fn labels(nodes: &[KeyNode]) -> Vec<String> {
         nodes.iter().map(|n| n.label().into_owned()).collect()
+    }
+
+    fn depth(nodes: &[KeyNode]) -> usize {
+        let mut d = 0;
+        let mut level: Vec<&KeyNode> = nodes.iter().collect();
+        while !level.is_empty() {
+            d += 1;
+            level = level.iter().flat_map(|n| n.children.iter()).collect();
+        }
+        d
+    }
+
+    #[test]
+    fn deep_key_is_capped_at_max_depth() {
+        // Arrange
+        let raw = vec![b':'; 100_000];
+        let key = EntryKey(raw);
+
+        // Act
+        let tree = group(std::slice::from_ref(&key), ":");
+
+        // Assert
+        assert!(depth(&tree) <= MAX_DEPTH);
+        let mut node = &tree[0];
+        while let Some(child) = node.children.first() {
+            node = child;
+        }
+        assert_eq!(node.key, Some(key));
     }
 
     #[test]
