@@ -224,4 +224,48 @@ mod tests {
         assert_eq!(tree[0].key, Some(EntryKey(b"a".to_vec())));
         assert_eq!(labels(&tree[0].children), ["b"]);
     }
+
+    #[test]
+    fn multi_byte_separator_groups_only_on_full_match() {
+        // Arrange
+        let ks = keys(&["a::b", "c:d"]);
+
+        // Act
+        let tree = group(&ks, "::");
+
+        // Assert
+        assert_eq!(labels(&tree), ["a", "c:d"]);
+        assert_eq!(labels(&tree[0].children), ["b"]);
+        assert!(tree[1].children.is_empty());
+    }
+
+    #[test]
+    fn empty_segment_creates_empty_intermediate_node() {
+        // Arrange
+        let ks = keys(&["a::b"]);
+
+        // Act
+        let tree = group(&ks, ":");
+
+        // Assert
+        assert_eq!(labels(&tree), ["a"]);
+        assert_eq!(labels(&tree[0].children), [""]);
+        assert_eq!(labels(&tree[0].children[0].children), ["b"]);
+        assert!(tree[0].children[0].key.is_none());
+    }
+
+    #[test]
+    fn leading_and_trailing_separator_yield_empty_labels() {
+        // Arrange
+        let ks = keys(&[":a", "a:"]);
+
+        // Act
+        let tree = group(&ks, ":");
+
+        // Assert
+        assert_eq!(labels(&tree), ["", "a"]);
+        assert_eq!(labels(&tree[0].children), ["a"]);
+        assert_eq!(labels(&tree[1].children), [""]);
+        assert_eq!(tree[1].children[0].key, Some(EntryKey(b"a:".to_vec())));
+    }
 }
