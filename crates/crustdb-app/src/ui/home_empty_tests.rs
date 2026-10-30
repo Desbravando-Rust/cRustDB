@@ -42,7 +42,7 @@ fn empty_state_text_with_connections() {
 
     // Assert
     h.get_by_label("Select a connection");
-    h.get_by_label("Double-click to connect · Right-click for options");
+    h.get_by_label("Double-click to connect");
 }
 
 #[test]

@@ -70,7 +70,7 @@ pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
             ui.label("Create a connection to get started");
         } else {
             ui.label("Select a connection");
-            ui.weak("Double-click to connect · Right-click for options");
+            ui.weak("Double-click to connect");
         }
     });
 }
