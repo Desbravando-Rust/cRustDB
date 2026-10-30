@@ -5,6 +5,20 @@ use super::Intent;
 use crate::state::AppState;
 use crate::state::tree::NodePath;
 
+/// Label of the active workspace, read from the saved connection (the workspace copy goes stale
+/// after a catalog rename/delete).
+fn active_label<'a>(
+    state: &'a AppState,
+    active: &'a crate::state::workspace::WorkspaceState,
+) -> Option<&'a str> {
+    state
+        .config
+        .connections
+        .iter()
+        .find(|c| c.id == active.config.id)
+        .map_or(active.config.label.as_deref(), |c| c.label.as_deref())
+}
+
 /// Workspace selector, filter box and the lazy object tree of the active workspace.
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
@@ -12,8 +26,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         return out;
     };
     super::home::logo(ui);
+    let label = active_label(state, active);
     ui.horizontal(|ui| {
-        if let Some(n) = &active.config.label {
+        if let Some(n) = label {
             let stripe = ui.max_rect().left_top();
             let c = super::labels::color32(super::labels::color_of(&state.config.labels, n));
             let bar = egui::Rect::from_min_size(stripe, egui::vec2(3.0, 22.0));
@@ -32,7 +47,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     }
                 }
             });
-        if let Some(n) = &active.config.label {
+        if let Some(n) = label {
             super::labels::chip(ui, n, &state.config.labels);
         }
     });
@@ -163,10 +178,10 @@ mod tests {
     }
 
     #[test]
-    fn sidebar_shows_label_stripe() {
+    fn sidebar_shows_label_chip() {
         // Arrange
         let mut s = online();
-        s.workspaces[0].config.label = Some("dev".into());
+        s.config.connections[0].label = Some("dev".into());
         s.config.labels = vec![crate::storage::config::Label {
             name: "dev".into(),
             color: [1, 2, 3],
@@ -185,6 +200,45 @@ mod tests {
 
         // Assert
         h.get_by_label("dev");
+    }
+
+    /// (shows "new", shows "dev") after applying `f`.
+    fn chip_after(f: impl FnOnce(&mut AppState)) -> (bool, bool) {
+        let mut s = online();
+        s.workspaces[0].config.label = Some("dev".into());
+        s.config.connections[0].label = Some("dev".into());
+        f(&mut s);
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
+        h.run();
+        (
+            h.query_by_label("new").is_some(),
+            h.query_by_label("dev").is_some(),
+        )
+    }
+
+    #[test]
+    fn sidebar_chip_follows_label_rename() {
+        // Arrange & Act
+        let shown = chip_after(|s| s.config.connections[0].label = Some("new".into()));
+
+        // Assert
+        assert_eq!(shown, (true, false));
+    }
+
+    #[test]
+    fn sidebar_chip_gone_after_label_delete() {
+        // Arrange & Act
+        let shown = chip_after(|s| s.config.connections[0].label = None);
+
+        // Assert
+        assert_eq!(shown, (false, false));
     }
 
     #[test]
