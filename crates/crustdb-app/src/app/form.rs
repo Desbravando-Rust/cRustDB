@@ -34,7 +34,7 @@ impl CrustApp {
             Some(slot) => *slot = config.clone(),
             None => all.push(config.clone()),
         }
-        if let Err(e) = self.store.save(&all) {
+        if let Err(e) = self.store.save(&all, &self.state.config.labels) {
             if let Some(f) = &mut self.form {
                 f.errors = vec![FieldError {
                     field: "name",
