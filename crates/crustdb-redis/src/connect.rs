@@ -82,6 +82,11 @@ pub(crate) fn map_err(e: RedisError) -> DriverError {
     err(kind, message)
 }
 
+/// The server answered with an error reply (as opposed to I/O or protocol failures).
+pub(crate) fn is_server_error(e: &RedisError) -> bool {
+    e.code().is_some()
+}
+
 pub(crate) fn from_value<T: FromRedisValue>(v: redis::Value) -> Result<T, DriverError> {
     T::from_redis_value(v).map_err(|e| map_err(e.into()))
 }
@@ -248,5 +253,15 @@ mod tests {
             }
         );
         assert_eq!(e.message, "WRONGTYPE bad type");
+    }
+
+    #[test]
+    fn only_server_replies_count_as_server_errors() {
+        // Arrange
+        let io = RedisError::from(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+
+        // Act & Assert
+        assert!(is_server_error(&server_error("-NOPERM denied\r\n")));
+        assert!(!is_server_error(&io));
     }
 }

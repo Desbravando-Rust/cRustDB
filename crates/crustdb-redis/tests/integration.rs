@@ -249,6 +249,31 @@ async fn acl_user_without_config_still_lists_namespaces() {
 
 #[tokio::test]
 #[ignore = "docker"]
+async fn scan_skips_keys_the_acl_user_cannot_inspect() {
+    // Arrange
+    let redis = start_redis(None).await;
+    let mut admin = editor(&redis, None).await;
+    run(&mut admin, &["SET", "a:1", "v"]).await;
+    run(&mut admin, &["SET", "b:1", "v"]).await;
+    run(
+        &mut admin,
+        &["ACL", "SETUSER", "r", "on", ">pw", "~a:*", "+@all"],
+    )
+    .await;
+    let mut restricted = RedisDriver
+        .connect(&target(&redis, "r", "pw", None), SessionPurpose::Data)
+        .await
+        .unwrap();
+
+    // Act: SCAN lists b:1 but TYPE/PTTL on it are denied; the page must still come back.
+    let keys = all_keys(&mut restricted).await;
+
+    // Assert
+    assert_eq!(keys, HashSet::from([b"a:1".to_vec()]));
+}
+
+#[tokio::test]
+#[ignore = "docker"]
 async fn wrong_password_maps_to_auth_error() {
     // Arrange
     let redis = start_redis(None).await;

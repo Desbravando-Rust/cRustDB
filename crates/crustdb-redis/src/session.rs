@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 
 use crate::classify::guard_run;
 use crate::commands::{build, scan_argv};
-use crate::connect::{from_value, map_err};
+use crate::connect::{from_value, is_server_error, map_err};
 use crate::decode;
 use crate::tls::err;
 
@@ -63,38 +63,54 @@ impl RedisSession {
             .map_err(map_err)
     }
 
-    /// `(TYPE, PTTL)` of each key in one round trip.
+    /// `(TYPE, PTTL)` of each key in one round trip. A key the server refuses to inspect (ACL
+    /// checks key patterns for `TYPE`/`PTTL` but not for `SCAN`) yields `Err` for that key only.
     async fn types_and_ttls(
         &mut self,
         keys: &[Vec<u8>],
-    ) -> Result<Vec<(String, i64)>, DriverError> {
+    ) -> Result<Vec<Result<(String, i64), DriverError>>, DriverError> {
         let mut pipe = redis::pipe();
+        pipe.ignore_errors();
         for k in keys {
             pipe.add_command(build([b"TYPE", k.as_slice()]));
             pipe.add_command(build([b"PTTL", k.as_slice()]));
         }
         let flat: Vec<Value> = pipe.query_async(&mut self.conn).await.map_err(map_err)?;
+        if flat.len() != keys.len() * 2 {
+            return Err(err(
+                ErrorKind::Protocol,
+                "malformed TYPE/PTTL pipeline reply",
+            ));
+        }
         flat.as_chunks::<2>()
             .0
             .iter()
-            .map(|[ty, ms]| Ok((from_value(ty.clone())?, from_value(ms.clone())?)))
+            .map(|[ty, ms]| match (ty, ms) {
+                (Value::ServerError(e), _) | (_, Value::ServerError(e)) => {
+                    Ok(Err(map_err(e.clone().into())))
+                }
+                _ => Ok(Ok((from_value(ty.clone())?, from_value(ms.clone())?))),
+            })
             .collect()
     }
 
-    /// Accumulates `HSCAN`/`SSCAN` items until `wanted` are collected or the cursor wraps.
+    /// Accumulates `HSCAN`/`SSCAN` items until `limit + 1` elements (`per_item` replies each,
+    /// 2 for hashes) are collected or the cursor wraps.
     async fn sub_scan(
         &mut self,
         name: &str,
         key: &[u8],
-        wanted: usize,
+        limit: usize,
+        per_item: usize,
     ) -> Result<Vec<Value>, DriverError> {
+        let wanted = (limit + 1) * per_item;
         let (mut cursor, mut items) = (String::from("0"), Vec::new());
         loop {
-            let argv = scan_argv(name, Some(key), &cursor, None, wanted);
+            let argv = scan_argv(name, Some(key), &cursor, None, limit + 1);
             let reply = self.call(argv).await?;
             let (next, page) = from_value::<(String, Vec<Value>)>(reply)?;
             items.extend(page);
-            if next == "0" || items.len() >= wanted {
+            if scan_done(&next, items.len(), wanted) {
                 return Ok(items);
             }
             cursor = next;
@@ -116,12 +132,12 @@ impl RedisSession {
                 (ValueBody::Text(bytes), t)
             }
             ValueKind::Map => {
-                let items = self.sub_scan("HSCAN", key, (limit + 1) * 2).await?;
+                let items = self.sub_scan("HSCAN", key, limit, 2).await?;
                 let (v, t) = decode::cap(decode::pairs(Value::Array(items))?, limit);
                 (ValueBody::Map(v), t)
             }
             ValueKind::Set => {
-                let items = self.sub_scan("SSCAN", key, limit + 1).await?;
+                let items = self.sub_scan("SSCAN", key, limit, 1).await?;
                 let members = from_value::<Vec<Vec<u8>>>(Value::Array(items))?;
                 let (v, t) = decode::cap(members, limit);
                 (ValueBody::Set(v), t)
@@ -165,7 +181,7 @@ impl RedisSession {
             .await
         {
             Ok(n) => Ok(n),
-            Err(e) if e.code().is_some() => Ok(None),
+            Err(e) if is_server_error(&e) => Ok(None),
             Err(e) => Err(map_err(e)),
         }
     }
@@ -175,6 +191,34 @@ impl RedisSession {
         let info = from_value::<String>(info)?;
         Ok(decode::namespaces_from_keyspace(&info, self.db))
     }
+}
+
+/// Pairs scanned keys with their `(TYPE, PTTL)`. Keys that vanished (expired between `SCAN` and
+/// `TYPE`) or that the server refused to inspect are dropped.
+fn key_entries(
+    keys: Vec<Vec<u8>>,
+    infos: Vec<Result<(String, i64), DriverError>>,
+) -> Vec<KeyEntry> {
+    keys.into_iter()
+        .zip(infos)
+        .filter_map(|(key, info)| {
+            let (ty, pttl) = info.ok()?;
+            Some(KeyEntry {
+                key: EntryKey(key),
+                kind: decode::value_kind(&ty)?,
+                ttl: decode::ttl(pttl)?,
+            })
+        })
+        .collect()
+}
+
+/// Only server-side errors (ACL denied, renamed command) fall back; I/O and auth failures propagate.
+fn falls_back(kind: &ErrorKind) -> bool {
+    matches!(kind, ErrorKind::Query { .. })
+}
+
+fn scan_done(next_cursor: &str, collected: usize, wanted: usize) -> bool {
+    next_cursor == "0" || collected >= wanted
 }
 
 impl Drop for RedisSession {
@@ -202,7 +246,7 @@ impl StoreSession for RedisSession {
                 None => self.keyspace_namespaces().await,
             },
             // ACLs often forbid CONFIG; I/O errors are not a reason to fall back.
-            Err(e) if matches!(e.kind, ErrorKind::Query { .. }) => self.keyspace_namespaces().await,
+            Err(e) if falls_back(&e.kind) => self.keyspace_namespaces().await,
             Err(e) => Err(e),
         }
     }
@@ -219,18 +263,7 @@ impl StoreSession for RedisSession {
         let reply = self.call(argv).await?;
         let (next, keys) = from_value::<(String, Vec<Vec<u8>>)>(reply)?;
         let infos = self.types_and_ttls(&keys).await?;
-        let entries = keys
-            .into_iter()
-            .zip(infos)
-            .filter_map(|(key, (ty, pttl))| {
-                // Keys that expired between SCAN and TYPE/PTTL are dropped.
-                Some(KeyEntry {
-                    key: EntryKey(key),
-                    kind: decode::value_kind(&ty)?,
-                    ttl: decode::ttl(pttl)?,
-                })
-            })
-            .collect();
+        let entries = key_entries(keys, infos);
         Ok(ScanPage {
             entries,
             next: (next != "0").then_some(next),
@@ -241,7 +274,9 @@ impl StoreSession for RedisSession {
         let (ty, pttl) = self
             .types_and_ttls(std::slice::from_ref(&key.0))
             .await?
-            .remove(0);
+            .into_iter()
+            .next()
+            .ok_or_else(|| err(ErrorKind::Protocol, "missing TYPE/PTTL reply"))??;
         let gone = || {
             err(
                 ErrorKind::Query {
@@ -269,4 +304,67 @@ impl StoreSession for RedisSession {
     }
 
     async fn close(self: Box<Self>) {}
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn denied() -> DriverError {
+        err(
+            ErrorKind::Query {
+                code: Some("NOPERM".into()),
+                position: None,
+            },
+            "NOPERM",
+        )
+    }
+
+    #[test]
+    fn scan_page_keeps_only_keys_that_can_be_inspected() {
+        // Arrange
+        let keys = vec![
+            b"ok".to_vec(),
+            b"gone".to_vec(),
+            b"denied".to_vec(),
+            b"mod".to_vec(),
+        ];
+        let infos = vec![
+            Ok(("string".to_owned(), 1500)),
+            Ok(("none".to_owned(), -2)),
+            Err(denied()),
+            Ok(("ReJSON-RL".to_owned(), -1)),
+        ];
+
+        // Act
+        let entries = key_entries(keys, infos);
+
+        // Assert
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].key, EntryKey(b"ok".to_vec()));
+        assert_eq!(entries[0].kind, ValueKind::Text);
+        assert_eq!(entries[0].ttl, Some(Duration::from_millis(1500)));
+        assert_eq!(entries[1].kind, ValueKind::Other("ReJSON-RL".into()));
+        assert_eq!(entries[1].ttl, None);
+    }
+
+    #[test]
+    fn only_server_errors_fall_back_for_namespaces() {
+        // Act & Assert
+        assert!(falls_back(&denied().kind));
+        for kind in [ErrorKind::Connect, ErrorKind::Auth, ErrorKind::Timeout] {
+            assert!(!falls_back(&kind), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn sub_scan_stops_at_cursor_wrap_or_enough_items() {
+        // Act & Assert
+        assert!(scan_done("0", 0, 10));
+        assert!(scan_done("17", 10, 10));
+        assert!(!scan_done("17", 9, 10));
+    }
 }
