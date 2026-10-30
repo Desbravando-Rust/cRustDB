@@ -49,6 +49,22 @@ impl MysqlContainer {
     }
 }
 
+/// Redis protected by `requirepass`; with TLS, only the TLS port (6379) is served.
+pub struct RedisContainer {
+    pub host: String,
+    pub port: u16,
+    pub password: String,
+    guard: ContainerAsync<GenericImage>,
+}
+
+impl RedisContainer {
+    /// Stops and starts the container (connections drop; the host port may change).
+    pub async fn restart(&self) {
+        self.guard.stop_with_timeout(Some(1)).await.unwrap();
+        self.guard.start().await.unwrap();
+    }
+}
+
 pub struct SshContainer {
     pub host: String,
     pub port: u16,
@@ -220,6 +236,48 @@ pub async fn start_mysql(tls: Option<&TestCerts>, network: Option<&str>) -> Mysq
         user: "root".into(),
         password: PASSWORD.into(),
         alias,
+        guard: c,
+    }
+}
+
+/// Image from `CRUSTDB_REDIS_IMAGE` (default `redis:latest`). With `tls`, plain TCP is off and
+/// the cert is valid for the hostnames given to `certs_for`.
+pub async fn start_redis(tls: Option<&TestCerts>) -> RedisContainer {
+    let mut args = vec!["--requirepass", PASSWORD];
+    let mut cli = vec!["redis-cli", "--no-auth-warning", "-a", PASSWORD];
+    if tls.is_some() {
+        args.extend([
+            "--port",
+            "0",
+            "--tls-port",
+            "6379",
+            "--tls-cert-file",
+            "/etc/crustdb-tls/server.crt",
+            "--tls-key-file",
+            "/etc/crustdb-tls/server.key",
+            "--tls-ca-cert-file",
+            "/etc/crustdb-tls/ca.pem",
+            "--tls-auth-clients",
+            "no",
+        ]);
+        cli.extend(["--tls", "--insecure"]);
+    }
+    let mut req = image("CRUSTDB_REDIS_IMAGE", "redis:latest")
+        .with_exposed_port(6379.tcp())
+        .with_cmd(args);
+    if let Some(t) = tls {
+        for (target, src) in copy_tls(t, "/etc/crustdb-tls") {
+            req = req.with_copy_to(target, src);
+        }
+    }
+    let c = req.start().await.unwrap();
+    cli.push("ping");
+    wait_exec(&c, &cli).await;
+    let (host, port) = endpoint(&c, 6379).await;
+    RedisContainer {
+        host,
+        port,
+        password: PASSWORD.into(),
         guard: c,
     }
 }
