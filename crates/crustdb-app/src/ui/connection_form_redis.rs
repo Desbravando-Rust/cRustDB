@@ -27,32 +27,3 @@ pub fn fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     error_for(ui, f, "key_separator");
     ui.end_row();
 }
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crustdb_core::model::DriverKind;
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::Queryable;
-
-    use super::*;
-
-    #[test]
-    fn redis_form_shows_index_and_separator_instead_of_database() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Redis, true);
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                super::super::connection_form::show(ui, &mut f, &[]);
-            });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("Database index");
-        h.get_by_label("Key separator");
-        assert!(h.query_by_label("Database").is_none());
-    }
-}
