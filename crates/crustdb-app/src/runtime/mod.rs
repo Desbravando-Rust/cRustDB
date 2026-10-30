@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 
 use crustdb_core::driver::Driver;
 use crustdb_core::model::{DriverKind, Row};
+use crustdb_core::store::StoreDriver;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 mod protocol;
@@ -14,18 +15,42 @@ pub use protocol::*;
 /// Maximum rows per `Event::Rows`.
 pub const ROWS_BATCH: usize = 500;
 
+/// A registered driver, by the kind of data model it serves.
+#[derive(Clone)]
+pub enum Backend {
+    Sql(Arc<dyn Driver>),
+    Store(Arc<dyn StoreDriver>),
+}
+
+impl Backend {
+    pub fn kind(&self) -> DriverKind {
+        match self {
+            Backend::Sql(d) => d.kind(),
+            Backend::Store(d) => d.kind(),
+        }
+    }
+}
+
 #[derive(Default)]
-// `DriverKind` has no `Hash`; two entries at most, so a Vec lookup is enough.
-pub struct DriverRegistry(Vec<Arc<dyn Driver>>);
+// `DriverKind` has no `Hash`; a few entries at most, so a Vec lookup is enough.
+pub struct DriverRegistry(Vec<Backend>);
 
 impl DriverRegistry {
-    pub fn with(mut self, driver: Arc<dyn Driver>) -> Self {
-        self.0.retain(|d| d.kind() != driver.kind());
-        self.0.push(driver);
+    pub fn with(self, driver: Arc<dyn Driver>) -> Self {
+        self.backend(Backend::Sql(driver))
+    }
+
+    pub fn with_store(self, driver: Arc<dyn StoreDriver>) -> Self {
+        self.backend(Backend::Store(driver))
+    }
+
+    fn backend(mut self, b: Backend) -> Self {
+        self.0.retain(|d| d.kind() != b.kind());
+        self.0.push(b);
         self
     }
 
-    pub fn get(&self, kind: DriverKind) -> Option<Arc<dyn Driver>> {
+    pub fn get(&self, kind: DriverKind) -> Option<Backend> {
         self.0.iter().find(|d| d.kind() == kind).cloned()
     }
 }
@@ -171,6 +196,10 @@ fn no_actor(cmd: &Command) -> Event {
         | LoadChildren { .. }
         | LoadColumns { .. }
         | LoadDiagram { .. }
+        | ListNamespaces { .. }
+        | ScanKeys { .. }
+        | ReadEntry { .. }
+        | CancelStore { .. }
         | CancelExport { .. } => TabId(0),
     };
     Event::Notice {

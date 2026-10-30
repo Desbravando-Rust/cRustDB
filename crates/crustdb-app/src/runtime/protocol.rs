@@ -13,6 +13,8 @@ use crustdb_core::model::{
 use crustdb_core::query::TableQuery;
 use crustdb_core::safety::Evaluation;
 pub use crustdb_core::sql::TxOp;
+use crustdb_core::store::keyspace::EntryKey;
+use crustdb_core::store::{EntryView, ScanPage};
 use secrecy::SecretString;
 
 use crate::net::ssh::SshSecrets;
@@ -89,6 +91,28 @@ pub enum Command {
         req: RequestId,
         database: String,
         schema: Option<String>,
+    },
+    /// Logical databases of a store workspace, answered by `Event::Namespaces`.
+    ListNamespaces {
+        ws: WorkspaceId,
+        req: RequestId,
+    },
+    /// One `ROWS_BATCH` of keys from `cursor` (`None` starts over), answered by `Event::KeysScanned`.
+    ScanKeys {
+        ws: WorkspaceId,
+        req: RequestId,
+        cursor: Option<String>,
+        pattern: Option<String>,
+    },
+    /// One entry's value, answered by `Event::EntryRead`.
+    ReadEntry {
+        ws: WorkspaceId,
+        req: RequestId,
+        key: EntryKey,
+    },
+    /// Drops the store session mid-operation; the pending request answers "cancelled".
+    CancelStore {
+        ws: WorkspaceId,
     },
     OpenTable {
         ws: WorkspaceId,
@@ -192,6 +216,18 @@ pub enum Event {
     Diagram {
         req: RequestId,
         tables: Option<Vec<DiagramTable>>,
+    },
+    Namespaces {
+        req: RequestId,
+        result: Result<Vec<String>, String>,
+    },
+    KeysScanned {
+        req: RequestId,
+        result: Result<ScanPage, String>,
+    },
+    EntryRead {
+        req: RequestId,
+        result: Result<EntryView, String>,
     },
     Page {
         req: RequestId,
