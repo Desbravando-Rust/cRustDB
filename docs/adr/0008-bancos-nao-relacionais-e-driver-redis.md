@@ -18,12 +18,12 @@ O Redis difere dos drivers atuais assim:
 Fatos do código (verificados):
 
 1. `Driver` (`crates/crustdb-core/src/driver.rs:92-93`) exige `dialect()` e `introspector()`. `Session` tem `start`, `start_params`, `explain_rows`, `use_database` e `CancelHandle`. `dialect()` é usado em `actors/data.rs:274` e `actors/export/mod.rs:235`. `introspector()` é usado em `actors/workspace.rs`, `actors/workspace/diagram.rs`, `actors/editor/mod.rs:342` e `actors/data.rs`.
-2. `DriverKind { Postgres, Mysql, Sqlite }` está em `crates/crustdb-core/src/model.rs:8` e é serializado em `connections.json`. Há `match` exaustivos em `state/tree.rs:64`, `state/connection_form.rs:45`, `state/tree_home.rs:14`, `ui/home.rs:19` e `:27`, `ui/connection_form.rs:154` e `export_fmt.rs:42`. Código de produção não usa `unreachable!` hoje (o único está em teste, `runtime/mod.rs:279`).
+2. `DriverKind { Postgres, Mysql, Sqlite }` está em `crates/crustdb-core/src/model.rs:8` e é serializado em `connections.json`. Há `match` exaustivos no app (`state/tree.rs:64`, `state/connection_form.rs:45`, `state/tree_home.rs:14`, `ui/home.rs:19` e `:27`, `ui/connection_form.rs:154`, `export_fmt.rs:42`), no core (`sql/mod.rs:68-74` com `dialect(kind)`, `sql/keywords.rs:164-169`, `query.rs:131-138` com `operators_for`) e no testkit (`crates/crustdb-testkit/src/fake_driver.rs:143-147`). Código de produção não usa `unreachable!` hoje (o único está em teste, `runtime/mod.rs:279`).
 3. `DriverRegistry` é `Vec<Arc<dyn Driver>>` (`crates/crustdb-app/src/runtime/mod.rs:19`).
-4. O túnel SSH fica no app: ele preenche `ConnectTarget.connect_addr`, e `host` continua sendo o nome TLS (`driver.rs:32`).
+4. O túnel SSH fica no app: ele preenche `ConnectTarget.connect_addr`, e `host` continua sendo o nome TLS (`driver.rs:31`).
 5. O teste `unknown_scheme_rejected` (`crates/crustdb-core/src/url.rs:219`) usa `redis://h`, e o plano o cita em `docs/specs/2026-10-17-crustdb-plan.md:247`. Ambos passam a usar `mongodb://h`.
 6. `Verdict { Run, Confirm, Password }` (`safety.rs:37`) é reaproveitável. `Classified`/`StatementClass` não são, pois dependem do AST do `sqlparser`.
-7. "Frame" é a meta de UI de até 16 ms (spec §8, `docs/specs/2026-10-17-crustdb-spec.md:326`; plano, linhas 699-702). É o critério de "100k chaves sem travar".
+7. "Frame" é a meta de UI de até 16 ms (spec §7, `docs/specs/2026-10-17-crustdb-spec.md:326`; plano, linhas 699-702). É o critério de "100k chaves sem travar".
 8. `deny.toml` permite Apache-2.0, MIT, BSD-2/3, ISC, MPL-2.0, Zlib, Unicode-3.0 e BUSL-1.1. As licenças de `redis` (BSD-3-Clause) e `fred` (MIT) estão aqui **de memória** e devem ser confirmadas com `cargo deny check` na fase de implementação.
 
 ## Opções Consideradas
@@ -46,12 +46,12 @@ Adicionar `DriverKind::Redis` (serde `"redis"`) e `Product::Redis`. No core, `pu
 * `row_edit` (ADRs 0003/0004), `ai_query` (ADR 0005);
 * `command_editor`.
 
-Para `KeyValue` tudo é `false`, exceto `command_editor`. A UI desabilita a ação com tooltip "Not supported for Redis". Nunca usa `unreachable!`/`panic!`. Os `match` existentes ganham um braço `Redis` explícito.
+Para `KeyValue` tudo é `false`, exceto `command_editor`. A UI desabilita a ação com tooltip "Not supported for Redis". Nunca usa `unreachable!`/`panic!`. Os `match` existentes ganham um braço `Redis` explícito. Nos helpers SQL do core (`sql::dialect`, `keywords`, `operators_for`) o braço Redis devolve um valor inerte (`GenericDialect`, lista de palavras-chave vazia, `COMPARE`). Ele é **inalcançável** em produção, pois `Capabilities` desliga `sql_editor`, `table_tab` e `row_edit`, de modo que nenhum caminho SQL é aberto para Redis. A diferença para o stub da Opção 1: aqui o valor inerte é só o braço total de um `match` sobre enum fechado, sem implementar `Driver` nem prometer contrato SQL. O `fake_driver` do testkit é só de `Driver` SQL e recebe um braço equivalente (`GenericDialect`). Um teste (`redis_kind_never_reaches_sql_helpers`) garante que `capabilities()` de Redis desliga todas as telas que os usam.
 
 ### D3. Traits `store` (ISP + DIP)
 Novo módulo `crustdb-core::store`, sem IO, com `async_trait` como o resto do core:
 
-* `StoreDriver { kind(); connect(&ConnectTarget, SessionPurpose) -> Box<dyn StoreSession>; assess(&[Vec<u8>]) -> (Verdict, reason) }`
+* `StoreDriver { kind(); connect(&ConnectTarget, SessionPurpose) -> Box<dyn StoreSession>; assess(&[Vec<u8>]) -> Result<(Verdict, String), Refused> }`. `Refused` é um erro tipado (`thiserror`) com o motivo (ver D9)
 * `StoreSession { server_version(); ping(); namespaces(); scan(ns, &ScanRequest) -> ScanPage; read(ns, &EntryKey, limit) -> EntryView; run(&[Vec<u8>]) -> Reply; close() }`
 
 Tipos neutros, reaproveitáveis por outros NoSQL:
@@ -86,17 +86,17 @@ Não há `CancelHandle` (ver D8). No app, `DriverRegistry::get(kind)` devolve `e
 ### D7. Árvore e leitura sem travar
 * Só `SCAN cursor MATCH p COUNT n`, com cursor opaco e lotes de 500 (`ROWS_BATCH`). **Nunca `KEYS`.** `SCAN` pode duplicar, então o app deduplica.
 * `TYPE` e `PTTL` por lote, via pipeline. `MEMORY USAGE` só ao abrir a chave (negado -> `None`).
-* Leitura sempre limitada: `GETRANGE 0 CELL_MEMORY_CAP`; `HSCAN`/`SSCAN`/`ZSCAN` ou `ZRANGE 0 limit WITHSCORES`; `LRANGE 0 limit-1`; `XRANGE - + COUNT limit`. `JSON.GET` só se `MODULE LIST` ou `COMMAND INFO JSON.GET` indicar o módulo. Ao passar do limite, `truncated = true`.
+* Leitura sempre limitada: `GETRANGE 0 CELL_MEMORY_CAP`; `HSCAN`/`SSCAN`/`ZSCAN` ou `ZRANGE 0 limit WITHSCORES`; `LRANGE 0 limit`; `XRANGE - + COUNT limit+1`. `JSON.GET` só se `MODULE LIST` ou `COMMAND INFO JSON.GET` indicar o módulo. Regra única: pedir sempre `limit + 1` itens (sentinela); se vierem mais de `limit`, descartar o excedente e marcar `truncated = true`. Para `GETRANGE`, pedir `CELL_MEMORY_CAP + 1` bytes. `HSCAN`/`SSCAN`/`ZSCAN` acumulam até `limit + 1`.
 
 ### D8. Cancelamento
-Não há cancel no servidor. O ator descarta o `Box<dyn StoreSession>` (fecha o socket) e reconecta sob demanda. Trade-off: Lua ou comando lento segue no servidor. `SCRIPT KILL` fica fora de escopo.
+Não há cancel no servidor. Durante o `.await` de `run()`/`scan()` o ator tem `&mut` da sessão, então ele não consegue descartá-la de fora. Mecanismo: a sessão vive numa task dona, e o ator faz `tokio::select!` entre a operação e um canal de cancelamento (alternativa equivalente: `abort()` da task dona). No cancelamento a task sai do `select!` e faz o drop do `Box<dyn StoreSession>` (fecha o socket); o ator reconecta sob demanda. **Invariante:** nenhum clone da `MultiplexedConnection` pode sobreviver ao drop (nem em tasks auxiliares, nem em pipelines em voo), senão o socket não fecha. O teste `dropping_session_closes_server_client` cobre isso. Trade-off: Lua ou comando lento segue no servidor. `SCRIPT KILL` fica fora de escopo.
 
 ### D9. Somente leitura e comandos perigosos
 * Sessões Metadata, Data e Export recusam `run()`. O driver garante isso.
-* `crustdb_redis::classify(argv) -> CommandClass` é exposta por `StoreDriver::assess`. Reaproveita o `Verdict` e o fluxo do §4.7.
-  * **Password:** `FLUSHALL`, `FLUSHDB`, `SHUTDOWN`.
-  * **Confirm:** `CONFIG SET|REWRITE|RESETSTAT`, `DEBUG`, `KEYS`, `SCRIPT FLUSH`, `FUNCTION FLUSH|DELETE`, `CLIENT KILL`, `MIGRATE`, `REPLICAOF`/`SLAVEOF`, `ACL SETUSER|DELUSER`, `MODULE`, `SAVE`, `SWAPDB`; `DEL`/`UNLINK` com mais chaves que o limite; comando desconhecido.
-  * **Recusados (fora de escopo):** `MULTI`/`EXEC`/`WATCH`, `SUBSCRIBE`/`PSUBSCRIBE`/`MONITOR`, `B*POP` e `XREAD BLOCK`.
+* `crustdb_redis::classify(argv)` é exposta por `StoreDriver::assess` como `Result<(Verdict, String), Refused>`. Não existe `CommandClass`: `Verdict` (Run/Confirm/Password) mais o motivo cobrem a classificação, e `Err(Refused)` cobre "Recusado". Reaproveita o `Verdict` e o fluxo do §4.7. `run()` também devolve o mesmo erro tipado se receber um comando recusado, sem depender de a UI ter chamado `assess`.
+  * **Password:** `FLUSHALL`, `FLUSHDB`, `SHUTDOWN` e `EVAL`/`EVALSHA`/`EVAL_RO`/`EVALSHA_RO`/`FCALL`/`FCALL_RO`. O script não é analisável (`EVAL "return redis.call('FLUSHALL')" 0` contornaria o Password), então todo script é tratado como o pior caso. Aceitamos o custo: a variante `_RO` também pede senha, por não termos como provar que o script é de leitura.
+  * **Confirm:** `CONFIG SET|REWRITE|RESETSTAT`, `DEBUG`, `KEYS`, `SCRIPT FLUSH`, `FUNCTION FLUSH|DELETE`, `CLIENT KILL`, `MIGRATE`, `REPLICAOF`/`SLAVEOF`, `ACL SETUSER|DELUSER`, `MODULE`, `SAVE`, `SWAPDB`, `SCRIPT LOAD`, `FUNCTION LOAD`; `DEL`/`UNLINK` com mais chaves que o limite; comando desconhecido.
+  * **Recusados (fora de escopo):** `MULTI`/`EXEC`/`WATCH`, `SUBSCRIBE`/`PSUBSCRIBE`/`MONITOR`, `B*POP` e `XREAD BLOCK`. Também recusados por quebrarem o pareamento ou o estado da conexão multiplexada: `CLIENT REPLY`, `HELLO`, `RESET`, `QUIT`. `SELECT` e `AUTH` via `run()` são recusados: o namespace e a identidade da sessão só mudam por `connect` ou pelo seletor de namespace (que reconecta com `SELECT n`), nunca por comando livre. Escolha registrada para evitar que um `SELECT` no editor mude o banco de forma silenciosa para as leituras seguintes.
 * Tokenizador estilo `redis-cli` (aspas, `\xHH`). Cada argumento vai como bulk RESP. **Nunca concatenar** (anti-injeção). Sem `quote_ident` nem `Dialect`.
 
 ### D10. Fora de escopo
@@ -120,9 +120,9 @@ Cluster, Sentinel, Pub/Sub, `MULTI`/`EXEC`, edição de valores, mTLS e `SCRIPT 
 ## Plano de Testes
 Só comportamento do domínio. Proibido testar apenas redis-rs ou serde sem regra do CrustDB. Testes seguem AAA.
 
-**Core (unit):** `parses_rediss_with_acl_user_and_db` (`rediss://alice:p%40ss@h:6380/3` -> Redis, `alice`, `p@ss`, db `"3"`, `VerifyFull`); `redis_password_only_url_uses_default_user`; `redis_db_path_must_be_number`; `unknown_scheme_rejected` (agora com `mongodb://h`); `key_value_kind_disables_sql_screens`; `groups_keys_by_separator_prefix`; `custom_separator_groups_by_it`; `key_without_separator_is_leaf`; `non_utf8_key_keeps_raw_bytes`; `hash_body_maps_to_field_value_rows`; `zset_rows_keep_score_order`.
+**Core (unit):** `parses_rediss_with_acl_user_and_db` (`rediss://alice:p%40ss@h:6380/3` -> Redis, `alice`, `p@ss`, db `"3"`, `VerifyFull`); `redis_password_only_url_uses_default_user`; `redis_db_path_must_be_number`; `redis_verify_ca_is_treated_as_verify_full`; `redis_require_skips_verification`; `redis_kind_never_reaches_sql_helpers`; `unknown_scheme_rejected` (agora com `mongodb://h`); `key_value_kind_disables_sql_screens`; `groups_keys_by_separator_prefix`; `custom_separator_groups_by_it`; `key_without_separator_is_leaf`; `non_utf8_key_keeps_raw_bytes`; `hash_body_maps_to_field_value_rows`; `zset_rows_keep_score_order`.
 
-**`crustdb-redis` (unit, sem Docker):** `flushall_requires_password`; `config_get_runs_but_config_set_confirms`; `del_over_key_limit_confirms`; `unknown_command_confirms`; `command_name_is_case_insensitive`; `subscribe_monitor_multi_rejected`; `tokenizer_keeps_quoted_crlf_as_single_arg` (`SET k "v\r\nFLUSHALL"` resulta em exatamente 3 argumentos); `unterminated_quote_errors`.
+**`crustdb-redis` (unit, sem Docker):** `flushall_requires_password`; `config_get_runs_but_config_set_confirms`; `del_over_key_limit_confirms`; `unknown_command_confirms`; `command_name_is_case_insensitive`; `subscribe_monitor_multi_rejected`; `eval_cannot_bypass_flushall_password` (`EVAL`, `EVALSHA`, `FCALL` e variantes `_RO` dão Password); `script_load_and_function_load_confirm`; `connection_state_commands_rejected` (`CLIENT REPLY`, `HELLO`, `RESET`, `QUIT`, `SELECT`, `AUTH`; e `run()` também recusa); `tokenizer_keeps_quoted_crlf_as_single_arg` (`SET k "v\r\nFLUSHALL"` resulta em exatamente 3 argumentos); `unterminated_quote_errors`.
 
 **`crustdb-redis` (integração, `#[ignore = "docker"]`, testcontainers `GenericImage` com `redis:latest` ou `CRUSTDB_REDIS_IMAGE`):** `scan_visits_all_10k_keys_in_bounded_pages`; `reads_each_type_with_ttl_and_size`; `large_hash_read_is_truncated_at_limit`; `binary_key_round_trips`; `select_db_isolates_keyspace`; `acl_user_without_config_still_lists_namespaces`; `wrong_password_maps_to_auth_error`; `non_editor_session_rejects_run`; `dropping_session_closes_server_client` (`CLIENT LIST` numa segunda sessão); TLS com CA opcional.
 
