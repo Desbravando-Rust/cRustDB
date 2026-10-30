@@ -427,7 +427,7 @@ mod tests {
         let mut h = Harness::builder()
             .with_accessibility_check(false)
             .build_ui(|ui| {
-                show(ui, &mut f);
+                show(ui, &mut f, &[]);
             });
         h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
         h.run();
