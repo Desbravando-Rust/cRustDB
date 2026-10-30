@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::time::Instant;
 
@@ -10,7 +10,7 @@ use super::dialogs::{Dialog, DialogStack};
 use super::query_tab::{QueryTab, char_to_byte};
 use super::table_tab::{Structure, TableTab, TableView};
 use super::tree::{ObjectTree, OpenAction, open_action};
-use crate::runtime::{Command, Event, RequestId, TabId, WorkspaceId};
+use crate::runtime::{Command, Event, RequestId, TabId, TxState, WorkspaceId};
 use crate::storage::config::{ConnectionConfig, LoadedConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,7 +101,9 @@ pub struct AppState {
     next_tab: u64,
     pub(super) evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
     next_exec: u64,
-    outbox: Vec<Command>,
+    pub(super) outbox: Vec<Command>,
+    /// Workspaces waiting for their editors' COMMIT/ROLLBACK before the real `Disconnect`.
+    pub(super) disconnecting: HashMap<WorkspaceId, HashSet<TabId>>,
 }
 
 impl AppState {
@@ -118,6 +120,7 @@ impl AppState {
             // High range so these ids cannot collide with the tabs' own counters.
             next_exec: 1 << 62,
             outbox: vec![],
+            disconnecting: HashMap::new(),
         }
     }
 
@@ -357,6 +360,8 @@ impl AppState {
                 }
             }
             Event::Notice { tab, text } => {
+                // A notice while resolving means the COMMIT/ROLLBACK failed: stay connected.
+                self.disconnecting.retain(|_, tabs| !tabs.contains(&tab));
                 if let Some(t) = self.table_mut(tab) {
                     t.fail(text);
                 } else if let Some(q) = self.query_mut(tab) {
@@ -378,9 +383,12 @@ impl AppState {
                     q.apply(&e);
                 }
             }
-            Event::TxChanged { tab, .. } => {
+            Event::TxChanged { tab, state } => {
                 if let Some(q) = self.query_mut(tab) {
                     q.apply(&e);
+                }
+                if state == TxState::Idle {
+                    self.tx_resolved(tab);
                 }
             }
             Event::Ddl { req, text } => {

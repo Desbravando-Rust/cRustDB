@@ -70,6 +70,12 @@ pub enum Dialog {
         id: ConnectionId,
         name: String,
     },
+    /// Disconnect with an open transaction and/or pending row edits.
+    Disconnect {
+        ws: WorkspaceId,
+        has_tx: bool,
+        pending_rows: usize,
+    },
 }
 
 /// What the session was opened with, for the password prompt (D25).
@@ -110,7 +116,9 @@ impl DialogStack {
     /// Drops the dialogs that belong to a workspace or to one of its tabs.
     pub fn retain_ws(&mut self, ws: WorkspaceId, tabs: &[TabId]) {
         self.0.retain(|d| match d {
-            Dialog::Safety { ws: w, .. } | Dialog::HostKey { ws: w, .. } => *w != ws,
+            Dialog::Safety { ws: w, .. }
+            | Dialog::HostKey { ws: w, .. }
+            | Dialog::Disconnect { ws: w, .. } => *w != ws,
             Dialog::CloseWithTx { tab } | Dialog::DirtyFile { tab } => !tabs.contains(tab),
             Dialog::DeleteConnection { .. } => true,
         });
