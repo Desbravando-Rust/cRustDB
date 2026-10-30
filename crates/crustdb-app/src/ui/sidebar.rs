@@ -11,7 +11,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let Some(active) = state.active_online() else {
         return out;
     };
-    super::home::logo(ui, 48.0);
+    super::home::logo(ui);
     egui::ComboBox::from_id_salt("workspace")
         .selected_text(&active.config.name)
         .show_ui(ui, |ui| {
@@ -28,15 +28,19 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if ui.button("New query").clicked() {
             out.push(Intent::NewQuery);
         }
+        ui.add_space(8.0);
         if ui.button("Disconnect").clicked() {
             out.push(Intent::Disconnect(active.id));
         }
     });
     let mut q = active.tree.filter_text().to_owned();
-    if ui
-        .add(egui::TextEdit::singleline(&mut q).hint_text("filter"))
-        .changed()
-    {
+    let edit = egui::Frame::new()
+        .fill(egui::Color32::from_gray(40))
+        .inner_margin(4.0)
+        .show(ui, |ui| {
+            ui.add(egui::TextEdit::singleline(&mut q).hint_text("filter"))
+        });
+    if edit.inner.changed() {
         out.push(Intent::Filter(q));
     }
     egui::ScrollArea::both().show(ui, |ui| {
@@ -130,5 +134,62 @@ mod tests {
         let logo = h.get_by_label("cRustDB logo").rect();
         let combo = h.get_by_role(egui::accesskit::Role::ComboBox).rect();
         assert!(logo.top() < combo.top());
+    }
+
+    fn online() -> AppState {
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].status = Status::Online(ServerVersion {
+            product: Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        });
+        s.active = Some(ws);
+        s
+    }
+
+    #[test]
+    fn sidebar_logo_is_150_square() {
+        // Arrange
+        let s = online();
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        let size = h.get_by_label("cRustDB logo").rect().size();
+        assert_eq!(size, egui::vec2(150.0, 150.0));
+    }
+
+    #[test]
+    fn sidebar_buttons_are_spaced() {
+        // Arrange
+        let s = online();
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        let new = h.get_by_label("New query").rect();
+        let disc = h.get_by_label("Disconnect").rect();
+        assert!(disc.left() - new.right() >= 8.0 + h.ctx.global_style().spacing.item_spacing.x);
     }
 }

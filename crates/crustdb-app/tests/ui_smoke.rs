@@ -67,7 +67,9 @@ fn start() -> Started {
             page_size: 300,
             editor_row_limit: 1000,
             safety_threshold: 1000,
+            labels: vec![],
         }],
+        labels: vec![],
         read_only: false,
         warning: None,
     };
@@ -210,12 +212,21 @@ fn refresh_button_refetches_open_table() {
     // Act
     h.get_by_label("Refresh").click();
     let end = Instant::now() + Duration::from_secs(10);
-    while driver.log.ops().len() <= before {
+    while !driver.log.ops()[before..]
+        .iter()
+        .any(|o| o.starts_with("start:SELECT"))
+    {
         assert!(Instant::now() < end, "timed out waiting for refetch");
         std::thread::sleep(Duration::from_millis(20));
         h.step();
     }
 
     // Assert
+    let end = Instant::now() + Duration::from_secs(10);
+    while h.query_by_label("Stop").is_some() {
+        assert!(Instant::now() < end, "timed out waiting for reload to end");
+        std::thread::sleep(Duration::from_millis(20));
+        h.step();
+    }
     wait_for(&mut h, "alice@example.com");
 }

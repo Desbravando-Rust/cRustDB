@@ -27,7 +27,11 @@ impl CrustApp {
             .workspaces
             .iter_mut()
             .filter(|w| matches!(w.status, crate::state::Status::Online(_)))
-            .filter_map(|w| w.tree.load_roots())
+            .flat_map(|w| {
+                let mut v = w.tree.load_for_filter();
+                v.extend(w.tree.load_roots());
+                v
+            })
             .collect();
         for c in cmds {
             self.send(c);
@@ -63,7 +67,7 @@ impl CrustApp {
         }
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
-                intents.extend(ui::connection_form::show(ui, f));
+                intents.extend(ui::connection_form::show(ui, f, &self.state.config.labels));
                 return;
             }
             if let Some(w) = self.state.active_online() {
@@ -103,7 +107,12 @@ impl CrustApp {
                 .and_then(|w| w.active_table_mut());
             match tab {
                 Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
-                None => intents.extend(ui::home::show(ui, &self.state)),
+                None => match self.state.active_online() {
+                    Some(w) if w.config.database.is_some() => {
+                        intents.extend(ui::workspace_home::show(ui, w));
+                    }
+                    _ => intents.extend(ui::home::show(ui, &self.state)),
+                },
             }
         });
         intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));

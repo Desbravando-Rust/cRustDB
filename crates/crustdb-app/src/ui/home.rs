@@ -2,7 +2,7 @@ use crustdb_core::model::DriverKind;
 use eframe::egui;
 use egui_phosphor::regular as icon;
 
-use super::Intent;
+use super::{Intent, labels};
 use crate::state::{AppState, Status};
 
 const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
@@ -28,12 +28,13 @@ fn engine_name(kind: DriverKind) -> &'static str {
 
 const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
-pub(crate) fn logo(ui: &mut egui::Ui, max_height: f32) {
+pub(crate) fn logo(ui: &mut egui::Ui) {
     ui.add(
         egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
-            .max_height(max_height)
+            .fit_to_exact_size(egui::vec2(150.0, 150.0))
             .alt_text("cRustDB logo"),
     );
+    ui.add_space(8.0);
 }
 
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
@@ -46,26 +47,34 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     egui::Image::new(egui::include_image!(
                         "../../../../assets/imgs/book-cover.png"
                     ))
-                    .max_height(48.0)
+                    .fit_to_exact_size(egui::vec2(80.0, 122.0))
                     .alt_text("Desbravando Rust book cover"),
                 );
                 ui.vertical(|ui| {
                     ui.weak(
-                        "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+                        "Este app é feito em Rust. Vindo do Python? Aprenda com o Desbravando Rust.",
                     );
-                    ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
+                    ui.hyperlink_to(format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT), BOOK_URL);
                 });
             });
         });
     egui::ScrollArea::vertical().show(ui, |ui| {
         if state.active_online().is_none() {
-            logo(ui, 96.0);
+            logo(ui);
         }
+        let mut filter = None;
         ui.horizontal(|ui| {
-            ui.heading("cRustDB");
-            if ui.button(format!("{} New", icon::PLUS)).clicked() {
-                out.push(Intent::NewConnection);
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(format!("{} New", icon::PLUS)).clicked() {
+                    out.push(Intent::NewConnection);
+                }
+                out.extend(labels::editor(
+                    ui,
+                    &state.config.labels,
+                    state.config.read_only,
+                ));
+                filter = labels::filter_combo(ui, &state.config.labels);
+            });
         });
         if let Some(w) = &state.config.warning {
             ui.colored_label(ui.visuals().warn_fg_color, w);
@@ -74,7 +83,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         if state.config.connections.is_empty() {
             ui.weak("No saved connections. Create one with New.");
         }
-        for c in &state.config.connections {
+        let shown =
+            (state.config.connections.iter()).filter(|c| labels::matches(c, filter.as_deref()));
+        for c in shown {
             let ws = state.workspaces.iter().rev().find(|w| w.config.id == c.id);
             let live = state
                 .live_workspace(c.id)
@@ -87,7 +98,13 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 if ui.selectable_label(false, name).double_clicked() && !connecting {
                     out.push(Intent::Connect(c.id));
                 }
-                ui.weak(format!("{}@{}:{}", c.user, c.host, c.port));
+                ui.label(
+                    egui::RichText::new(format!("{}@{}:{}", c.user, c.host, c.port))
+                        .color(egui::Color32::GRAY),
+                );
+                for n in &c.labels {
+                    labels::chip(ui, n, &state.config.labels);
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add_enabled(!state.config.read_only, egui::Button::new(icon::TRASH))
@@ -132,255 +149,5 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::Queryable;
-
-    use crustdb_core::model::{Product, ServerVersion};
-
-    use super::*;
-    use crate::state::workspace::tests::state;
-
-    /// Installs theme fonts and image loaders on the first pass and returns
-    /// `false` then: fonts apply on the next pass, and without loaders the
-    /// logo renders egui's "⚠️" error glyph, which no installed font draws.
-    pub(crate) fn ready(ui: &egui::Ui, done: &mut bool) -> bool {
-        if std::mem::replace(done, true) {
-            return true;
-        }
-        crate::ui::theme::install_theme(ui.ctx());
-        egui_extras::install_image_loaders(ui.ctx());
-        false
-    }
-
-    #[test]
-    fn home_lists_saved_connections() {
-        // Arrange
-        let s = state(&["alpha", "beta"]);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("alpha");
-        h.get_by_label("beta");
-    }
-
-    #[test]
-    fn home_has_single_new_button() {
-        // Arrange
-        let s = state(&[]);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label(&format!("{} New", icon::PLUS));
-        assert!(h.query_by_label_contains("Import URL").is_none());
-    }
-
-    #[test]
-    fn home_shows_logo() {
-        // Arrange
-        let s = state(&[]);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-        // `run` waits for pending images, so the decode must be done by now.
-        h.run();
-        h.get_by_label("cRustDB logo");
-
-        // Act
-        let poll = h.ctx.try_load_image(
-            "bytes://../../../../assets/imgs/logo2.png",
-            egui::SizeHint::default(),
-        );
-
-        // Assert
-        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
-    }
-
-    #[test]
-    fn home_shows_book_promo() {
-        // Arrange
-        let s = state(&[]);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-        h.run();
-        h.get_by_label(
-            "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
-        );
-        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT));
-        h.get_by_label("Desbravando Rust book cover");
-
-        // Act
-        let poll = h.ctx.try_load_image(
-            "bytes://../../../../assets/imgs/book-cover.png",
-            egui::SizeHint::default(),
-        );
-
-        // Assert
-        assert!(matches!(poll, Ok(egui::load::ImagePoll::Ready { .. })));
-    }
-
-    #[test]
-    fn book_promo_links_to_site() {
-        // Arrange
-        let s = state(&[]);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-        h.run();
-        h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
-            .click();
-        h.step();
-
-        // Act
-        let opened = h.output().platform_output.commands.iter().any(|c| {
-            matches!(c, egui::OutputCommand::OpenUrl(u) if u.url == "https://desbravandorust.com.br/")
-        });
-
-        // Assert
-        assert!(opened);
-    }
-
-    #[test]
-    fn book_promo_stays_visible_when_list_overflows() {
-        // Arrange
-        let names: Vec<String> = (0..15).map(|i| format!("conn{i}")).collect();
-        let names: Vec<&str> = names.iter().map(String::as_str).collect();
-        let s = state(&names);
-        let mut done = false;
-        let mut h = Harness::builder()
-            .with_size(egui::vec2(800.0, 300.0))
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
-        h.run();
-
-        // Act
-        let r = h
-            .get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
-            .rect();
-
-        // Assert
-        assert!(r.max.y <= 300.0, "promo cut off: {r:?}");
-    }
-
-    #[test]
-    fn double_click_connects() {
-        // Arrange
-        let s = state(&["alpha"]);
-        let id = s.config.connections[0].id;
-        let mut intents = vec![];
-        let mut done = false;
-        let mut h = Harness::builder().with_step_dt(0.05).build_ui(|ui| {
-            if ready(ui, &mut done) {
-                intents.extend(show(ui, &s));
-            }
-        });
-        h.run();
-        h.get_by_label("alpha").click();
-        h.step();
-        h.get_by_label("alpha").click();
-        h.step();
-
-        // Act
-        h.run();
-        drop(h);
-
-        // Assert
-        assert!(intents.contains(&Intent::Connect(id)));
-    }
-
-    #[test]
-    fn live_connection_shows_open_instead_of_connect() {
-        // Arrange
-        let mut s = state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].status = Status::Online(ServerVersion {
-            product: Product::Postgres,
-            major: 16,
-            minor: 0,
-            patch: 0,
-            raw: "16.0".into(),
-        });
-        let mut intents = vec![];
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                intents.extend(show(ui, &s));
-            }
-        });
-        h.run();
-
-        // Act & Assert
-        h.get_by_label("Active");
-        assert!(h.query_by_label("Connect").is_none());
-        h.get_by_label("Open").click();
-        h.run();
-        drop(h);
-        assert!(intents.contains(&Intent::SwitchWorkspace(ws)));
-    }
-
-    #[test]
-    fn home_hides_logo_when_connection_active() {
-        // Arrange
-        let mut s = state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].status = Status::Online(ServerVersion {
-            product: Product::Postgres,
-            major: 16,
-            minor: 0,
-            patch: 0,
-            raw: "16.0".into(),
-        });
-        s.active = Some(ws);
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        assert!(h.query_by_label("cRustDB logo").is_none());
-    }
-
-    #[test]
-    fn engine_colors_differ() {
-        // Act & Assert
-        assert_ne!(
-            engine_color(DriverKind::Postgres),
-            engine_color(DriverKind::Mysql)
-        );
-    }
-}
+#[path = "home_tests.rs"]
+pub(crate) mod tests;

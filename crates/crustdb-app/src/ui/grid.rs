@@ -31,6 +31,7 @@ pub enum CellOp {
     Commit,
     Cancel,
     SetNull { row: usize, col: usize },
+    Follow { row: usize, col: usize },
 }
 
 /// The cell being edited (`rows` index, column, text) and the op raised this frame.
@@ -128,6 +129,12 @@ pub fn grid(
                     {
                         **op = Some(CellOp::Begin { row: i, col: j });
                     }
+                    if let Some((_, op)) = edit.as_mut()
+                        && cell_resp.clicked()
+                        && cell_resp.ctx.input(|inp| inp.modifiers.command)
+                    {
+                        **op = Some(CellOp::Follow { row: i, col: j });
+                    }
                 }
                 let resp = row.response();
                 if resp.clicked() {
@@ -206,9 +213,6 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);
-                if ui.button("Retry").clicked() {
-                    out.push(Intent::Retry(id));
-                }
             }
             if tab.unordered() {
                 ui.colored_label(Color32::YELLOW, "unordered");
@@ -247,6 +251,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             Some(CellOp::Commit) => out.push(Intent::CommitEdit(id)),
             Some(CellOp::Cancel) => tab.editing = None,
             Some(CellOp::SetNull { row, col }) => out.push(Intent::SetNull { tab: id, row, col }),
+            Some(CellOp::Follow { row, col }) => out.push(Intent::FollowFk { tab: id, row, col }),
             None => {}
         }
         if let Some((column, shift)) = clicked {
@@ -474,5 +479,20 @@ mod tests {
         // Assert
         assert!(h.query_by_label("new").is_some());
         assert!(h.query_by_label("old").is_none());
+    }
+
+    #[test]
+    fn data_view_notice_has_no_duplicate_retry() {
+        // Arrange
+        let mut t = tab();
+        t.notice = Some("boom".into());
+        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label("Retry").is_none());
+        assert!(h.query_by_label("Refresh").is_some());
     }
 }

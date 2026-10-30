@@ -60,6 +60,7 @@ fn main() -> anyhow::Result<()> {
         tracing::error!("loading connections failed: {e}");
         LoadedConfig {
             connections: vec![],
+            labels: vec![],
             read_only: true,
             warning: Some(format!("could not load connections: {e}")),
         }

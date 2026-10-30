@@ -122,6 +122,7 @@ impl CrustApp {
                 let secrets = self.stored_secrets(id);
                 self.connect(config, secrets);
             }
+            Intent::Label(op) => self.apply_label_op(op),
             Intent::DeleteConnection(id) => self.state.request_delete(id),
             Intent::CancelDialog => {
                 let cmd = self.state.dialogs.cancel();
@@ -263,6 +264,13 @@ impl CrustApp {
             Intent::SetNull { tab, row, col } => {
                 if let Some(t) = self.state.table_mut(tab) {
                     t.set_null(row, col);
+                }
+            }
+            Intent::FollowFk { tab, row, col } => {
+                if let Some(rt) = &self.runtime {
+                    for c in self.state.follow_fk(tab, row, col, rt.next_request_id()) {
+                        self.send(c);
+                    }
                 }
             }
             Intent::SavePending(tab) => {

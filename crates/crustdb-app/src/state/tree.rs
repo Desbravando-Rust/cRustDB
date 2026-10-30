@@ -98,7 +98,7 @@ pub(super) struct Entry {
 pub struct ObjectTree {
     ws: WorkspaceId,
     pub(super) driver: DriverKind,
-    root: Load,
+    pub(super) root: Load,
     pub(super) entries: HashMap<NodePath, Entry>,
     filter: String,
     pub selected: Option<NodePath>,
@@ -168,7 +168,7 @@ impl ObjectTree {
 
     /// Marks the node loading and builds its command; `None` for nodes that need no load
     /// (PG schemas and MySQL databases only list the static folders).
-    fn request(&mut self, node: &NodePath) -> Option<Command> {
+    pub(super) fn request(&mut self, node: &NodePath) -> Option<Command> {
         let (cmd, req) = match node {
             NodePath::Database(d) if self.driver == DriverKind::Postgres => {
                 let (r, c) = self.command(d.clone(), None, ObjectKind::Schema);
@@ -229,7 +229,7 @@ impl ObjectTree {
         }
     }
 
-    fn items(&self, node: &NodePath) -> &[ObjectRef] {
+    pub(super) fn items(&self, node: &NodePath) -> &[ObjectRef] {
         match self.entries.get(node) {
             Some(Entry {
                 load: Load::Done(v),
