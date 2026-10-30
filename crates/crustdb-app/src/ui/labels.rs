@@ -116,23 +116,25 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
     sel
 }
 
-/// Single-select of a catalog label for the connection form.
+/// Single-select (ComboBox with "None") of a catalog label for the connection form.
 pub fn picker(ui: &mut egui::Ui, selected: &mut Option<String>, labels: &[Label]) {
     if labels.is_empty() && selected.is_none() {
         return;
     }
-    ui.label("Label");
-    ui.horizontal_wrapped(|ui| {
-        if ui.selectable_label(selected.is_none(), "None").clicked() {
-            *selected = None;
-        }
-        for l in labels {
-            let on = selected.as_deref() == Some(l.name.as_str());
-            if ui.selectable_label(on, &l.name).clicked() {
-                *selected = Some(l.name.clone());
+    // A name no longer in the catalog stays listed so it can be kept or replaced.
+    let orphan = selected
+        .as_ref()
+        .filter(|n| !labels.iter().any(|l| &l.name == *n))
+        .cloned();
+    let names = labels.iter().map(|l| &l.name).chain(orphan.iter());
+    egui::ComboBox::new("label_picker", "Label")
+        .selected_text(selected.as_deref().unwrap_or("None"))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(selected, None, "None");
+            for n in names {
+                ui.selectable_value(selected, Some(n.clone()), n);
             }
-        }
-    });
+        });
 }
 
 fn dirty_id() -> egui::Id {
