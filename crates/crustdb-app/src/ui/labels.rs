@@ -2,7 +2,7 @@
 use eframe::egui;
 
 use super::Intent;
-use crate::storage::config::{ConnectionConfig, Label};
+use crate::storage::config::Label;
 
 /// One edit of the label catalog; the app applies it, propagates it and saves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,11 +23,11 @@ pub enum LabelOp {
 
 const FALLBACK: [u8; 3] = [128, 128, 128];
 
-fn color32(c: [u8; 3]) -> egui::Color32 {
+pub(crate) fn color32(c: [u8; 3]) -> egui::Color32 {
     egui::Color32::from_rgb(c[0], c[1], c[2])
 }
 
-fn color_of(labels: &[Label], name: &str) -> [u8; 3] {
+pub(crate) fn color_of(labels: &[Label], name: &str) -> [u8; 3] {
     labels
         .iter()
         .find(|l| l.name == name)
@@ -61,10 +61,6 @@ pub fn filter_options<'a>(labels: &'a [Label], query: &str) -> Vec<&'a Label> {
         .iter()
         .filter(|l| l.name.to_lowercase().contains(&q))
         .collect()
-}
-
-pub fn matches(c: &ConnectionConfig, selected: Option<&str>) -> bool {
-    selected.is_none_or(|s| c.labels.iter().any(|n| n == s))
 }
 
 /// Memory id of the selected filter label (`Option<String>`); session-only, never persisted.
@@ -116,31 +112,25 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
     sel
 }
 
-/// Multi-select of catalog labels for the connection form.
-pub fn picker(ui: &mut egui::Ui, selected: &mut Vec<String>, labels: &[Label]) {
-    if labels.is_empty() && selected.is_empty() {
+/// Single-select (ComboBox with "None") of a catalog label for the connection form.
+pub fn picker(ui: &mut egui::Ui, selected: &mut Option<String>, labels: &[Label]) {
+    if labels.is_empty() && selected.is_none() {
         return;
     }
-    ui.label("Labels");
-    // Names no longer in the catalog stay listed (checked) so they can be removed.
-    let orphans: Vec<String> = selected
-        .iter()
+    // A name no longer in the catalog stays listed so it can be kept or replaced.
+    let orphan = selected
+        .as_ref()
         .filter(|n| !labels.iter().any(|l| &l.name == *n))
-        .cloned()
-        .collect();
-    let names = labels.iter().map(|l| &l.name).chain(orphans.iter());
-    ui.horizontal_wrapped(|ui| {
-        for name in names {
-            let mut on = selected.contains(name);
-            if ui.checkbox(&mut on, name).changed() {
-                if on {
-                    selected.push(name.clone());
-                } else {
-                    selected.retain(|n| n != name);
-                }
+        .cloned();
+    let names = labels.iter().map(|l| &l.name).chain(orphan.iter());
+    egui::ComboBox::new("label_picker", "Label")
+        .selected_text(selected.as_deref().unwrap_or("None"))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(selected, None, "None");
+            for n in names {
+                ui.selectable_value(selected, Some(n.clone()), n);
             }
-        }
-    });
+        });
 }
 
 fn dirty_id() -> egui::Id {

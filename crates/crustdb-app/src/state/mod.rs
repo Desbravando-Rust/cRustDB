@@ -5,6 +5,7 @@ pub mod diagram;
 pub mod dialogs;
 pub mod filter_draft;
 pub mod find;
+pub mod home_filter;
 pub mod query_tab;
 pub mod result_pane;
 pub mod status;

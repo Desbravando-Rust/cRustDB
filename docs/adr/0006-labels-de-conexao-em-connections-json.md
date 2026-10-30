@@ -1,6 +1,6 @@
 # Labels de conexão persistidas em connections.json (v1 compatível)
 
-* **Status:** Aceito
+* **Status:** Invalidado (substituído pelo ADR 0007, #20)
 * **Data:** 2026-10-29
 * **Issue Relacionada:** #128
 

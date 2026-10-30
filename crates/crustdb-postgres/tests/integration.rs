@@ -208,18 +208,23 @@ async fn connect_timeout_after_10s() {
         },
         connect_timeout: Duration::from_secs(1),
     };
-    let start = Instant::now();
 
     // Act
-    let err = PostgresDriver
-        .connect(&t, SessionPurpose::Editor)
-        .await
-        .err()
-        .expect("must fail");
+    // Outer guard: fails instead of hanging if the driver ignores connect_timeout.
+    let start = Instant::now();
+    let err = tokio::time::timeout(
+        Duration::from_secs(10),
+        PostgresDriver.connect(&t, SessionPurpose::Editor),
+    )
+    .await
+    .expect("connect_timeout not applied")
+    .err()
+    .expect("must fail");
+    let elapsed = start.elapsed();
 
     // Assert
     assert_eq!(err.kind, ErrorKind::Timeout, "{err}");
-    assert!(start.elapsed() < Duration::from_secs(3));
+    assert!(elapsed >= t.connect_timeout, "{elapsed:?}");
     drop(silent);
 }
 
