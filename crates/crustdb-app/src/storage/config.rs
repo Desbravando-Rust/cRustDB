@@ -97,8 +97,21 @@ pub struct ConfigStore {
 struct Versioned {
     version: u32,
     connections: serde_json::Value,
-    #[serde(default = "default_labels")]
-    labels: Vec<Label>,
+    labels: Option<serde_json::Value>,
+}
+
+/// Absent catalog -> defaults; malformed -> defaults plus a warning (connections are kept).
+fn parse_labels(v: Option<serde_json::Value>) -> (Vec<Label>, Option<String>) {
+    match v {
+        None => (default_labels(), None),
+        Some(v) => match serde_json::from_value(v) {
+            Ok(l) => (l, None),
+            Err(_) => (
+                default_labels(),
+                Some("connections.json has an invalid labels catalog; defaults restored".into()),
+            ),
+        },
+    }
 }
 
 impl ConfigStore {
@@ -118,10 +131,11 @@ impl ConfigStore {
         let Ok(doc) = serde_json::from_str::<Versioned>(&text) else {
             return self.backup_and_reset();
         };
+        let (labels, label_warning) = parse_labels(doc.labels);
         if doc.version != VERSION {
             return Ok(LoadedConfig {
                 connections: serde_json::from_value(doc.connections).unwrap_or_default(),
-                labels: doc.labels,
+                labels,
                 read_only: true,
                 warning: Some(format!(
                     "connections.json has unsupported version {}; opened read-only",
@@ -132,9 +146,9 @@ impl ConfigStore {
         match serde_json::from_value(doc.connections) {
             Ok(connections) => Ok(LoadedConfig {
                 connections,
-                labels: doc.labels,
+                labels,
                 read_only: false,
-                warning: None,
+                warning: label_warning,
             }),
             Err(_) => self.backup_and_reset(),
         }
@@ -205,10 +219,11 @@ pub fn delete_label(conns: &mut [ConnectionConfig], cat: &mut Vec<Label>, name: 
     }
 }
 
+/// Names are trimmed by the caller; duplicates ignore ASCII case.
 pub fn validate_label(name: &str, cat: &[Label]) -> Result<(), String> {
     if name.trim().is_empty() {
         Err("name is required".into())
-    } else if cat.iter().any(|l| l.name == name) {
+    } else if cat.iter().any(|l| l.name.eq_ignore_ascii_case(name.trim())) {
         Err("name already in use".into())
     } else {
         Ok(())

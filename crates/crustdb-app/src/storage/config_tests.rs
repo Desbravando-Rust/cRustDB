@@ -275,4 +275,45 @@ fn validate_label_rejects_empty_and_duplicate_name() {
     assert!(validate_label("c", &cat).is_ok());
     assert!(validate_label("  ", &cat).is_err());
     assert!(validate_label("a", &cat).is_err());
+    for dup in [" a", "a ", "A"] {
+        assert!(validate_label(dup, &cat).is_err(), "{dup:?}");
+    }
+}
+
+#[test]
+fn unknown_version_with_odd_labels_stays_read_only_without_backup() {
+    // Arrange
+    let (t, s) = store();
+    let v1: serde_json::Value = serde_json::from_str(SPEC).unwrap();
+    let raw =
+        serde_json::json!({"version": 99, "connections": v1["connections"], "labels": {"x": 1}})
+            .to_string();
+    fs::write(&s.path, &raw).unwrap();
+
+    // Act
+    let l = s.load().unwrap();
+
+    // Assert
+    assert!(l.read_only);
+    assert_eq!(l.connections.len(), 1);
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn corrupt_labels_keep_connections_and_warn() {
+    // Arrange
+    let (t, s) = store();
+    let v1: serde_json::Value = serde_json::from_str(SPEC).unwrap();
+    let raw = serde_json::json!({"version": 1, "connections": v1["connections"], "labels": "bad"})
+        .to_string();
+    fs::write(&s.path, raw).unwrap();
+
+    // Act
+    let l = s.load().unwrap();
+
+    // Assert
+    assert_eq!(l.connections.len(), 1);
+    assert_eq!(l.labels.len(), 4);
+    assert!(l.warning.is_some() && !l.read_only);
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
 }
