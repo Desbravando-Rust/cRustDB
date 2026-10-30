@@ -62,7 +62,7 @@ Tipos neutros, reaproveitáveis por outros NoSQL:
 * `EntryView { ttl: Option<Duration>, size_bytes: Option<u64>, body: ValueBody, truncated: bool }`.
 * `Reply`: árvore estilo RESP3.
 
-Não há `CancelHandle` (ver D8). No app, `DriverRegistry::get(kind)` devolve `enum Backend { Sql(Arc<dyn Driver>), Store(Arc<dyn StoreDriver>) }`. Os atores SQL seguem com `Arc<dyn Driver>`, e um ator novo atende `Store`. Dependências: `app -> crustdb-redis -> core`, e o core continua sem `tokio` e sem `egui`.
+Não há `CancelHandle` (ver D8). No app, `DriverRegistry::get(kind)` devolve `Option<Backend>` (`enum Backend { Sql(Arc<dyn Driver>), Store(Arc<dyn StoreDriver>) }`). Os atores SQL seguem com `Arc<dyn Driver>`, e um ator novo atende `Store`. Dependências: `app -> crustdb-redis -> core`, e o core continua sem `tokio` e sem `egui`.
 
 ### D4. Funções puras no core
 * `store::keyspace::group(keys, sep) -> árvore por prefixo`. O separador é configurável por conexão (padrão `":"`).
@@ -150,8 +150,20 @@ Apenas listadas, não criadas aqui.
 
 ## Ajustes da fase de código (#164)
 
-* D-a. O seletor de driver do formulário não ganha `selectable_value` para Redis; só `selected_text` ganha o braço "Redis". A opção entra com o driver (fase 2b).
-* D-b. `ConnectionForm::import_url` recusa URL de modelo não relacional (`UnsupportedScheme`) até o backend `Store` existir. Esse gate sai na #166.
+* D-a. O seletor de driver do formulário não ganha `selectable_value` para Redis; só `selected_text` ganha o braço "Redis". **Superado na #166** (ver D-a abaixo, no bloco da #166): a opção entra no formulário antes do driver.
+* D-b. `ConnectionForm::import_url` recusa URL de modelo não relacional (`UnsupportedScheme`) até o backend `Store` existir. **Gate removido na #166.**
 * D-c. `redis://` puro usa `Disable` e ignora `sslmode`. `rediss://` usa `Require` com `sslmode=require` (e `prefer`/`allow`, com aviso) e `VerifyFull` em qualquer outro caso (ausente, `verify-ca`, `verify-full`, `disable`, valor desconhecido).
 * D-d. `VerifyCa` vira `VerifyFull` só no parser. O driver da fase 2b também deve tratar `VerifyCa` escolhido à mão no formulário (como o MySQL em `tls_notes`).
-* D-e. Braços inertes nos helpers SQL (`sql::dialect`, `keywords`, `operators_for`, `export_fmt::dialect`, árvore) e no `FakeDriver`: hoje são inalcançáveis só porque nenhum driver Redis está registrado; nada na UI usa `capabilities()` ainda. O gate de `Capabilities` (#166) precisa entrar antes ou junto com o registro do driver Redis no `DriverRegistry` (#165/#166).
+* D-e. Braços inertes nos helpers SQL (`sql::dialect`, `keywords`, `operators_for`, `export_fmt::dialect`, árvore) e no `FakeDriver`: hoje são inalcançáveis só porque nenhum driver Redis está registrado; nada na UI usa `capabilities()` ainda. O gate de `Capabilities` entrou na #166 (árvore SQL e workspace_home por `caps.table_tab`), antes do registro do driver Redis (#165).
+
+## Ajustes da fase de código (#166)
+
+1. `StoreSession::run` fica adiado para a #168: exige sessão Editor e `assess`/`Verdict`.
+2. A árvore SQL e o `workspace_home` são protegidos por `caps.table_tab`, sem flag nova em `Capabilities`.
+3. `KeyScan` é estado puro, sem ligação com `WorkspaceState`. A #167 faz a ligação.
+4. O workspace `Store` não tem ping nem backoff: reconecta sob demanda.
+5. A opção Redis entra no formulário antes do driver (#165), contrariando a decisão D-a da #164 (superada). Enquanto nenhum `StoreDriver` estiver registrado, conectar dá "no driver for this connection" (teste `redis_connection_without_store_driver_fails_cleanly`). O gate de `import_url` (D-b da #164) foi removido aqui. `ConnectionConfig` ganha `key_separator: Option<String>` (`None` vale ":"; o acessor com default entra na #167). `validate` exige, para Redis, `database` numérico `u32` (mesma regra do parser de URL) e separador não vazio.
+6. `WsMsg::Connected` não é usado pelo ator `Store`: ele reaproveita a caixa de mensagens e o roteamento.
+7. `tunnel_target` foi extraído para `actors/tunnel.rs` e é usado pelos dois atores.
+8. `race`: `Disconnect` ou caixa fechada encerram o ator. Erros `Connect`/`Protocol` descartam a sessão; os demais a mantêm. A sessão `Store` usa `SessionPurpose::Data`.
+9. Os comentários "unreachable: no Redis driver is registered…" (`core/query.rs`, `sql/mod.rs`, `sql/keywords.rs`, `app/export_fmt.rs`) serão atualizados na #165.
