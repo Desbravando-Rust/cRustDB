@@ -12,18 +12,30 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         return out;
     };
     super::home::logo(ui);
-    egui::ComboBox::from_id_salt("workspace")
-        .selected_text(&active.config.name)
-        .show_ui(ui, |ui| {
-            for w in &state.workspaces {
-                if ui
-                    .selectable_label(w.id == active.id, &w.config.name)
-                    .clicked()
-                {
-                    out.push(Intent::SwitchWorkspace(w.id));
+    ui.horizontal(|ui| {
+        if let Some(n) = &active.config.label {
+            let stripe = ui.max_rect().left_top();
+            let c = super::labels::color32(super::labels::color_of(&state.config.labels, n));
+            let bar = egui::Rect::from_min_size(stripe, egui::vec2(3.0, 22.0));
+            ui.painter().rect_filled(bar, 1.0, c);
+            ui.add_space(5.0);
+        }
+        egui::ComboBox::from_id_salt("workspace")
+            .selected_text(&active.config.name)
+            .show_ui(ui, |ui| {
+                for w in &state.workspaces {
+                    if ui
+                        .selectable_label(w.id == active.id, &w.config.name)
+                        .clicked()
+                    {
+                        out.push(Intent::SwitchWorkspace(w.id));
+                    }
                 }
-            }
-        });
+            });
+        if let Some(n) = &active.config.label {
+            super::labels::chip(ui, n, &state.config.labels);
+        }
+    });
     ui.horizontal(|ui| {
         if ui.button("New query").clicked() {
             out.push(Intent::NewQuery);
@@ -148,6 +160,31 @@ mod tests {
         });
         s.active = Some(ws);
         s
+    }
+
+    #[test]
+    fn sidebar_shows_label_stripe() {
+        // Arrange
+        let mut s = online();
+        s.workspaces[0].config.label = Some("dev".into());
+        s.config.labels = vec![crate::storage::config::Label {
+            name: "dev".into(),
+            color: [1, 2, 3],
+        }];
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_accessibility_check(false)
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &s);
+                }
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("dev");
     }
 
     #[test]
