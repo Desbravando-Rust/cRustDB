@@ -13,7 +13,9 @@ use tokio::sync::{Mutex, oneshot};
 use super::tunnel::tunnel_target;
 use super::workspace::WsMsg;
 use crate::net::ssh::Tunnel;
-use crate::runtime::{Command, Emitter, Event, ROWS_BATCH, ResolvedSecrets, TabId, WorkspaceId};
+use crate::runtime::{
+    Command, Emitter, Event, ROWS_BATCH, RequestId, ResolvedSecrets, TabId, WorkspaceId,
+};
 use crate::storage::config::ConnectionConfig;
 
 /// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
@@ -38,6 +40,8 @@ pub(crate) struct StoreActor {
     decision: Option<oneshot::Sender<bool>>,
     /// Messages that arrived while an operation was in flight.
     queue: VecDeque<WsMsg>,
+    /// The request whose operation is running; only a `CancelStore` naming it may abort it.
+    in_flight: Option<RequestId>,
     stopped: bool,
 }
 
@@ -59,6 +63,7 @@ impl StoreActor {
             tunnel: None,
             decision: None,
             queue: VecDeque::new(),
+            in_flight: None,
             stopped: false,
         }
     }
@@ -81,6 +86,14 @@ impl StoreActor {
     }
 
     async fn handle(&mut self, m: WsMsg, rx: &mut Rx) {
+        self.in_flight = match &m {
+            WsMsg::Cmd(
+                Command::ListNamespaces { req, .. }
+                | Command::ScanKeys { req, .. }
+                | Command::ReadEntry { req, .. },
+            ) => Some(*req),
+            _ => None,
+        };
         let ws = self.ws;
         match m {
             WsMsg::Cmd(Command::Connect {
@@ -249,12 +262,49 @@ impl StoreActor {
                         self.stopped = true;
                         return None;
                     }
-                    Some(WsMsg::Cmd(Command::CancelStore { .. })) => return None,
+                    Some(WsMsg::Cmd(Command::CancelStore { req, .. })) => {
+                        if self.in_flight == Some(req) {
+                            return None;
+                        }
+                        self.cancel_queued(req);
+                    }
                     Some(WsMsg::Cmd(Command::HostKeyDecision { accept, .. })) => self.decide(accept),
                     Some(WsMsg::AskHostKey(tx)) => self.decision = Some(tx),
                     Some(other) => self.queue.push_back(other),
                 },
             }
+        }
+    }
+
+    /// Answers "cancelled" for a still-queued request; unknown or finished ones are ignored.
+    fn cancel_queued(&mut self, req: RequestId) {
+        let queued = |m: &WsMsg| match m {
+            WsMsg::Cmd(
+                Command::ListNamespaces { req: r, .. }
+                | Command::ScanKeys { req: r, .. }
+                | Command::ReadEntry { req: r, .. },
+            ) => *r == req,
+            _ => false,
+        };
+        let Some(i) = self.queue.iter().position(queued) else {
+            return;
+        };
+        match self.queue.remove(i) {
+            Some(WsMsg::Cmd(Command::ListNamespaces { req, .. })) => {
+                self.out.emit(Event::Namespaces {
+                    req,
+                    result: Err("cancelled".into()),
+                })
+            }
+            Some(WsMsg::Cmd(Command::ScanKeys { req, .. })) => self.out.emit(Event::KeysScanned {
+                req,
+                result: Err("cancelled".into()),
+            }),
+            Some(WsMsg::Cmd(Command::ReadEntry { req, .. })) => self.out.emit(Event::EntryRead {
+                req,
+                result: Err("cancelled".into()),
+            }),
+            _ => {}
         }
     }
 }

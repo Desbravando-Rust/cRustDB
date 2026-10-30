@@ -165,7 +165,7 @@ impl Actors {
             | Command::ListNamespaces { ws, .. }
             | Command::ScanKeys { ws, .. }
             | Command::ReadEntry { ws, .. }
-            | Command::CancelStore { ws } => match self.ws.get(&ws) {
+            | Command::CancelStore { ws, .. } => match self.ws.get(&ws) {
                 Some(e) => {
                     let _ = e.tx.send(WsMsg::Cmd(cmd));
                     None

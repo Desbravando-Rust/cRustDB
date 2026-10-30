@@ -110,9 +110,11 @@ pub enum Command {
         req: RequestId,
         key: EntryKey,
     },
-    /// Drops the store session mid-operation; the pending request answers "cancelled".
+    /// Drops the store session while request `req` is in flight, or discards it while still
+    /// queued; either way it answers "cancelled". Any other request is left alone.
     CancelStore {
         ws: WorkspaceId,
+        req: RequestId,
     },
     OpenTable {
         ws: WorkspaceId,

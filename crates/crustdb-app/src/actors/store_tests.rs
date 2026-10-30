@@ -144,7 +144,14 @@ mod store {
         // Act
         send(&mut h, scan(1, None));
         let first = next(&h.rx).await;
-        settle().await;
+        send(
+            &mut h,
+            Command::ListNamespaces {
+                ws: WS,
+                req: RequestId(9),
+            },
+        );
+        next(&h.rx).await;
 
         // Assert
         let Event::KeysScanned { req, result } = first else {
@@ -152,7 +159,11 @@ mod store {
         };
         assert_eq!(req, RequestId(1));
         assert_eq!(result.unwrap().next.as_deref(), Some("1"));
-        assert_eq!(h.log.ops(), [format!("scan:-:{ROWS_BATCH}")]);
+        assert_eq!(
+            h.log.ops(),
+            [format!("scan:-:{ROWS_BATCH}"), "namespaces".to_string()],
+            "the mailbox was served in order with no scan continuation"
+        );
         assert!(drain(&h.rx).is_empty(), "no automatic continuation");
 
         // Act
@@ -161,7 +172,7 @@ mod store {
 
         // Assert
         assert!(matches!(second, Event::KeysScanned { result: Ok(p), .. } if p.next.is_none()));
-        assert_eq!(h.log.ops().len(), 2);
+        assert_eq!(h.log.ops().len(), 3);
     }
 
     #[tokio::test]
@@ -226,7 +237,13 @@ mod store {
         }
 
         // Act
-        send(&mut h, Command::CancelStore { ws: WS });
+        send(
+            &mut h,
+            Command::CancelStore {
+                ws: WS,
+                req: RequestId(1),
+            },
+        );
         let cancelled = next(&h.rx).await;
 
         // Assert
@@ -245,6 +262,106 @@ mod store {
         // Assert
         assert!(matches!(again, Event::KeysScanned { result: Ok(_), .. }));
         assert_eq!(h.log.connects.load(Ordering::SeqCst), 2);
+    }
+
+    fn read(req: u64) -> Command {
+        Command::ReadEntry {
+            ws: WS,
+            req: RequestId(req),
+            key: EntryKey(b"k".to_vec()),
+        }
+    }
+
+    fn cancel(req: u64) -> Command {
+        Command::CancelStore {
+            ws: WS,
+            req: RequestId(req),
+        }
+    }
+
+    async fn hung_scan_then_read(h: &mut H) {
+        connect(h).await;
+        h.log.hang_scan.store(true, Ordering::SeqCst);
+        send(h, scan(1, None));
+        while h.log.ops().is_empty() {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        send(h, read(2));
+    }
+
+    fn store_with_entry() -> FakeStore {
+        let mut fake = FakeStore::new(DriverKind::Redis);
+        fake.entries = vec![(EntryKey(b"k".to_vec()), view())];
+        fake
+    }
+
+    #[tokio::test]
+    async fn cancel_aborts_only_the_named_request_in_flight() {
+        // Arrange
+        let mut h = harness(store_with_entry());
+        hung_scan_then_read(&mut h).await;
+
+        // Act
+        send(&mut h, cancel(1));
+        let scanned = next(&h.rx).await;
+        let read = next(&h.rx).await;
+
+        // Assert
+        assert!(
+            matches!(scanned, Event::KeysScanned { req: RequestId(1), result: Err(e) } if e == "cancelled")
+        );
+        assert!(matches!(
+            read,
+            Event::EntryRead {
+                req: RequestId(2),
+                result: Ok(_)
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn cancel_discards_a_queued_request_without_touching_the_one_in_flight() {
+        // Arrange
+        let mut h = harness(store_with_entry());
+        hung_scan_then_read(&mut h).await;
+
+        // Act
+        send(&mut h, cancel(2));
+        let read = next(&h.rx).await;
+        send(&mut h, cancel(1));
+        let scanned = next(&h.rx).await;
+
+        // Assert
+        assert!(
+            matches!(read, Event::EntryRead { req: RequestId(2), result: Err(e) } if e == "cancelled")
+        );
+        assert!(
+            matches!(scanned, Event::KeysScanned { req: RequestId(1), result: Err(e) } if e == "cancelled")
+        );
+    }
+
+    #[tokio::test]
+    async fn late_cancel_of_a_finished_request_keeps_the_next_one_and_the_session() {
+        // Arrange
+        let mut fake = FakeStore::new(DriverKind::Redis);
+        fake.pages = vec![page(&["a"], None)];
+        let mut h = harness(fake);
+        connect(&mut h).await;
+        send(&mut h, scan(1, None));
+        next(&h.rx).await;
+        h.log.hang_scan.store(true, Ordering::SeqCst);
+        send(&mut h, scan(2, None));
+        while h.log.ops().len() < 2 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        // Act
+        send(&mut h, cancel(1));
+        settle().await;
+
+        // Assert
+        assert!(drain(&h.rx).is_empty(), "scan 2 is still running");
+        assert_eq!(h.log.alive.load(Ordering::SeqCst), 1, "session kept");
     }
 
     #[tokio::test]
