@@ -78,6 +78,7 @@ pub enum Intent {
     },
     ConfirmSafety,
     CloseResolve(crate::runtime::TxOp),
+    DisconnectResolve(crate::runtime::TxOp),
     SaveFile,
     DiscardFile,
     AcceptHostKey,
