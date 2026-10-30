@@ -16,7 +16,7 @@ use crustdb_core::model::{
 };
 use crustdb_testkit::fake_driver::{FakeDriver, FakeScript};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 fn text(s: &str) -> Cell {
     Cell::Text {
@@ -229,4 +229,49 @@ fn refresh_button_refetches_open_table() {
         h.step();
     }
     wait_for(&mut h, "alice@example.com");
+}
+
+#[test]
+fn offline_layout_lists_in_sidebar_and_hints_in_center() {
+    // Arrange
+    let (mut h, _app, _dir, _) = start();
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_label("smoke");
+    h.get_by_label("Select a connection");
+}
+
+#[test]
+fn open_form_disables_saved_list_actions() {
+    // Arrange
+    let (mut h, _app, _dir, _) = start();
+    h.run();
+
+    // Act
+    h.get_by_label_contains("New").click();
+    h.run();
+
+    // Assert
+    assert!(
+        h.query_all_by_label("Connect")
+            .any(|n| n.accesskit_node().is_disabled())
+    );
+}
+
+#[test]
+fn server_level_connection_keeps_saved_list_in_center() {
+    // Arrange
+    let (mut h, _app, _dir, _) = start();
+    h.run();
+
+    // Act
+    h.get_by_label("Connect").click();
+    wait_for(&mut h, "New query");
+
+    // Assert
+    assert!(h.query_by_label("Select a connection").is_none());
+    h.get_by_label("Active");
 }

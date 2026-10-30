@@ -65,7 +65,11 @@ impl CrustApp {
             if online {
                 intents.extend(ui::sidebar::show(ui, &self.state));
             } else {
-                intents.extend(ui::home::show(ui, &self.state));
+                // The form edits one connection: lock the list so another row
+                // cannot silently replace it.
+                ui.add_enabled_ui(self.form.is_none(), |ui| {
+                    intents.extend(ui::home::show(ui, &self.state));
+                });
             }
         });
         if online {
@@ -117,7 +121,10 @@ impl CrustApp {
                     Some(w) if w.config.database.is_some() => {
                         intents.extend(ui::workspace_home::show(ui, w));
                     }
-                    _ => ui::home::empty_state(ui, &self.state),
+                    // Server-level connection (no database): as before #146, the
+                    // saved list stays in the central area.
+                    Some(_) => intents.extend(ui::home::show(ui, &self.state)),
+                    None => ui::home::empty_state(ui, &self.state),
                 },
             }
         });
