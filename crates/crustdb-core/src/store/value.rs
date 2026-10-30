@@ -20,7 +20,12 @@ pub enum ValueBody {
 fn col(name: &str, category: TypeCategory) -> ColumnMeta {
     ColumnMeta {
         name: name.to_owned(),
-        type_name: name.to_owned(),
+        type_name: match category {
+            TypeCategory::Integer => "integer",
+            TypeCategory::Float => "float",
+            _ => "text",
+        }
+        .to_owned(),
         category,
         nullable: Some(false),
         is_primary_key: false,
@@ -84,6 +89,7 @@ impl ValueBody {
     }
 }
 
+// ponytail: stream é só exibição com perda; bytes não-UTF-8 viram U+FFFD. Cap por CELL_MEMORY_CAP se streams grandes importarem
 fn join_fields(fields: &[(Vec<u8>, Vec<u8>)]) -> String {
     let parts: Vec<String> = fields
         .iter()
@@ -134,6 +140,7 @@ mod tests {
 
         // Assert
         assert_eq!(names(&cols), ["member", "score"]);
+        assert_eq!(cols[1].type_name, "float");
         assert_eq!(rows[0][0], t("b"));
         assert_eq!(rows[0][1], t("1"));
         assert_eq!(rows[1][0], t("a"));
@@ -181,6 +188,8 @@ mod tests {
 
         // Assert
         assert_eq!(names(&cols), ["index", "value"]);
+        assert_eq!(cols[0].type_name, "integer");
+        assert_eq!(cols[1].type_name, "text");
         assert_eq!(rows[1][0], t("1"));
         assert_eq!(rows[1][1], t("y"));
     }
