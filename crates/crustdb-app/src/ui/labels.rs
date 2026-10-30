@@ -275,4 +275,37 @@ mod tests {
         rename_filter(&ctx, "a", "b");
         assert_eq!(current().as_deref(), Some("x"));
     }
+
+    #[test]
+    fn color_persists_once_on_pointer_release() {
+        // Arrange
+        let labels = [lab("a")];
+        let mut h = egui_kittest::Harness::new_ui_state(
+            |ui, out: &mut Vec<Intent>| out.extend(editor(ui, &labels, false)),
+            Vec::new(),
+        );
+        h.ctx.data_mut(|d| d.insert_temp(dirty_id(), true));
+        let button = |pressed| egui::Event::PointerButton {
+            pos: egui::Pos2::ZERO,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let persists = |h: &egui_kittest::Harness<'_, Vec<Intent>>| {
+            h.state()
+                .iter()
+                .filter(|i| matches!(i, Intent::Label(LabelOp::Persist)))
+                .count()
+        };
+
+        // Act & Assert
+        h.event(button(true));
+        h.step();
+        assert_eq!(persists(&h), 0);
+        h.event(button(false));
+        h.step();
+        assert_eq!(persists(&h), 1);
+        h.step();
+        assert_eq!(persists(&h), 1);
+    }
 }
