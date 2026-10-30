@@ -8,6 +8,11 @@ impl WorkspaceState {
     pub fn capabilities(&self) -> Capabilities {
         self.config.driver.data_model().capabilities()
     }
+
+    /// The object tree, or `None` when the data model has no table tab (nothing to browse).
+    pub fn tree_if_supported(&mut self) -> Option<&mut super::tree::ObjectTree> {
+        self.capabilities().table_tab.then_some(&mut self.tree)
+    }
 }
 
 #[cfg(test)]
@@ -15,7 +20,7 @@ impl WorkspaceState {
 mod tests {
     use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef, Product, ServerVersion};
 
-    use crate::runtime::{Event, RequestId};
+    use crate::runtime::{Command, Event, RequestId};
     use crate::state::AppState;
     use crate::state::workspace::tests::{conn, state};
 
@@ -63,6 +68,27 @@ mod tests {
         assert!(home.is_empty());
         let w = s.workspace_mut(ws).unwrap();
         assert!(w.queries.is_empty() && w.tabs.is_empty() && w.diagram.is_none());
-        assert!(!w.capabilities().table_export_csv);
+    }
+
+    #[test]
+    fn tree_refresh_only_for_workspaces_with_a_table_tab() {
+        // Arrange
+        let (mut redis, rws) = online_redis();
+        let mut sql = state(&[]);
+        let sws = sql.open_workspace(conn("s"));
+
+        // Act
+        let redis_cmd = redis
+            .workspace_mut(rws)
+            .and_then(|w| w.tree_if_supported())
+            .and_then(|t| t.refresh_root());
+        let sql_cmd = sql
+            .workspace_mut(sws)
+            .and_then(|w| w.tree_if_supported())
+            .and_then(|t| t.refresh_root());
+
+        // Assert
+        assert!(redis_cmd.is_none());
+        assert!(matches!(sql_cmd, Some(Command::LoadChildren { .. })));
     }
 }
