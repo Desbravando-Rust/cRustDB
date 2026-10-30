@@ -92,10 +92,8 @@ fn home_shows_book_promo() {
         }
     });
     h.run();
-    h.get_by_label(
-        "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
-    );
-    h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT));
+    h.get_by_label("Este app é feito em Rust. Vindo do Python? Aprenda com o Desbravando Rust.");
+    h.get_by_label(&format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT));
     h.get_by_label("Desbravando Rust book cover");
 
     // Act
@@ -119,7 +117,7 @@ fn book_promo_links_to_site() {
         }
     });
     h.run();
-    h.get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
+    h.get_by_label(&format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT))
         .click();
     h.step();
 
@@ -150,7 +148,7 @@ fn book_promo_stays_visible_when_list_overflows() {
 
     // Act
     let r = h
-        .get_by_label(&format!("Read a free chapter {}", icon::ARROW_RIGHT))
+        .get_by_label(&format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT))
         .rect();
 
     // Assert

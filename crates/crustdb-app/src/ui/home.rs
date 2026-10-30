@@ -52,9 +52,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 );
                 ui.vertical(|ui| {
                     ui.weak(
-                        "This app is built in Rust. Coming from Python? Learn it with Desbravando Rust.",
+                        "Este app é feito em Rust. Vindo do Python? Aprenda com o Desbravando Rust.",
                     );
-                    ui.hyperlink_to(format!("Read a free chapter {}", icon::ARROW_RIGHT), BOOK_URL);
+                    ui.hyperlink_to(format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT), BOOK_URL);
                 });
             });
         });
