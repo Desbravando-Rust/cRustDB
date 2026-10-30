@@ -10,7 +10,7 @@ impl ObjectTree {
         match self.driver {
             // ponytail: only `public`; take the schema from the config if asked.
             DriverKind::Postgres => (db, Some("public".into())),
-            DriverKind::Mysql => (db, None),
+            DriverKind::Mysql | DriverKind::Redis => (db, None),
             DriverKind::Sqlite => ("main", None),
         }
     }

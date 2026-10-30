@@ -152,6 +152,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                             DriverKind::Postgres => "PostgreSQL",
                             DriverKind::Mysql => "MySQL/MariaDB",
                             DriverKind::Sqlite => "SQLite",
+                            DriverKind::Redis => "Redis",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut driver, DriverKind::Postgres, "PostgreSQL");

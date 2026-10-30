@@ -70,5 +70,7 @@ pub(crate) fn dialect(kind: crate::model::DriverKind) -> &'static dyn sqlparser:
         crate::model::DriverKind::Postgres => &sqlparser::dialect::PostgreSqlDialect {},
         crate::model::DriverKind::Mysql => &sqlparser::dialect::MySqlDialect {},
         crate::model::DriverKind::Sqlite => &sqlparser::dialect::SQLiteDialect {},
+        // inert: Capabilities gate keeps SQL screens off for key-value (ADR 0008 D2)
+        crate::model::DriverKind::Redis => &sqlparser::dialect::GenericDialect {},
     }
 }
