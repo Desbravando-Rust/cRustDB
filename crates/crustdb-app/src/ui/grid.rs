@@ -213,9 +213,6 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);
-                if ui.button("Retry").clicked() {
-                    out.push(Intent::Retry(id));
-                }
             }
             if tab.unordered() {
                 ui.colored_label(Color32::YELLOW, "unordered");
@@ -482,5 +479,20 @@ mod tests {
         // Assert
         assert!(h.query_by_label("new").is_some());
         assert!(h.query_by_label("old").is_none());
+    }
+
+    #[test]
+    fn data_view_notice_has_no_duplicate_retry() {
+        // Arrange
+        let mut t = tab();
+        t.notice = Some("boom".into());
+        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label("Retry").is_none());
+        assert!(h.query_by_label("Refresh").is_some());
     }
 }
