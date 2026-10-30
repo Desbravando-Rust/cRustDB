@@ -357,7 +357,10 @@ async fn tls_verify_full_uses_host_over_connect_addr() {
     let redis = start_redis(Some(&certs)).await;
     let mut t = target(&redis, "", &redis.password, None);
     t.host = "localhost".into();
-    t.connect_addr = Some(format!("127.0.0.1:{}", redis.port).parse().unwrap());
+    t.connect_addr = tokio::net::lookup_host((redis.host.as_str(), redis.port))
+        .await
+        .unwrap()
+        .next();
     t.tls = TlsConfig {
         mode: TlsMode::VerifyFull,
         ca_path: Some(certs.dir.path().join("ca.pem")),

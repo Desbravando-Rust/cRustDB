@@ -54,15 +54,7 @@ pub struct RedisContainer {
     pub host: String,
     pub port: u16,
     pub password: String,
-    guard: ContainerAsync<GenericImage>,
-}
-
-impl RedisContainer {
-    /// Stops and starts the container (connections drop; the host port may change).
-    pub async fn restart(&self) {
-        self.guard.stop_with_timeout(Some(1)).await.unwrap();
-        self.guard.start().await.unwrap();
-    }
+    _guard: ContainerAsync<GenericImage>,
 }
 
 pub struct SshContainer {
@@ -278,7 +270,7 @@ pub async fn start_redis(tls: Option<&TestCerts>) -> RedisContainer {
         host,
         port,
         password: PASSWORD.into(),
-        guard: c,
+        _guard: c,
     }
 }
 
