@@ -187,10 +187,7 @@ impl StoreActor {
                 self.out.emit(Event::Connected { ws, server });
             }
             Some(Err(error)) => self.out.emit(Event::ConnectFailed { ws, error }),
-            None if !self.stopped => self.out.emit(Event::ConnectFailed {
-                ws,
-                error: "cancelled".into(),
-            }),
+            // connect is only cancelled by Disconnect (bounded by CONNECT_TIMEOUT)
             None => {}
         }
     }

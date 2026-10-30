@@ -116,10 +116,6 @@ mod store {
         }
     }
 
-    async fn settle() {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-
     #[tokio::test]
     async fn store_connect_emits_connected_with_server_version() {
         // Arrange
@@ -357,11 +353,15 @@ mod store {
 
         // Act
         send(&mut h, cancel(1));
-        settle().await;
+        send(&mut h, cancel(2));
+        let first = next(&h.rx).await;
 
         // Assert
-        assert!(drain(&h.rx).is_empty(), "scan 2 is still running");
-        assert_eq!(h.log.alive.load(Ordering::SeqCst), 1, "session kept");
+        assert!(
+            matches!(first, Event::KeysScanned { req: RequestId(2), result: Err(e) } if e == "cancelled"),
+            "cancel(1) emitted nothing"
+        );
+        assert_eq!(h.log.connects.load(Ordering::SeqCst), 1, "session kept");
     }
 
     #[tokio::test]
