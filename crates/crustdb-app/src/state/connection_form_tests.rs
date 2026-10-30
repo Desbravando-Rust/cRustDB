@@ -66,17 +66,17 @@ fn import_url_fills_fields_and_keeps_password_out_of_config() {
 }
 
 #[test]
-fn redis_url_import_rejected_until_driver_exists() {
+fn redis_url_import_fills_form() {
     // Arrange
     let mut f = form();
 
     // Act
-    let r = f.import_url("redis://h");
+    f.import_url("redis://h/3").unwrap();
 
     // Assert
-    assert_eq!(r, Err(UrlError::UnsupportedScheme("redis".into())));
-    assert_eq!(f.draft.driver, DriverKind::Postgres);
-    assert_eq!(f.draft.port, 5432);
+    assert_eq!(f.draft.driver, DriverKind::Redis);
+    assert_eq!(f.draft.port, 6379);
+    assert_eq!(f.draft.database.as_deref(), Some("3"));
 }
 
 #[test]

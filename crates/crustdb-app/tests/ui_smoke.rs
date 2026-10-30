@@ -68,6 +68,7 @@ fn start() -> Started {
             editor_row_limit: 1000,
             safety_threshold: 1000,
             label: None,
+            key_separator: None,
         }],
         labels: vec![],
         read_only: false,

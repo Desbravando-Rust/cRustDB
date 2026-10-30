@@ -400,3 +400,49 @@ fn label_roundtrip_writes_label_not_labels() {
     assert_eq!(v["connections"][0]["label"], "prod");
     assert!(v["connections"][0].get("labels").is_none());
 }
+
+fn redis() -> ConnectionConfig {
+    ConnectionConfig {
+        driver: DriverKind::Redis,
+        port: 6379,
+        database: None,
+        ..sample()
+    }
+}
+
+#[test]
+fn redis_database_must_be_an_index() {
+    // Arrange
+    let ok = |d: Option<&str>| {
+        validate(
+            &ConnectionConfig {
+                database: d.map(Into::into),
+                ..redis()
+            },
+            &[],
+        )
+    };
+
+    // Act & Assert
+    assert!(ok(None).is_ok());
+    assert!(ok(Some("15")).is_ok());
+    for bad in ["cache", "-1", "+1", "1.5", "4294967296", ""] {
+        let errs = ok(Some(bad)).unwrap_err();
+        assert!(errs.iter().any(|e| e.field == "database"), "{bad}");
+    }
+}
+
+#[test]
+fn redis_key_separator_must_not_be_empty() {
+    // Arrange
+    let with = |s: Option<&str>| ConnectionConfig {
+        key_separator: s.map(Into::into),
+        ..redis()
+    };
+
+    // Act & Assert
+    assert!(validate(&with(None), &[]).is_ok());
+    assert!(validate(&with(Some("/")), &[]).is_ok());
+    let errs = validate(&with(Some("")), &[]).unwrap_err();
+    assert!(errs.iter().any(|e| e.field == "key_separator"));
+}

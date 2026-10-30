@@ -68,6 +68,9 @@ pub struct ConnectionConfig {
         skip_serializing_if = "Option::is_none"
     )]
     pub label: Option<String>,
+    /// Redis key-tree separator; `None` means ":".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_separator: Option<String>,
 }
 
 /// Accepts `label` (string) and legacy `labels` (array -> first string); anything else is `None`.
@@ -272,6 +275,17 @@ pub fn validate(c: &ConnectionConfig, others: &[ConnectionConfig]) -> Result<(),
         }
         if c.port == 0 {
             bad("port", "port must be 1-65535");
+        }
+    }
+    if c.driver == DriverKind::Redis {
+        // Logical database index, same rule as the URL parser.
+        if c.database.as_deref().is_some_and(|d| {
+            d.is_empty() || !d.bytes().all(|b| b.is_ascii_digit()) || d.parse::<u32>().is_err()
+        }) {
+            bad("database", "database must be a number");
+        }
+        if c.key_separator.as_deref() == Some("") {
+            bad("key_separator", "key separator must not be empty");
         }
     }
     if !(10..=10_000).contains(&c.page_size) {
