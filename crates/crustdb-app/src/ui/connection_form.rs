@@ -31,7 +31,7 @@ fn path_edit(ui: &mut egui::Ui, p: &mut Option<PathBuf>) {
     }
 }
 
-fn error_for(ui: &mut egui::Ui, f: &ConnectionForm, field: &str) {
+pub(super) fn error_for(ui: &mut egui::Ui, f: &ConnectionForm, field: &str) {
     for e in f.errors.iter().filter(|e| e.field == field) {
         ui.colored_label(ui.visuals().error_fg_color, &e.message);
     }
@@ -71,12 +71,16 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    ui.label("Database");
-    let mut db = f.draft.database.clone().unwrap_or_default();
-    if ui.text_edit_singleline(&mut db).changed() {
-        f.draft.database = (!db.is_empty()).then_some(db);
+    if f.draft.driver == DriverKind::Redis {
+        super::connection_form_redis::fields(ui, f);
+    } else {
+        ui.label("Database");
+        let mut db = f.draft.database.clone().unwrap_or_default();
+        if ui.text_edit_singleline(&mut db).changed() {
+            f.draft.database = (!db.is_empty()).then_some(db);
+        }
+        ui.end_row();
     }
-    ui.end_row();
 
     ui.label("TLS mode").on_hover_text(
         "Disable: no encryption.\n\
@@ -158,6 +162,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                             ui.selectable_value(&mut driver, DriverKind::Postgres, "PostgreSQL");
                             ui.selectable_value(&mut driver, DriverKind::Mysql, "MySQL/MariaDB");
                             ui.selectable_value(&mut driver, DriverKind::Sqlite, "SQLite");
+                            ui.selectable_value(&mut driver, DriverKind::Redis, "Redis");
                         });
                     if driver != f.draft.driver {
                         f.set_driver(driver);

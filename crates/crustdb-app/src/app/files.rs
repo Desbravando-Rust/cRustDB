@@ -48,7 +48,7 @@ impl CrustApp {
                 };
                 let cmd = self
                     .active_ws()
-                    .map(|w| w.open_diagram(req, database, schema));
+                    .and_then(|w| w.open_diagram(req, database, schema));
                 self.send(cmd);
             }
             _ => {}

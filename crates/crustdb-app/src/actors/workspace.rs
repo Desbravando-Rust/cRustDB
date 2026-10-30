@@ -1,10 +1,9 @@
 //! Owns one connection: SSH tunnel, per-database Metadata sessions, ping and reconnect.
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crustdb_core::driver::{ConnectTarget, Driver, Session, SessionPurpose};
+use crustdb_core::driver::{Driver, Session, SessionPurpose};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -13,16 +12,14 @@ use tokio::task::JoinHandle;
 use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at, sleep_until};
 
 use super::Shared;
-use crate::net::known_hosts::KnownHosts;
-use crate::net::ssh::{HostKeyAsk, Tunnel, open_tunnel};
+use super::tunnel::tunnel_target;
+use crate::net::ssh::Tunnel;
 use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId};
 use crate::storage::config::ConnectionConfig;
-use crate::storage::paths::config_dir;
 
 mod diagram;
 
 const PING_EVERY: Duration = Duration::from_secs(60);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
 const NO_TAB: TabId = TabId(0);
 
@@ -384,52 +381,7 @@ async fn open(
     out: &Emitter,
     tx: &UnboundedSender<WsMsg>,
 ) -> Result<Ready, String> {
-    let mut tunnel = None;
-    if let Some(ssh) = &config.ssh {
-        let known = KnownHosts {
-            app_file: config_dir().join("known_hosts"),
-            user_file: std::env::var_os("HOME")
-                .map_or_else(PathBuf::new, PathBuf::from)
-                .join(".ssh/known_hosts"),
-        };
-        let (host, out, tx) = (ssh.host.clone(), out.clone(), tx.clone());
-        let ask: HostKeyAsk = Box::new(move |fingerprint| {
-            Box::pin(async move {
-                let (d_tx, d_rx) = oneshot::channel();
-                // Registered before the prompt, so the decision cannot overtake it.
-                if tx.send(WsMsg::AskHostKey(d_tx)).is_err() {
-                    return false;
-                }
-                out.emit(Event::HostKeyPrompt {
-                    ws,
-                    host,
-                    fingerprint,
-                });
-                d_rx.await.unwrap_or(false)
-            })
-        });
-        tunnel = Some(
-            open_tunnel(
-                ssh,
-                secrets.ssh,
-                (config.host.clone(), config.port),
-                &known,
-                ask,
-            )
-            .await
-            .map_err(|e| e.to_string())?,
-        );
-    }
-    let target = ConnectTarget {
-        host: config.host.clone(),
-        port: config.port,
-        connect_addr: tunnel.as_ref().map(|t| t.local_addr),
-        user: config.user.clone(),
-        password: secrets.db,
-        database: config.database.clone(),
-        tls: config.tls.clone(),
-        connect_timeout: CONNECT_TIMEOUT,
-    };
+    let (tunnel, target) = tunnel_target(&config, secrets, ws, out, tx).await?;
     let session = driver
         .connect(&target, SessionPurpose::Metadata)
         .await

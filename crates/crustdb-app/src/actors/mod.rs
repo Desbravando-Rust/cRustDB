@@ -9,13 +9,17 @@ use crustdb_core::model::{DriverKind, ObjectRef};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
 
-use crate::runtime::{Command, DriverRegistry, Emitter, Event, RequestId, TabId, WorkspaceId};
+use crate::runtime::{
+    Backend, Command, DriverRegistry, Emitter, Event, RequestId, TabId, WorkspaceId,
+};
 use crate::storage::config::ConnectionConfig;
 
 mod data;
 mod editor;
 pub(crate) use editor::{LOST, STALE_EVALUATION};
 mod export;
+mod store;
+mod tunnel;
 mod workspace;
 
 #[cfg(test)]
@@ -25,10 +29,13 @@ mod diagram_tests;
 #[cfg(test)]
 mod disconnect_tests;
 #[cfg(test)]
+mod store_tests;
+#[cfg(test)]
 mod tests;
 
 use data::DataActor;
 use editor::EditorActor;
+use store::StoreActor;
 use workspace::{WorkspaceActor, WsMsg};
 
 /// What a connected workspace shares with its table tabs.
@@ -70,6 +77,13 @@ where
             out.emit(Event::ActorCrashed { tab });
         }
     });
+}
+
+fn crashed(ws: WorkspaceId) -> Event {
+    Event::ConnectFailed {
+        ws,
+        error: "workspace actor crashed".into(),
+    }
 }
 
 struct WsEntry {
@@ -147,7 +161,11 @@ impl Actors {
             Command::HostKeyDecision { ws, .. }
             | Command::LoadChildren { ws, .. }
             | Command::LoadColumns { ws, .. }
-            | Command::LoadDiagram { ws, .. } => match self.ws.get(&ws) {
+            | Command::LoadDiagram { ws, .. }
+            | Command::ListNamespaces { ws, .. }
+            | Command::ScanKeys { ws, .. }
+            | Command::ReadEntry { ws, .. }
+            | Command::CancelStore { ws, .. } => match self.ws.get(&ws) {
                 Some(e) => {
                     let _ = e.tx.send(WsMsg::Cmd(cmd));
                     None
@@ -245,7 +263,7 @@ impl Actors {
         let Command::Connect { config, .. } = &connect else {
             return;
         };
-        let Some(driver) = self.drivers.get(config.driver) else {
+        let Some(backend) = self.drivers.get(config.driver) else {
             self.out.emit(Event::ConnectFailed {
                 ws,
                 error: "no driver for this connection".into(),
@@ -258,29 +276,41 @@ impl Actors {
         }
         self.forget_tabs(ws);
         let (tx, rx) = unbounded_channel();
-        let (shared_tx, shared) = watch::channel(None);
-        let shared_tx = Arc::new(shared_tx);
         let _ = tx.send(WsMsg::Cmd(connect));
         let (out, self_tx) = (self.out.clone(), tx.clone());
         let first_run = AtomicBool::new(true);
-        supervise(TabId(0), self.out.clone(), rx, move |rx| {
-            if !first_run.swap(false, Ordering::SeqCst) {
-                // Restarted after a panic: the old connection state is gone.
-                shared_tx.send_replace(None);
-                out.emit(Event::ConnectFailed {
-                    ws,
-                    error: "workspace actor crashed".into(),
+        let shared = match backend {
+            Backend::Sql(driver) => {
+                let (shared_tx, shared) = watch::channel(None);
+                let shared_tx = Arc::new(shared_tx);
+                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                    if !first_run.swap(false, Ordering::SeqCst) {
+                        // Restarted after a panic: the old connection state is gone.
+                        shared_tx.send_replace(None);
+                        out.emit(crashed(ws));
+                    }
+                    WorkspaceActor::new(
+                        ws,
+                        driver.clone(),
+                        out.clone(),
+                        self_tx.clone(),
+                        shared_tx.clone(),
+                    )
+                    .run(rx)
                 });
+                shared
             }
-            WorkspaceActor::new(
-                ws,
-                driver.clone(),
-                out.clone(),
-                self_tx.clone(),
-                shared_tx.clone(),
-            )
-            .run(rx)
-        });
+            Backend::Store(driver) => {
+                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                    if !first_run.swap(false, Ordering::SeqCst) {
+                        out.emit(crashed(ws));
+                    }
+                    StoreActor::new(ws, driver.clone(), out.clone(), self_tx.clone()).run(rx)
+                });
+                // Store workspaces share nothing with tabs: there are no table tabs.
+                watch::channel(None).1
+            }
+        };
         self.ws.insert(ws, WsEntry { tx, shared });
     }
 

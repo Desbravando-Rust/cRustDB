@@ -63,6 +63,7 @@ pub(super) fn config(database: Option<&str>) -> ConnectionConfig {
         editor_row_limit: 1000,
         safety_threshold: 1000,
         label: None,
+        key_separator: None,
     }
 }
 
