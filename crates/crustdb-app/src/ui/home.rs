@@ -221,3 +221,7 @@ fn row(ui: &mut egui::Ui, state: &AppState, c: &ConnectionConfig, out: &mut Vec<
 #[cfg(test)]
 #[path = "home_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "home_empty_tests.rs"]
+mod empty_tests;
