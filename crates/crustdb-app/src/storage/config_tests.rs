@@ -355,6 +355,25 @@ fn legacy_empty_labels_is_none() {
 }
 
 #[test]
+fn legacy_null_label_is_none() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"label": null}));
+
+    // Assert
+    assert_eq!(l.connections[0].label, None);
+    assert!(l.warning.is_none());
+}
+
+#[test]
+fn plain_string_label_is_kept() {
+    // Arrange & Act
+    let (_t, l) = load_with(serde_json::json!({"label": "prod"}));
+
+    // Assert
+    assert_eq!(l.connections[0].label.as_deref(), Some("prod"));
+}
+
+#[test]
 fn legacy_labels_wrong_type_does_not_reset() {
     // Arrange & Act
     let (t, l) = load_with(serde_json::json!({"labels": 7}));
