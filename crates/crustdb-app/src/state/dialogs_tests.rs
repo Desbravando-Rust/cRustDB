@@ -375,3 +375,25 @@ fn retain_ws_drops_only_that_workspaces_dialogs() {
     assert!(matches!(s.pop(), Some(Dialog::HostKey { ws, .. }) if ws == other));
     assert!(s.pop().is_none());
 }
+
+#[test]
+fn retain_ws_drops_disconnect_dialog_of_ws_only() {
+    // Arrange
+    let mut s = DialogStack::default();
+    let other = WorkspaceId(3);
+    for ws in [other, WS] {
+        s.push(Dialog::Disconnect {
+            ws,
+            has_tx: true,
+            pending_rows: 0,
+        });
+    }
+
+    // Act
+    s.retain_ws(WS, &[]);
+
+    // Assert
+    assert!(matches!(s.top(), Some(Dialog::Disconnect { ws, .. }) if *ws == other));
+    s.pop();
+    assert!(s.top().is_none());
+}
