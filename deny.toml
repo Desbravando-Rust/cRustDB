@@ -46,3 +46,8 @@ allow = ["Apache-2.0 WITH LLVM-exception"]
 [[licenses.exceptions]]
 crate = "webpki-roots"
 allow = ["CDLA-Permissive-2.0"]
+
+# Transitive dep of redis (crustdb-redis); permissive Boost license.
+[[licenses.exceptions]]
+crate = "xxhash-rust"
+allow = ["BSL-1.0"]
