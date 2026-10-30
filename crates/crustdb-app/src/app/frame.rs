@@ -29,7 +29,9 @@ impl CrustApp {
             .filter(|w| matches!(w.status, crate::state::Status::Online(_)))
             .flat_map(|w| {
                 let mut v = w.tree.load_for_filter();
-                v.extend(w.tree.load_roots());
+                if w.capabilities().table_tab {
+                    v.extend(w.tree.load_roots());
+                }
                 v
             })
             .collect();

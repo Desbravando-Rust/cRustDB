@@ -10,6 +10,10 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         return out;
     };
     ui.heading(db);
+    if !w.capabilities().table_tab {
+        ui.weak("No tables in this database");
+        return out;
+    }
     ui.weak("Tables - double-click to open");
     let Some(tables) = w.tree.loaded_tables(db) else {
         ui.label("Loading…");

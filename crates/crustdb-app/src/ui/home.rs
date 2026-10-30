@@ -22,13 +22,18 @@ fn engine_color(kind: DriverKind) -> egui::Color32 {
     }
 }
 
-fn engine_name(kind: DriverKind) -> &'static str {
+pub(crate) fn engine_name(kind: DriverKind) -> &'static str {
     match kind {
         DriverKind::Postgres => "PostgreSQL",
         DriverKind::Mysql => "MySQL",
         DriverKind::Sqlite => "SQLite",
         DriverKind::Redis => "Redis",
     }
+}
+
+/// Tooltip for an action the connection's data model does not offer.
+pub(crate) fn unsupported_for(kind: DriverKind) -> String {
+    format!("Not supported for {}", engine_name(kind))
 }
 
 const BANNER_MIN: egui::Vec2 = egui::vec2(420.0, 430.0);

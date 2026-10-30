@@ -27,6 +27,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     };
     super::home::logo(ui);
     let label = active_label(state, active);
+    let caps = active.capabilities();
     ui.horizontal(|ui| {
         if let Some(n) = label {
             let stripe = ui.max_rect().left_top();
@@ -52,7 +53,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         }
     });
     ui.horizontal(|ui| {
-        if ui.button("New query").clicked() {
+        let new_query = ui
+            .add_enabled(caps.sql_editor, egui::Button::new("New query"))
+            .on_disabled_hover_text(super::home::unsupported_for(active.config.driver));
+        if new_query.clicked() {
             out.push(Intent::NewQuery);
         }
         ui.add_space(8.0);
@@ -95,7 +99,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                             }
                             _ => None,
                         };
-                        if let Some((database, schema)) = diagram {
+                        if let Some((database, schema)) = diagram.filter(|_| caps.er_diagram) {
                             r.context_menu(|ui| {
                                 if ui.button("ER diagram").clicked() {
                                     out.push(Intent::OpenDiagram { database, schema });
