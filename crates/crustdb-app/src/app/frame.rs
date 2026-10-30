@@ -27,7 +27,11 @@ impl CrustApp {
             .workspaces
             .iter_mut()
             .filter(|w| matches!(w.status, crate::state::Status::Online(_)))
-            .filter_map(|w| w.tree.load_roots())
+            .flat_map(|w| {
+                let mut v = w.tree.load_for_filter();
+                v.extend(w.tree.load_roots());
+                v
+            })
             .collect();
         for c in cmds {
             self.send(c);
