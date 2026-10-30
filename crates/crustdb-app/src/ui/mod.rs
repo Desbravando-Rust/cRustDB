@@ -55,6 +55,12 @@ pub enum Intent {
     },
     NextPage(TabId),
     PrevPage(TabId),
+    /// Ctrl+click on a foreign key cell: open the referenced row.
+    FollowFk {
+        tab: TabId,
+        row: usize,
+        col: usize,
+    },
     StopTab(TabId),
     Retry(TabId),
     /// Stages the inline grid edit of the table tab.
