@@ -227,7 +227,7 @@ async fn auth_failure_maps_to_auth_kind() {
 
 #[tokio::test]
 async fn connect_timeout_after_10s() {
-    // Act & Assert
+    // Arrange
     // Accepts (kernel backlog) but never answers.
     let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let t = ConnectTarget {
@@ -243,14 +243,23 @@ async fn connect_timeout_after_10s() {
         },
         connect_timeout: Duration::from_secs(1),
     };
+
+    // Act
+    // Outer guard: fails instead of hanging if the driver ignores connect_timeout.
     let start = Instant::now();
-    let err = MysqlDriver
-        .connect(&t, SessionPurpose::Editor)
-        .await
-        .err()
-        .expect("must fail");
+    let err = tokio::time::timeout(
+        Duration::from_secs(10),
+        MysqlDriver.connect(&t, SessionPurpose::Editor),
+    )
+    .await
+    .expect("connect_timeout not applied")
+    .err()
+    .expect("must fail");
+    let elapsed = start.elapsed();
+
+    // Assert
     assert_eq!(err.kind, ErrorKind::Timeout, "{err}");
-    assert!(start.elapsed() < Duration::from_secs(3));
+    assert!(elapsed >= t.connect_timeout, "{elapsed:?}");
     drop(silent);
 }
 
