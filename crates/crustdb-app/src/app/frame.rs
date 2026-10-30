@@ -103,7 +103,12 @@ impl CrustApp {
                 .and_then(|w| w.active_table_mut());
             match tab {
                 Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
-                None => intents.extend(ui::home::show(ui, &self.state)),
+                None => match self.state.active_online() {
+                    Some(w) if w.config.database.is_some() => {
+                        intents.extend(ui::workspace_home::show(ui, w));
+                    }
+                    _ => intents.extend(ui::home::show(ui, &self.state)),
+                },
             }
         });
         intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));
