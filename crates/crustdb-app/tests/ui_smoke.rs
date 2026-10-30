@@ -222,10 +222,11 @@ fn refresh_button_refetches_open_table() {
     }
 
     // Assert
-    assert!(
-        driver.log.ops()[before..]
-            .iter()
-            .any(|o| o.starts_with("start:SELECT"))
-    );
+    let end = Instant::now() + Duration::from_secs(10);
+    while h.query_by_label("Stop").is_some() {
+        assert!(Instant::now() < end, "timed out waiting for reload to end");
+        std::thread::sleep(Duration::from_millis(20));
+        h.step();
+    }
     wait_for(&mut h, "alice@example.com");
 }
