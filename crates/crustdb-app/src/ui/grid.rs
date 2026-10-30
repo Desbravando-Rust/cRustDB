@@ -31,6 +31,7 @@ pub enum CellOp {
     Commit,
     Cancel,
     SetNull { row: usize, col: usize },
+    Follow { row: usize, col: usize },
 }
 
 /// The cell being edited (`rows` index, column, text) and the op raised this frame.
@@ -128,6 +129,12 @@ pub fn grid(
                     {
                         **op = Some(CellOp::Begin { row: i, col: j });
                     }
+                    if let Some((_, op)) = edit.as_mut()
+                        && cell_resp.clicked()
+                        && cell_resp.ctx.input(|inp| inp.modifiers.command)
+                    {
+                        **op = Some(CellOp::Follow { row: i, col: j });
+                    }
                 }
                 let resp = row.response();
                 if resp.clicked() {
@@ -180,6 +187,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::NextPage(id));
             }
             ui.label(tab.footer_label());
+            let refresh = egui::Button::new("Refresh");
+            if ui
+                .add_enabled(!tab.is_loading(), refresh)
+                .on_hover_text("Reload page (F5)")
+                .clicked()
+            {
+                out.push(Intent::Retry(id));
+            }
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
@@ -239,6 +254,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             Some(CellOp::Commit) => out.push(Intent::CommitEdit(id)),
             Some(CellOp::Cancel) => tab.editing = None,
             Some(CellOp::SetNull { row, col }) => out.push(Intent::SetNull { tab: id, row, col }),
+            Some(CellOp::Follow { row, col }) => out.push(Intent::FollowFk { tab: id, row, col }),
             None => {}
         }
         if let Some((column, shift)) = clicked {

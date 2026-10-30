@@ -43,6 +43,7 @@ type Started = (
     Harness<'static>,
     Rc<RefCell<Option<CrustApp>>>,
     tempfile::TempDir,
+    Arc<FakeDriver>,
 );
 
 fn start() -> Started {
@@ -66,7 +67,9 @@ fn start() -> Started {
             page_size: 300,
             editor_row_limit: 1000,
             safety_threshold: 1000,
+            labels: vec![],
         }],
+        labels: vec![],
         read_only: false,
         warning: None,
     };
@@ -76,6 +79,7 @@ fn start() -> Started {
 
     let app: Rc<RefCell<Option<CrustApp>>> = Rc::default();
     let slot = app.clone();
+    let driver_in = driver.clone();
     let h = Harness::builder()
         .with_accessibility_check(false)
         // the sidebar arrows (U+25B8) are not in the installed fonts
@@ -89,7 +93,7 @@ fn start() -> Started {
                     config.take().unwrap(),
                     ConfigStore { path: path.clone() },
                     Box::<MemoryStore>::default(),
-                    DriverRegistry::default().with(driver.clone()),
+                    DriverRegistry::default().with(driver_in.clone()),
                     hist.clone(),
                 ));
                 return;
@@ -98,7 +102,7 @@ fn start() -> Started {
                 app.show(ui);
             }
         });
-    (h, app, dir)
+    (h, app, dir, driver)
 }
 
 fn wait_for(h: &mut Harness<'_>, label: &str) {
@@ -113,7 +117,7 @@ fn wait_for(h: &mut Harness<'_>, label: &str) {
 #[test]
 fn connect_and_open_table_renders_grid() {
     // Arrange
-    let (mut h, app, _dir) = start();
+    let (mut h, app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
     wait_for(&mut h, "New query"); // sidebar is up once the workspace is online
@@ -139,7 +143,7 @@ fn connect_and_open_table_renders_grid() {
 #[test]
 fn run_query_shows_result_and_messages() {
     // Arrange
-    let (mut h, _app, _dir) = start();
+    let (mut h, _app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
     wait_for(&mut h, "New query");
@@ -171,7 +175,7 @@ fn run_query_shows_result_and_messages() {
 #[test]
 fn disconnect_returns_to_saved_connections() {
     // Arrange
-    let (mut h, _app, _dir) = start();
+    let (mut h, _app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
     wait_for(&mut h, "New query");
@@ -183,4 +187,37 @@ fn disconnect_returns_to_saved_connections() {
     // Assert
     wait_for(&mut h, "Connect");
     assert!(h.query_by_label("New query").is_none());
+}
+
+#[test]
+fn refresh_button_refetches_open_table() {
+    // Arrange
+    let (mut h, app, _dir, driver) = start();
+    h.run();
+    h.get_by_label("Connect").click();
+    wait_for(&mut h, "New query");
+    let object = ObjectRef {
+        database: "fake".into(),
+        schema: Some("public".into()),
+        name: "users".into(),
+        kind: ObjectKind::Table,
+    };
+    app.borrow_mut()
+        .as_mut()
+        .unwrap()
+        .handle(Intent::OpenObject { object });
+    wait_for(&mut h, "alice@example.com");
+    let before = driver.log.ops().len();
+
+    // Act
+    h.get_by_label("Refresh").click();
+    let end = Instant::now() + Duration::from_secs(10);
+    while driver.log.ops().len() <= before {
+        assert!(Instant::now() < end, "timed out waiting for refetch");
+        std::thread::sleep(Duration::from_millis(20));
+        h.step();
+    }
+
+    // Assert
+    wait_for(&mut h, "alice@example.com");
 }

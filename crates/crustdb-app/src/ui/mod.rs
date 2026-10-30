@@ -10,6 +10,7 @@ pub mod grid;
 pub mod grid_copy;
 pub mod history_panel;
 pub mod home;
+pub mod labels;
 pub mod picker;
 pub mod results;
 pub mod row_detail;
@@ -18,6 +19,7 @@ pub mod status_bar;
 pub mod structure;
 pub mod tab_bar;
 pub mod theme;
+pub mod workspace_home;
 
 use crustdb_core::model::{ConnectionId, ObjectRef};
 
@@ -28,6 +30,7 @@ use crate::state::tree::NodePath;
 pub enum Intent {
     Connect(ConnectionId),
     NewConnection,
+    Label(labels::LabelOp),
     EditConnection(ConnectionId),
     DeleteConnection(ConnectionId),
     ConfirmDelete,
@@ -55,6 +58,12 @@ pub enum Intent {
     },
     NextPage(TabId),
     PrevPage(TabId),
+    /// Ctrl+click on a foreign key cell: open the referenced row.
+    FollowFk {
+        tab: TabId,
+        row: usize,
+        col: usize,
+    },
     StopTab(TabId),
     Retry(TabId),
     /// Stages the inline grid edit of the table tab.
