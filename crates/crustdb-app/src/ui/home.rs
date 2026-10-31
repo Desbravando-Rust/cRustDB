@@ -46,15 +46,6 @@ fn search_id() -> egui::Id {
 
 const BOOK_URL: &str = "https://desbravandorust.com.br/";
 
-pub(crate) fn logo(ui: &mut egui::Ui) {
-    ui.add(
-        egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
-            .fit_to_exact_size(egui::vec2(150.0, 150.0))
-            .alt_text("cRustDB logo"),
-    );
-    ui.add_space(8.0);
-}
-
 /// Central-panel empty state: watermark, hint and book banner. The banner
 /// yields first on small windows, then the watermark.
 pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {

@@ -25,7 +25,6 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let Some(active) = state.active_online() else {
         return out;
     };
-    super::home::logo(ui);
     let label = active_label(state, active);
     let caps = active.capabilities();
     ui.horizontal(|ui| {
@@ -147,18 +146,9 @@ mod tests {
     use crate::ui::home::tests::ready;
 
     #[test]
-    fn sidebar_shows_logo_above_selector() {
+    fn sidebar_has_no_logo() {
         // Arrange
-        let mut s = state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].status = Status::Online(ServerVersion {
-            product: Product::Postgres,
-            major: 16,
-            minor: 0,
-            patch: 0,
-            raw: "16.0".into(),
-        });
-        s.active = Some(ws);
+        let s = online();
         let mut done = false;
         let mut h = Harness::builder().build_ui(|ui| {
             if ready(ui, &mut done) {
@@ -170,9 +160,7 @@ mod tests {
         h.run();
 
         // Assert
-        let logo = h.get_by_label("cRustDB logo").rect();
-        let combo = h.get_by_role(egui::accesskit::Role::ComboBox).rect();
-        assert!(logo.top() < combo.top());
+        assert!(h.query_by_label("cRustDB logo").is_none());
     }
 
     fn online() -> AppState {
@@ -247,25 +235,6 @@ mod tests {
 
         // Assert
         assert_eq!(shown, (false, false));
-    }
-
-    #[test]
-    fn sidebar_logo_is_150_square() {
-        // Arrange
-        let s = online();
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        let size = h.get_by_label("cRustDB logo").rect().size();
-        assert_eq!(size, egui::vec2(150.0, 150.0));
     }
 
     #[test]
