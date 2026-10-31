@@ -21,6 +21,8 @@ fn target(db: &MysqlContainer, mode: TlsMode, certs: Option<&TestCerts>) -> Conn
         tls: TlsConfig {
             mode,
             ca_path: certs.map(|c| c.dir.path().join("ca.pem")),
+            client_cert_path: None,
+            client_key_path: None,
         },
         connect_timeout: Duration::from_secs(10),
     }
@@ -240,6 +242,8 @@ async fn connect_timeout_after_10s() {
         tls: TlsConfig {
             mode: TlsMode::Disable,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         },
         connect_timeout: Duration::from_secs(1),
     };

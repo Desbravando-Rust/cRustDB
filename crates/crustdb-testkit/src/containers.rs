@@ -140,15 +140,27 @@ async fn endpoint(c: &ContainerAsync<GenericImage>, internal: u16) -> (String, u
 /// Image from `CRUSTDB_PG_IMAGE` (default `postgres:latest`). With `tls`, SSL is on
 /// and the cert is valid for the hostnames given to `certs_for`.
 pub async fn start_postgres(tls: Option<&TestCerts>, network: Option<&str>) -> PgContainer {
-    start_pg(tls, network, false).await
+    start_pg(tls, network, PgAccess::Any).await
 }
 
 /// Like `start_postgres` with TLS, but a `pg_hba.conf` that rejects non-TLS TCP connections.
 pub async fn start_postgres_tls_only(tls: &TestCerts) -> PgContainer {
-    start_pg(Some(tls), None, true).await
+    start_pg(Some(tls), None, PgAccess::TlsOnly).await
 }
 
-async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, tls_only: bool) -> PgContainer {
+/// Like `start_postgres_tls_only`, and the client must present a certificate signed by the CA.
+pub async fn start_postgres_mtls(tls: &TestCerts) -> PgContainer {
+    start_pg(Some(tls), None, PgAccess::ClientCert).await
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum PgAccess {
+    Any,
+    TlsOnly,
+    ClientCert,
+}
+
+async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, access: PgAccess) -> PgContainer {
     let alias = unique("crustdb-pg");
     let mut img = image("CRUSTDB_PG_IMAGE", "postgres:latest");
     if tls.is_some() {
@@ -163,13 +175,18 @@ async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, tls_only: bool
         for (target, src) in copy_tls(t, "/tmp/tls") {
             req = req.with_copy_to(target, src);
         }
-        let hba = if tls_only {
-            "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256\\n' > /tmp/tls/hba.conf \
+        let hba = match access {
+            PgAccess::Any => "",
+            PgAccess::TlsOnly => {
+                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256\\n' > /tmp/tls/hba.conf \
              && "
-        } else {
-            ""
+            }
+            PgAccess::ClientCert => {
+                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256 clientcert=verify-ca\\n' > /tmp/tls/hba.conf \
+             && "
+            }
         };
-        let hba_opt = if tls_only {
+        let hba_opt = if access != PgAccess::Any {
             "-c hba_file=/tmp/tls/hba.conf"
         } else {
             ""
@@ -200,6 +217,15 @@ async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, tls_only: bool
 
 /// Image from `CRUSTDB_MYSQL_IMAGE` (default `mysql:8.4`; MariaDB works too).
 pub async fn start_mysql(tls: Option<&TestCerts>, network: Option<&str>) -> MysqlContainer {
+    start_my(tls, network, false).await
+}
+
+/// TLS server where `root` over TCP must present a CA-signed client certificate (`REQUIRE X509`).
+pub async fn start_mysql_mtls(tls: &TestCerts) -> MysqlContainer {
+    start_my(Some(tls), None, true).await
+}
+
+async fn start_my(tls: Option<&TestCerts>, network: Option<&str>, x509: bool) -> MysqlContainer {
     let alias = unique("crustdb-mysql");
     let mut req = image("CRUSTDB_MYSQL_IMAGE", "mysql:8.4")
         .with_exposed_port(3306.tcp())
@@ -221,6 +247,10 @@ pub async fn start_mysql(tls: Option<&TestCerts>, network: Option<&str>) -> Mysq
     let c = req.start().await.unwrap();
     // TCP ping: the init-time temporary server is skip-networking. MariaDB 11+ may lack the mysqladmin name.
     wait_exec(&c, &["sh", "-c", "mysqladmin --protocol=tcp -h127.0.0.1 ping --silent || mariadb-admin --protocol=tcp -h127.0.0.1 ping --silent"]).await;
+    if x509 {
+        // Over the local socket: root@localhost is not affected, only root@'%' (TCP).
+        wait_exec(&c, &["sh", "-c", "q=\"ALTER USER 'root'@'%' REQUIRE X509\"; mysql -uroot -pcrustdb -e \"$q\" || mariadb -uroot -pcrustdb -e \"$q\""]).await;
+    }
     let (host, port) = endpoint(&c, 3306).await;
     MysqlContainer {
         host,

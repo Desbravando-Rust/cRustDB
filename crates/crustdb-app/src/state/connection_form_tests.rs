@@ -211,3 +211,95 @@ fn import_sqlite_url_names_from_file() {
     assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
     assert_eq!(f.draft.name, "a.db");
 }
+
+#[test]
+fn import_url_sets_client_cert_paths() {
+    // Arrange
+    let mut f = form();
+
+    // Act
+    f.import_url("postgres://h/db?sslcert=/c/client.crt&sslkey=/c/client.key")
+        .unwrap();
+
+    // Assert
+    assert_eq!(
+        f.draft.tls.client_cert_path.as_deref(),
+        Some(Path::new("/c/client.crt"))
+    );
+    assert_eq!(
+        f.draft.tls.client_key_path.as_deref(),
+        Some(Path::new("/c/client.key"))
+    );
+}
+
+fn field_errors(f: &ConnectionForm) -> Vec<&'static str> {
+    f.to_save(&[])
+        .err()
+        .unwrap_or_default()
+        .iter()
+        .map(|e| e.field)
+        .collect()
+}
+
+#[test]
+fn cert_without_key_is_an_error() {
+    // Arrange
+    let mut f = form();
+    f.draft.tls.client_cert_path = Some("/etc/hostname".into());
+
+    // Act & Assert
+    assert!(field_errors(&f).contains(&"client_key"));
+}
+
+#[test]
+fn key_without_cert_is_an_error() {
+    // Arrange
+    let mut f = form();
+    f.draft.tls.client_key_path = Some("/etc/hostname".into());
+
+    // Act & Assert
+    assert!(field_errors(&f).contains(&"client_cert"));
+}
+
+#[test]
+fn unreadable_client_cert_is_an_error() {
+    // Arrange
+    let mut f = form();
+    f.draft.tls.client_cert_path = Some("/nonexistent/c.crt".into());
+    f.draft.tls.client_key_path = Some("/etc/hostname".into());
+
+    // Act & Assert
+    assert_eq!(field_errors(&f), vec!["client_cert"]);
+}
+
+#[test]
+fn sqlite_and_redis_clear_client_cert() {
+    for driver in [DriverKind::Sqlite, DriverKind::Redis] {
+        // Arrange
+        let mut f = form();
+        f.set_driver(driver);
+        f.draft.database = (driver == DriverKind::Sqlite).then(|| "/tmp/a.db".into());
+        f.draft.tls.client_cert_path = Some("/nonexistent/c.crt".into());
+        f.draft.tls.client_key_path = Some("/nonexistent/c.key".into());
+
+        // Act
+        let (cfg, _) = f.to_save(&[]).unwrap();
+
+        // Assert
+        assert!(cfg.tls.client_cert_path.is_none() && cfg.tls.client_key_path.is_none());
+    }
+}
+
+#[test]
+fn tls_disabled_clears_client_cert() {
+    // Arrange
+    let mut f = form();
+    f.draft.tls.mode = TlsMode::Disable;
+    f.draft.tls.client_cert_path = Some("/nonexistent/c.crt".into());
+
+    // Act
+    let (cfg, _) = f.to_save(&[]).unwrap();
+
+    // Assert
+    assert!(cfg.tls.client_cert_path.is_none() && cfg.tls.client_key_path.is_none());
+}

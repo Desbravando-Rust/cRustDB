@@ -60,6 +60,8 @@ fn default_config(driver: DriverKind) -> ConnectionConfig {
         tls: TlsConfig {
             mode: TlsMode::VerifyFull,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         },
         ssh: None,
         page_size: 300,
@@ -124,6 +126,8 @@ impl ConnectionForm {
             password,
             database,
             tls_mode,
+            client_cert_path,
+            client_key_path,
             warnings,
         } = parse_connection_url(s.trim())?;
         self.set_driver(driver);
@@ -141,6 +145,10 @@ impl ConnectionForm {
         self.draft.database = database;
         if let Some(m) = tls_mode {
             self.draft.tls.mode = m;
+        }
+        if client_cert_path.is_some() || client_key_path.is_some() {
+            self.draft.tls.client_cert_path = client_cert_path;
+            self.draft.tls.client_key_path = client_key_path;
         }
         if let Some(p) = password {
             self.password = p;
@@ -190,6 +198,13 @@ impl ConnectionForm {
             c.tls.ca_path = None;
             c.save_password = false;
         }
+        if matches!(c.driver, DriverKind::Sqlite | DriverKind::Redis)
+            || c.tls.mode == TlsMode::Disable
+        {
+            // mTLS is PostgreSQL/MySQL with TLS on; the rows are hidden otherwise.
+            c.tls.client_cert_path = None;
+            c.tls.client_key_path = None;
+        }
         let mut errs = validate(&c, others).err().unwrap_or_default();
         let mut bad = |field, message: &str| {
             errs.push(FieldError {
@@ -201,6 +216,27 @@ impl ConnectionForm {
             && !readable(ca)
         {
             bad("ca_path", "CA file not found or unreadable");
+        }
+        match (&c.tls.client_cert_path, &c.tls.client_key_path) {
+            (Some(_), None) => bad(
+                "client_key",
+                "client key is required with a client certificate",
+            ),
+            (None, Some(_)) => bad(
+                "client_cert",
+                "client certificate is required with a client key",
+            ),
+            _ => {}
+        }
+        for (path, field, what) in [
+            (&c.tls.client_cert_path, "client_cert", "client certificate"),
+            (&c.tls.client_key_path, "client_key", "client key"),
+        ] {
+            if let Some(p) = path
+                && !readable(p)
+            {
+                bad(field, &format!("{what} file not found or unreadable"));
+            }
         }
         if let Some(ssh) = &c.ssh {
             if ssh.host.trim().is_empty() {

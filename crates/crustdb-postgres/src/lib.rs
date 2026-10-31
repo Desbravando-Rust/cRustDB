@@ -1,3 +1,4 @@
+mod client_auth;
 mod connect;
 mod dialect;
 mod exec;

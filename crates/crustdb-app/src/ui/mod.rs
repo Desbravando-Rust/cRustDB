@@ -3,6 +3,7 @@ pub mod autocomplete;
 pub mod command_pane;
 pub mod confirm_dialog;
 pub mod connection_form;
+mod connection_form_mtls;
 mod connection_form_redis;
 pub mod diagram;
 pub mod editor;

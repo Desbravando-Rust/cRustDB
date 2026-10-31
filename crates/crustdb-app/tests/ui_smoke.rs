@@ -62,6 +62,8 @@ fn start() -> Started {
             tls: TlsConfig {
                 mode: TlsMode::Disable,
                 ca_path: None,
+                client_cert_path: None,
+                client_key_path: None,
             },
             ssh: None,
             page_size: 300,
@@ -82,7 +84,7 @@ fn start() -> Started {
     let slot = app.clone();
     let driver_in = driver.clone();
     let h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // form text inputs and spin buttons are unnamed (#186)
         // the sidebar arrows (U+25B8) are not in the installed fonts
         .allow_missing_glyphs()
         .build_ui(move |ui| {
