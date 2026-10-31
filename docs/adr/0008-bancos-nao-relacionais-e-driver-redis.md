@@ -184,3 +184,8 @@ Apenas listadas, não criadas aqui.
 7. `tunnel_target` foi extraído para `actors/tunnel.rs` e é usado pelos dois atores.
 8. `race`: `Disconnect` ou caixa fechada encerram o ator. Erros `Connect`/`Protocol` descartam a sessão; os demais a mantêm. A sessão `Store` usa `SessionPurpose::Data`.
 9. Os comentários "unreachable: no Redis driver is registered…" (`core/query.rs`, `sql/mod.rs`, `sql/keywords.rs`, `app/export_fmt.rs`) serão atualizados na #165.
+
+## Ajustes da fase de código (#174)
+
+1. O gate de `Capabilities` (#166) entrou antes do registro do driver; com o `RedisDriver` agora registrado em `runtime::drivers()`, os braços `DriverKind::Redis` dos caminhos SQL continuam inalcançáveis, e os comentários passam a citar o gate em vez da ausência do driver.
+2. O registry padrão saiu de `main.rs` para `runtime::drivers()`, para ser testável.

@@ -1428,6 +1428,7 @@ dependencies = [
  "crustdb-core",
  "crustdb-mysql",
  "crustdb-postgres",
+ "crustdb-redis",
  "crustdb-sqlite",
  "crustdb-testkit",
  "eframe",
