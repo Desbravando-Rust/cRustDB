@@ -82,13 +82,13 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    ui.label("TLS mode").on_hover_text(
+    let tls_label = ui.label("TLS mode").on_hover_text(
         "Disable: no encryption.\n\
          Require: encrypt, don't verify the server certificate.\n\
          VerifyCa: encrypt and verify the certificate is signed by a trusted CA.\n\
          VerifyFull: VerifyCa plus check the host name matches the certificate.",
     );
-    egui::ComboBox::from_id_salt("tls")
+    let tls = egui::ComboBox::from_id_salt("tls")
         .selected_text(format!("{:?}", f.draft.tls.mode))
         .show_ui(ui, |ui| {
             for (m, l) in [
@@ -100,6 +100,7 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
                 ui.selectable_value(&mut f.draft.tls.mode, m, l);
             }
         });
+    tls.response.labelled_by(tls_label.id);
     ui.end_row();
     for n in f.tls_notes() {
         ui.label("");
@@ -149,9 +150,9 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     error_for(ui, f, "name");
                     ui.end_row();
 
-                    ui.label("Driver");
+                    let driver_label = ui.label("Driver");
                     let mut driver = f.draft.driver;
-                    egui::ComboBox::from_id_salt("driver")
+                    let driver_combo = egui::ComboBox::from_id_salt("driver")
                         .selected_text(match driver {
                             DriverKind::Postgres => "PostgreSQL",
                             DriverKind::Mysql => "MySQL/MariaDB",
@@ -164,6 +165,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                             ui.selectable_value(&mut driver, DriverKind::Sqlite, "SQLite");
                             ui.selectable_value(&mut driver, DriverKind::Redis, "Redis");
                         });
+                    driver_combo.response.labelled_by(driver_label.id);
                     if driver != f.draft.driver {
                         f.set_driver(driver);
                     }
@@ -231,13 +233,13 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     ui.label("SSH user");
                     ui.text_edit_singleline(&mut ssh.user);
                     ui.end_row();
-                    ui.label("Auth");
+                    let auth_label = ui.label("Auth");
                     let cur = match ssh.auth {
                         SshAuth::Password => "Password",
                         SshAuth::Key { .. } => "Key file",
                         SshAuth::Agent => "Agent",
                     };
-                    egui::ComboBox::from_id_salt("ssh_auth")
+                    let auth_combo = egui::ComboBox::from_id_salt("ssh_auth")
                         .selected_text(cur)
                         .show_ui(ui, |ui| {
                             if ui.selectable_label(cur == "Password", "Password").clicked() {
@@ -254,6 +256,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                                 ssh.auth = SshAuth::Agent;
                             }
                         });
+                    auth_combo.response.labelled_by(auth_label.id);
                     ui.end_row();
                     match &mut ssh.auth {
                         SshAuth::Password => {
@@ -316,181 +319,5 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::Queryable;
-
-    use super::*;
-
-    #[test]
-    fn form_shows_keyring_hint_and_buttons() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Postgres, false);
-        f.set_ssh(true);
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &[]);
-            });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("Save");
-        h.get_by_label("Test");
-        h.get_by_label("OS keyring unavailable: passwords cannot be saved");
-    }
-
-    #[test]
-    fn url_box_shows_example_hint() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &[]);
-            });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("Import");
-        h.get_by_label_contains("postgres://");
-    }
-
-    #[test]
-    fn sqlite_form_shows_only_file_fields() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &[]);
-            });
-        h.run();
-        h.get_by_label("Database file");
-        h.get_by_label("Page size");
-
-        // Act & Assert
-        for hidden in ["Host", "Port", "User", "Password", "TLS mode", "SSH tunnel"] {
-            assert!(h.query_by_label(hidden).is_none(), "{hidden} is shown");
-        }
-    }
-
-    #[test]
-    fn sqlite_form_browse_emits_intent() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
-        let mut intents = vec![];
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                intents.extend(show(ui, &mut f, &[]));
-            });
-        h.run();
-
-        // Act
-        h.get_by_label("Browse…").click();
-        h.run();
-        drop(h);
-
-        // Assert
-        assert!(intents.contains(&Intent::FormBrowseSqlite));
-    }
-
-    #[test]
-    fn buttons_reachable_in_small_window() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Postgres, true);
-        f.set_ssh(true);
-        let mut h = Harness::builder()
-            .with_size(egui::vec2(400.0, 240.0))
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &[]);
-            });
-        h.run();
-
-        // Act
-        h.get_by_label("Save").scroll_to_me();
-        h.run();
-
-        // Assert
-        for label in ["Save", "Cancel"] {
-            let max_y = h.get_by_label(label).rect().max.y;
-            assert!(max_y <= 240.0, "{label} cut off at y={max_y}");
-        }
-    }
-
-    #[test]
-    fn field_labels_show_help_on_hover() {
-        // Arrange
-        let mut f = ConnectionForm::new(DriverKind::Postgres, false);
-        f.set_ssh(false);
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &[]);
-            });
-        h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
-        h.run();
-
-        for (label, help) in [
-            ("TLS mode", "VerifyFull: VerifyCa plus"),
-            ("CA file", "PEM file with the CA certificate"),
-            ("Page size", "Rows fetched per page"),
-            ("Editor row limit", "Rows fetched per batch"),
-            ("Safety threshold", "require password confirmation"),
-            ("SSH tunnel", "Connect through an SSH server"),
-        ] {
-            // Act
-            h.get_by_label(label).hover();
-            h.run();
-
-            // Assert
-            h.get_by_label_contains(help);
-        }
-    }
-
-    #[test]
-    fn label_picker_selects_one_or_none() {
-        // Arrange
-        let cat = ["dev", "prod"].map(|n| Label {
-            name: n.into(),
-            color: [1, 2, 3],
-        });
-        let mut f = ConnectionForm::new(DriverKind::Postgres, false);
-        f.draft.label = Some("dev".into());
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                show(ui, &mut f, &cat);
-            });
-        h.run();
-
-        // Act
-        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
-            .scroll_to_me();
-        h.run();
-        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
-            .click();
-        h.run();
-        h.get_by_label("None").click();
-        h.run();
-        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
-            .scroll_to_me();
-        h.run();
-        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Label")
-            .click();
-        h.run();
-        h.get_by_label("prod").click();
-        h.run();
-        drop(h);
-
-        // Assert
-        assert_eq!(f.draft.label.as_deref(), Some("prod"));
-    }
-}
+#[path = "connection_form_tests.rs"]
+mod tests;
