@@ -44,6 +44,7 @@ impl AppState {
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
         let is_kv = config.driver.data_model() == DataModel::KeyValue;
+        let db = config.database.clone().unwrap_or_else(|| "0".into());
         self.workspaces.push(WorkspaceState {
             id,
             tree: ObjectTree::new(id, config.driver),
@@ -55,7 +56,7 @@ impl AppState {
             active_tab: None,
             diagram: None,
             session_password: None,
-            keyspace: is_kv.then(|| Keyspace::new(id)),
+            keyspace: is_kv.then(|| Keyspace::new(id, db)),
         });
         self.active = Some(id);
         id
