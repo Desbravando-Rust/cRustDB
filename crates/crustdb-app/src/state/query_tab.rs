@@ -191,6 +191,7 @@ impl QueryTab {
                 }
             }
             Event::ActorCrashed { .. } => {
+                self.tx = TxState::Idle;
                 let n = self.pane.messages.len();
                 self.pane
                     .push(n, false, "connection actor crashed".into(), Duration::ZERO);
