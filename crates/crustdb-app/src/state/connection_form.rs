@@ -198,6 +198,11 @@ impl ConnectionForm {
             c.tls.ca_path = None;
             c.save_password = false;
         }
+        if matches!(c.driver, DriverKind::Sqlite | DriverKind::Redis) {
+            // mTLS is PostgreSQL/MySQL only.
+            c.tls.client_cert_path = None;
+            c.tls.client_key_path = None;
+        }
         let mut errs = validate(&c, others).err().unwrap_or_default();
         let mut bad = |field, message: &str| {
             errs.push(FieldError {
@@ -209,6 +214,27 @@ impl ConnectionForm {
             && !readable(ca)
         {
             bad("ca_path", "CA file not found or unreadable");
+        }
+        match (&c.tls.client_cert_path, &c.tls.client_key_path) {
+            (Some(_), None) => bad(
+                "client_key",
+                "client key is required with a client certificate",
+            ),
+            (None, Some(_)) => bad(
+                "client_cert",
+                "client certificate is required with a client key",
+            ),
+            _ => {}
+        }
+        for (path, field, what) in [
+            (&c.tls.client_cert_path, "client_cert", "client certificate"),
+            (&c.tls.client_key_path, "client_key", "client key"),
+        ] {
+            if let Some(p) = path
+                && !readable(p)
+            {
+                bad(field, &format!("{what} file not found or unreadable"));
+            }
         }
         if let Some(ssh) = &c.ssh {
             if ssh.host.trim().is_empty() {
