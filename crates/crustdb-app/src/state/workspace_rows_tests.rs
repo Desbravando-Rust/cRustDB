@@ -89,3 +89,23 @@ fn cancel_sends_nothing() {
     assert!(cmd.is_none());
     assert!(s.table_mut(tab).unwrap().edit_req.is_none());
 }
+
+#[test]
+fn selection_changed_between_request_and_confirm_sends_nothing() {
+    // Arrange
+    let (mut s, tab) = setup();
+    s.request_delete_rows(tab);
+    s.table_mut(tab).unwrap().select_anchor = None;
+
+    // Act
+    let cmd = s.confirm_delete_rows(RequestId(9));
+
+    // Assert
+    assert!(cmd.is_none());
+    let t = s.table_mut(tab).unwrap();
+    assert!(t.edit_req.is_none());
+    assert_eq!(
+        t.notice.as_deref(),
+        Some("Selection changed, delete cancelled")
+    );
+}

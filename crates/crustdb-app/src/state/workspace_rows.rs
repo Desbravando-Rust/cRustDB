@@ -15,17 +15,24 @@ impl AppState {
         if let Some((lo, hi)) = t.selection() {
             self.dialogs.push(Dialog::DeleteRows {
                 tab,
+                range: (lo, hi),
                 count: hi - lo + 1,
             });
         }
     }
 
-    /// Pops the dialog and sends the `DELETE` for the tab's current selection.
+    /// Pops the dialog and sends the `DELETE` for the rows the dialog counted; if the selection
+    /// moved meanwhile (the dialog is not modal), nothing is sent.
     pub fn confirm_delete_rows(&mut self, req: RequestId) -> Option<Command> {
-        let Some(Dialog::DeleteRows { tab, .. }) = self.dialogs.pop() else {
+        let Some(Dialog::DeleteRows { tab, range, .. }) = self.dialogs.pop() else {
             return None;
         };
-        self.table_mut(tab)?.delete_selected(req)
+        let t = self.table_mut(tab)?;
+        if t.selection() != Some(range) {
+            t.notice = Some("Selection changed, delete cancelled".into());
+            return None;
+        }
+        t.delete_selected(req)
     }
 }
 
