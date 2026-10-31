@@ -72,31 +72,31 @@ Não há `CancelHandle` (ver D8). No app, `DriverRegistry::get(kind)` devolve `O
 ### D5. Cliente `redis` (redis-rs)
 * `cargo add redis --no-default-features --features tokio-comp`, sem features de TLS nem de cluster.
 * Uma `MultiplexedConnection` por `StoreSession`, com os timeouts de `ConnectTarget.connect_timeout`.
-* Comandos sempre como `redis::cmd(name).arg(bytes)` retornando `redis::Value`, sem helpers tipados (mantém binary-safe e uniforme com `run()`).
-* TLS com SSH: o driver abre o próprio TCP para `connect_addr.unwrap_or(host:port)` e o envolve com `tokio-rustls`, com `ServerName` = `host` (builder como `crates/crustdb-postgres/src/connect.rs`). O stream segue para `MultiplexedConnection::new_with_config`. **A API precisa ser confirmada na fase de implementação.** Plano B: feature `tokio-rustls-comp` e recusar "SSH + VerifyFull" com erro claro. `rustls` e `tokio-rustls` já estão na árvore.
+* Comandos sempre como `Cmd::new()` com `.arg(bytes)` em cada argumento, inclusive o nome do comando (`redis::cmd(&str)` não é binary-safe), retornando `redis::Value`, sem helpers tipados (uniforme com `run()`).
+* TLS com SSH: o driver abre o próprio TCP para `connect_addr.unwrap_or(host:port)` e o envolve com `tokio-rustls`, com `ServerName` = `host` (builder como `crates/crustdb-postgres/src/connect.rs`). O stream segue para `MultiplexedConnection::new_with_config`. API confirmada na fase de código (redis 1.8.1, ver "Ajustes (#165)"); o plano B (`tokio-rustls-comp` e recusar "SSH + VerifyFull") foi descartado.
 * Por que não `fred` (MIT): pool, reconexão e retry automáticos conflitam com "cancelar = descartar a conexão" (D8). Traz mais dependências e foca em cluster/sentinel (fora de escopo). A vantagem dele, registrada aqui, é o `tls_server_name` nativo.
 
 ### D6. Conexão
 * `parse_connection_url` aceita `redis://` e `rediss://`. `rediss` usa `VerifyFull` por padrão. `VerifyCa` é tratado como `VerifyFull` (fail-safe). `Require` aceita o certificado sem verificação.
 * `user` é o usuário ACL. URL só com senha (`redis://:p@h`) usa `default`.
 * O path `/n` vai para `ConnectTarget.database` e deve ser `u32`, senão `Malformed`. A conexão faz `AUTH` (via redis-rs) e `SELECT n`. Porta padrão 6379.
-* `namespaces()` usa `CONFIG GET databases`. Se a ACL negar, usa `INFO keyspace` somando o banco atual.
+* `namespaces()` usa `CONFIG GET databases`. Qualquer erro do servidor nesse comando (ACL, `CONFIG` renomeado/desabilitado) cai em `INFO keyspace` somando o banco atual; erro de I/O nunca dispara o fallback.
 * Um `connections.json` com `"redis"` não abre em versões antigas (mesmo trade-off do ADR 0002).
 
 ### D7. Árvore e leitura sem travar
 * Só `SCAN cursor MATCH p COUNT n`, com cursor opaco e lotes de 500 (`ROWS_BATCH`). **Nunca `KEYS`.** `SCAN` pode duplicar, então o app deduplica.
 * `TYPE` e `PTTL` por lote, via pipeline. `MEMORY USAGE` só ao abrir a chave (negado -> `None`).
-* Leitura sempre limitada: `GETRANGE 0 CELL_MEMORY_CAP`; `HSCAN`/`SSCAN`/`ZSCAN` ou `ZRANGE 0 limit WITHSCORES`; `LRANGE 0 limit`; `XRANGE - + COUNT limit+1`. `JSON.GET` só se `MODULE LIST` ou `COMMAND INFO JSON.GET` indicar o módulo. Regra única: pedir sempre `limit + 1` itens (sentinela); se vierem mais de `limit`, descartar o excedente e marcar `truncated = true`. Para `GETRANGE`, pedir `CELL_MEMORY_CAP + 1` bytes. `HSCAN`/`SSCAN`/`ZSCAN` acumulam até `limit + 1`.
+* Leitura sempre limitada: `GETRANGE 0 CELL_MEMORY_CAP`; `HSCAN`/`SSCAN` ou `ZRANGE 0 limit WITHSCORES`; `LRANGE 0 limit`; `XRANGE - + COUNT limit+1`. Tipo desconhecido (módulos) não é lido: `scan` o lista como `ValueKind::Other` e `read` devolve `Unsupported`; **não há `JSON.GET`** (prevalece #163.7). Regra única: pedir sempre `limit + 1` itens (sentinela); se vierem mais de `limit`, descartar o excedente e marcar `truncated = true`. Para `GETRANGE`, pedir `CELL_MEMORY_CAP + 1` bytes. `HSCAN`/`SSCAN` acumulam até `limit + 1`.
 
 ### D8. Cancelamento
-Não há cancel no servidor. Durante o `.await` de `run()`/`scan()` o ator tem `&mut` da sessão, então ele não consegue descartá-la de fora. Mecanismo: a sessão vive numa task dona, e a task dona faz `tokio::select!` entre a operação e o canal de cancelamento, e o ator envia o cancelamento (alternativa equivalente: `abort()` da task dona). No cancelamento a task dona sai do `select!` e faz o drop do `Box<dyn StoreSession>` (fecha o socket); o ator reconecta sob demanda. **Invariante:** nenhum clone da `MultiplexedConnection` pode sobreviver ao drop (nem em tasks auxiliares, nem em pipelines em voo), senão o socket não fecha. O teste `dropping_session_closes_server_client` cobre isso. Trade-off: Lua ou comando lento segue no servidor. `SCRIPT KILL` fica fora de escopo.
+Não há cancel no servidor. Durante o `.await` de `run()`/`scan()` o ator tem `&mut` da sessão, então ele não consegue descartá-la de fora. Mecanismo: a sessão vive numa task dona, e a task dona faz `tokio::select!` entre a operação e o canal de cancelamento, e o ator envia o cancelamento (alternativa equivalente: `abort()` da task dona). No cancelamento a task dona sai do `select!` e faz o drop do `Box<dyn StoreSession>`; o ator reconecta sob demanda. No driver, descartar a `MultiplexedConnection` com comando em voo **não** fecha o socket (o `poll_close` do pipeline espera as respostas pendentes). Por isso `RedisSession` guarda o `JoinHandle` do laço de I/O e o `Drop` faz `abort()`, o que derruba o socket na hora. Pipelines usam `&mut conn`, sem clones. O teste `dropping_session_closes_server_client` cobre sessão ociosa e sessão com `WAIT 1 5000` descartada em voo (o cliente precisa sumir do `CLIENT LIST` antes de 5 s). Trade-off: Lua ou comando lento segue no servidor. `SCRIPT KILL` fica fora de escopo.
 
 ### D9. Somente leitura e comandos perigosos
 * Sessões Metadata, Data e Export recusam `run()`. O driver garante isso.
 * `crustdb_redis::classify(argv)` é exposta por `StoreDriver::assess` como `Result<(Verdict, String), Refused>`. Não existe `CommandClass`: `Verdict` (Run/Confirm/Password) mais o motivo cobrem a classificação, e `Err(Refused)` cobre "Recusado". Reaproveita o `Verdict` e o fluxo do §4.7. `run()` também devolve o mesmo erro tipado se receber um comando recusado, sem depender de a UI ter chamado `assess`.
-  * **Password:** `FLUSHALL`, `FLUSHDB`, `SHUTDOWN` e `EVAL`/`EVALSHA`/`EVAL_RO`/`EVALSHA_RO`/`FCALL`/`FCALL_RO`. O script não é analisável (`EVAL "return redis.call('FLUSHALL')" 0` contornaria o Password), então todo script é tratado como o pior caso. Aceitamos o custo: a variante `_RO` também pede senha, por não termos como provar que o script é de leitura.
-  * **Confirm:** `CONFIG SET|REWRITE|RESETSTAT`, `DEBUG`, `KEYS`, `SCRIPT FLUSH`, `FUNCTION FLUSH|DELETE`, `CLIENT KILL`, `MIGRATE`, `REPLICAOF`/`SLAVEOF`, `ACL SETUSER|DELUSER`, `MODULE`, `SAVE`, `SWAPDB`, `SCRIPT LOAD`, `FUNCTION LOAD`; `DEL`/`UNLINK` com mais chaves que o limite; comando desconhecido.
-  * **Recusados (fora de escopo):** `MULTI`/`EXEC`/`WATCH`, `SUBSCRIBE`/`PSUBSCRIBE`/`MONITOR`, `B*POP` e `XREAD BLOCK`. Também recusados por quebrarem o pareamento ou o estado da conexão multiplexada: `CLIENT REPLY`, `HELLO`, `RESET`, `QUIT`. `SELECT` e `AUTH` via `run()` são recusados: o namespace e a identidade da sessão só mudam por `connect` ou pelo seletor de namespace (que reconecta com `SELECT n`), nunca por comando livre. Escolha registrada para evitar que um `SELECT` no editor mude o banco de forma silenciosa para as leituras seguintes.
+  * **Password:** `FLUSHALL`, `FLUSHDB`, `SHUTDOWN`, `MODULE LOAD`/`MODULE LOADEX` (carregam código nativo no servidor, pior que script) e `EVAL`/`EVALSHA`/`EVAL_RO`/`EVALSHA_RO`/`FCALL`/`FCALL_RO`. O script não é analisável (`EVAL "return redis.call('FLUSHALL')" 0` contornaria o Password), então todo script é tratado como o pior caso. Aceitamos o custo: a variante `_RO` também pede senha, por não termos como provar que o script é de leitura.
+  * **Confirm:** `CONFIG SET|REWRITE|RESETSTAT`, `DEBUG`, `KEYS`, `SCRIPT FLUSH`, `FUNCTION FLUSH|DELETE`, `CLIENT KILL`, `MIGRATE`, `REPLICAOF`/`SLAVEOF`, `ACL SETUSER|DELUSER`, demais subcomandos de `MODULE`, `SAVE`, `SWAPDB`, `SCRIPT LOAD`, `FUNCTION LOAD`; `DEL`/`UNLINK` com mais de 10 chaves (`DEL_CONFIRM_ABOVE`); `XREAD`/`XREADGROUP` sem `BLOCK`; comando desconhecido.
+  * **Recusados (fora de escopo):** `MULTI`/`EXEC`/`DISCARD`/`WATCH`/`UNWATCH`, `SUBSCRIBE`/`PSUBSCRIBE`/`MONITOR`, `B*POP`, `XREAD BLOCK`, `WAIT`/`WAITAOF` (bloqueiam como `B*POP`) e `SYNC`/`PSYNC`/`REPLCONF` (transformam o socket em stream de replicação). Também recusados por quebrarem o pareamento ou o estado da conexão multiplexada: `CLIENT REPLY`, `HELLO`, `RESET`, `QUIT`. `SELECT` e `AUTH` via `run()` são recusados: o namespace e a identidade da sessão só mudam por `connect` ou pelo seletor de namespace (que reconecta com `SELECT n`), nunca por comando livre. Escolha registrada para evitar que um `SELECT` no editor mude o banco de forma silenciosa para as leituras seguintes.
 * Tokenizador estilo `redis-cli` (aspas, `\xHH`). Cada argumento vai como bulk RESP. **Nunca concatenar** (anti-injeção). Sem `quote_ident` nem `Dialect`.
 
 ### D10. Fora de escopo
@@ -113,9 +113,9 @@ Cluster, Sentinel, Pub/Sub, `MULTI`/`EXEC`, edição de valores, mTLS e `SCRIPT 
 * Dois caminhos no app (`Backend::Sql` e `Backend::Store`) e um ator a mais para manter.
 * Adicionar `DriverKind::Redis` obriga a atualizar os `match` exaustivos listados no fato 2, e o `connections.json` fica incompatível com versões antigas.
 * Cancelar descarta a conexão, mas não interrompe o comando no servidor.
-* TLS com SSH exige código próprio (`tokio-rustls`), e a API do redis-rs ainda precisa ser confirmada. O plano B recusa "SSH + VerifyFull".
+* TLS com SSH exige código próprio (`tokio-rustls`), duplicado do driver Postgres em `crustdb-redis/src/tls.rs`.
 * `Capabilities` pode crescer com cada NoSQL. Novas flags só entram com consumidor real.
-* Licenças de `redis`/`fred` citadas de memória, a confirmar com `cargo deny check`.
+* Licenças confirmadas com `cargo deny check`: `redis` entra sem exceção; só o transitivo `xxhash-rust` (BSL-1.0) precisou de exceção em `deny.toml`.
 
 ## Plano de Testes
 Só comportamento do domínio. Proibido testar apenas redis-rs ou serde sem regra do CrustDB. Testes seguem AAA.
@@ -155,6 +155,23 @@ Apenas listadas, não criadas aqui.
 * D-c. `redis://` puro usa `Disable` e ignora `sslmode`. `rediss://` usa `Require` com `sslmode=require` (e `prefer`/`allow`, com aviso) e `VerifyFull` em qualquer outro caso (ausente, `verify-ca`, `verify-full`, `disable`, valor desconhecido).
 * D-d. `VerifyCa` vira `VerifyFull` só no parser. O driver da fase 2b também deve tratar `VerifyCa` escolhido à mão no formulário (como o MySQL em `tls_notes`).
 * D-e. Braços inertes nos helpers SQL (`sql::dialect`, `keywords`, `operators_for`, `export_fmt::dialect`, árvore) e no `FakeDriver`: hoje são inalcançáveis só porque nenhum driver Redis está registrado; nada na UI usa `capabilities()` ainda. O gate de `Capabilities` entrou na #166 (árvore SQL e workspace_home por `caps.table_tab`), antes do registro do driver Redis (#165).
+
+## Ajustes da fase de código (#165)
+
+* E-a. `redis` 1.8.1, sem features de TLS. O plano A de TLS foi confirmado: `MultiplexedConnection::new_with_config(&RedisConnectionInfo, stream, AsyncConnectionConfig)` aceita qualquer `AsyncRead + AsyncWrite + Unpin + Send`. O driver abre o `TcpStream` para `connect_addr.unwrap_or(host:port)`, embrulha com `tokio_rustls::TlsConnector` usando `ServerName` = `host`, e faz `tokio::spawn` do future de I/O. "SSH + VerifyFull" funciona; plano B descartado.
+* E-b. `Drop` de `RedisSession` faz `abort()` do laço de I/O: descartar a conexão com comando em voo não fecha o socket (ver D8). Pipelines usam `&mut conn`.
+* E-c. `AsyncConnectionConfig::set_response_timeout(None)`: o padrão de 500 ms quebraria comandos lentos, e cancelar é descartar a sessão. TCP, TLS, `AUTH`/`SELECT` e `INFO server` rodam sob um único `tokio::time::timeout(connect_timeout)`.
+* E-d. Sem `JSON.GET`: prevalece #163.7. Tipo desconhecido vira `ValueKind::Other` no `scan` e `Unsupported` no `read`. `MEMORY USAGE` sem `SAMPLES`; erro do servidor vira `size_bytes: None`, erro de I/O propaga.
+* E-e. `DEL_CONFIRM_ABOVE = 10`: `DEL`/`UNLINK` com mais de 10 chaves pedem confirmação.
+* E-f. Fallback de `namespaces()` para `INFO keyspace` em qualquer erro de servidor de `CONFIG GET databases` (D6).
+* E-g. `ConnectTarget.database` que não seja `u32` falha em `connect` com `ErrorKind::Connect` ("database must be a numeric index"); vazio equivale a `0`. Usuário vazio vira `default` quando há senha.
+* E-h. `tls.rs` é cópia enxuta do TLS do Postgres (YAGNI: dois consumidores). `VerifyCa` vira `VerifyFull`; `Require` usa um verificador que aceita qualquer certificado mas valida as assinaturas do handshake; TLS antigo devolve a mensagem D39. **Issue de extração a abrir** (crate/módulo compartilhado) se surgir um terceiro consumidor.
+* E-i. Erros: `AuthenticationFailed` ou `NOAUTH`/`WRONGPASS` viram `ErrorKind::Auth`; erro do servidor vira `Query { code }`; timeout de I/O vira `Timeout`; falha de I/O vira `Connect`; handshake TLS vira `Tls`; o resto vira `Protocol`.
+* E-j. Licença: `xxhash-rust` (BSL-1.0, dependência transitiva do `redis`) tem exceção em `deny.toml`. `XREAD`/`XREADGROUP` sem `BLOCK` são `Confirm`; com `BLOCK`, recusados. `DISCARD` e `UNWATCH` são recusados junto com `MULTI`/`EXEC`/`WATCH`.
+* E-k (revisão). `WAIT`/`WAITAOF`/`SYNC`/`PSYNC`/`REPLCONF` recusados; `MODULE LOAD`/`LOADEX` exigem senha. `TYPE`/`PTTL` do `scan` rodam com `ignore_errors`: chave negada pela ACL (o `SCAN` não checa padrão de chave) é descartada, não derruba a página. O teste de cancelamento com comando em voo usa `WAIT` via `RedisSession::call` interno (teste de unidade `#[ignore = "docker"]`), porque `run` agora recusa `WAIT` e `DEBUG SLEEP` travaria o servidor inteiro (o observador também).
+* Fora desta fase: o driver não está registrado no `DriverRegistry`/`main.rs`, e os comentários "unreachable: no Redis driver" do core e do app seguem como estão.
+
+**NÃO verificado em Docker nesta fase:** os testes de integração (`crates/crustdb-redis/tests/integration.rs`, `#[ignore = "docker"]`) e o helper `start_redis` foram escritos e compilam, mas não foram executados (sem Docker no ambiente). Rodar `cargo test -p crustdb-redis -- --include-ignored` antes de confiar em TLS, cancelamento e `SCAN`.
 
 ## Ajustes da fase de código (#166)
 

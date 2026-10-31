@@ -5,6 +5,6 @@ pub mod fake_driver;
 pub mod fake_store;
 pub use certs::{TestCerts, certs_for};
 pub use containers::{
-    MysqlContainer, PgContainer, SshContainer, start_mysql, start_postgres,
-    start_postgres_tls_only, start_sshd,
+    MysqlContainer, PgContainer, RedisContainer, SshContainer, start_mysql, start_postgres,
+    start_postgres_tls_only, start_redis, start_sshd,
 };
