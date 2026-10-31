@@ -151,6 +151,18 @@ impl StoreActor {
                     .await;
                 self.out.emit(Event::CommandReply { req, result });
             }
+            WsMsg::Cmd(Command::SwitchNamespace { ns, .. }) => {
+                if let Some(t) = self.target.as_mut() {
+                    t.database = Some(ns);
+                }
+                // The next operation reconnects lazily on the new database.
+                for s in [self.session.take(), self.editor.take()]
+                    .into_iter()
+                    .flatten()
+                {
+                    s.close().await;
+                }
+            }
             WsMsg::Cmd(Command::LoadChildren { req, .. }) => {
                 self.out.emit(Event::Notice {
                     tab: NO_TAB,

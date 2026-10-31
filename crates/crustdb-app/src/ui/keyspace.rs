@@ -17,7 +17,9 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
             ui,
             |ui| {
                 for n in &ks.namespaces {
-                    ui.weak(n);
+                    if ui.selectable_label(*n == ks.current, n).clicked() {
+                        out.push(Intent::SelectNamespace(n.clone()));
+                    }
                 }
             },
         );

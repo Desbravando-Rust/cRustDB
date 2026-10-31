@@ -43,6 +43,8 @@ pub struct EntryPane {
 pub struct Keyspace {
     ws: WorkspaceId,
     pub namespaces: Vec<String>,
+    /// Logical database the sessions are on.
+    pub current: String,
     ns_req: Option<RequestId>,
     pub scan: KeyScan,
     tree: Vec<KeyNode>,
@@ -57,10 +59,11 @@ pub struct Keyspace {
 }
 
 impl Keyspace {
-    pub fn new(ws: WorkspaceId) -> Self {
+    pub fn new(ws: WorkspaceId, current: String) -> Self {
         Self {
             ws,
             namespaces: vec![],
+            current,
             ns_req: None,
             scan: KeyScan::new(None),
             tree: vec![],
@@ -113,6 +116,24 @@ impl Keyspace {
         self.scan_error = None;
         self.rebuild();
         self.scan.next(self.ws, req)
+    }
+
+    /// Moves to namespace `ns`: drops the tree and entry, then scans from the start.
+    pub fn select_namespace(&mut self, ns: &str, req: RequestId) -> Vec<Command> {
+        self.current = ns.to_owned();
+        self.entry = None;
+        self.entry_req = None;
+        self.entry_error = None;
+        self.expanded.clear();
+        let switch = Command::SwitchNamespace {
+            ws: self.ws,
+            ns: ns.to_owned(),
+        };
+        self.scan = KeyScan::new(self.scan.pattern().map(str::to_owned));
+        self.scan_error = None;
+        self.rebuild();
+        let scan = self.scan.next(self.ws, req);
+        std::iter::once(switch).chain(scan).collect()
     }
 
     pub fn open(&mut self, key: EntryKey, req: RequestId) -> Command {
@@ -245,14 +266,27 @@ impl AppState {
         RequestId(self.next_exec)
     }
 
+    /// Entry point for `Intent::SelectNamespace`; refused while a command runs or awaits approval.
+    pub fn select_namespace(&mut self, ws: WorkspaceId, ns: &str) -> Vec<Command> {
+        let req = self.internal_req();
+        if self.dialogs.has_store_safety(ws) {
+            return vec![];
+        }
+        match self.workspace_mut(ws).and_then(|w| w.keyspace.as_mut()) {
+            Some(ks) if ks.current != ns && !ks.command.is_busy() => ks.select_namespace(ns, req),
+            _ => vec![],
+        }
+    }
+
     /// Starts the keyspace of a freshly connected key-value workspace.
     pub(super) fn start_keyspace(&mut self, ws: WorkspaceId) {
         let (ns, scan) = (self.internal_req(), self.internal_req());
         let Some(w) = self.workspace_mut(ws) else {
             return;
         };
+        let db = w.config.database.clone().unwrap_or_else(|| "0".into());
         if let Some(ks) = w.keyspace.as_mut() {
-            *ks = Keyspace::new(ws);
+            *ks = Keyspace::new(ws, db);
             let cmds = ks.start(ns, scan);
             self.outbox.extend(cmds);
         }

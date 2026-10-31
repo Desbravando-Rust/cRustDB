@@ -29,6 +29,8 @@ mod diagram_tests;
 #[cfg(test)]
 mod disconnect_tests;
 #[cfg(test)]
+mod store_ns_tests;
+#[cfg(test)]
 mod store_tests;
 #[cfg(test)]
 mod tests;
@@ -163,6 +165,7 @@ impl Actors {
             | Command::LoadColumns { ws, .. }
             | Command::LoadDiagram { ws, .. }
             | Command::ListNamespaces { ws, .. }
+            | Command::SwitchNamespace { ws, .. }
             | Command::ScanKeys { ws, .. }
             | Command::ReadEntry { ws, .. }
             | Command::AssessCommand { ws, .. }

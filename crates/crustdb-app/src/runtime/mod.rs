@@ -206,6 +206,7 @@ fn no_actor(cmd: &Command) -> Event {
         | LoadColumns { .. }
         | LoadDiagram { .. }
         | ListNamespaces { .. }
+        | SwitchNamespace { .. }
         | ScanKeys { .. }
         | ReadEntry { .. }
         | AssessCommand { .. }

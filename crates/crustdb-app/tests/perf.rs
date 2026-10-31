@@ -331,7 +331,7 @@ fn keyspace_100k_keys_frame_under_16ms() {
     if cfg!(debug_assertions) {
         return;
     }
-    let mut ks = Keyspace::new(WorkspaceId(1));
+    let mut ks = Keyspace::new(WorkspaceId(1), "0".into());
     ks.start(RequestId(1), RequestId(2));
     let entries = (0..100_000)
         .map(|i| KeyEntry {
@@ -393,7 +393,7 @@ fn keyspace_apply_batch_with_100k_keys_time() {
             .collect(),
         next: next.map(String::from),
     };
-    let mut ks = Keyspace::new(WorkspaceId(1));
+    let mut ks = Keyspace::new(WorkspaceId(1), "0".into());
     ks.start(RequestId(1), RequestId(2));
     ks.apply(&Event::KeysScanned {
         req: RequestId(2),

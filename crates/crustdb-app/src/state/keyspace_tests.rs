@@ -298,3 +298,121 @@ fn filter_pattern_is_trimmed() {
         Some(Command::ScanKeys { pattern: Some(p), .. }) if p == "user:*"
     ));
 }
+
+#[test]
+fn select_namespace_resets_tree_and_rescans() {
+    // Arrange
+    let (mut s, ws, cmds) = online_redis();
+    let (req, ..) = scans(&cmds)[0].clone();
+    s.apply(Event::KeysScanned {
+        req,
+        result: Ok(page(&["a:1"], Some("5"))),
+    });
+    keyspace(&mut s, ws).open(key("a:1"), RequestId(50));
+    assert_eq!(keyspace(&mut s, ws).current, "0");
+
+    // Act
+    let cmds = s.select_namespace(ws, "3");
+
+    // Assert
+    assert!(matches!(
+        &cmds[..],
+        [
+            Command::SwitchNamespace { ns, .. },
+            Command::ScanKeys { cursor: None, .. }
+        ] if ns == "3"
+    ));
+    let ks = keyspace(&mut s, ws);
+    assert_eq!(ks.current, "3");
+    assert!(ks.entry.is_none() && ks.nodes().is_empty() && ks.scan.entries.is_empty());
+}
+
+#[test]
+fn select_current_namespace_is_noop() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+
+    // Act
+    let cmds = s.select_namespace(ws, "0");
+
+    // Assert
+    assert!(cmds.is_empty());
+}
+
+#[test]
+fn select_namespace_refused_while_command_running() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+    keyspace(&mut s, ws).command.text = "GET k".into();
+    let Some(Command::AssessCommand { req, .. }) = s.run_command(ws) else {
+        panic!("expected AssessCommand");
+    };
+    s.apply(Event::CommandAssessed {
+        req,
+        result: Ok((crustdb_core::safety::Verdict::Run, String::new())),
+    });
+    assert!(keyspace(&mut s, ws).command.is_running());
+
+    // Act
+    let cmds = s.select_namespace(ws, "3");
+
+    // Assert
+    assert!(cmds.is_empty());
+    assert_eq!(keyspace(&mut s, ws).current, "0");
+}
+
+#[test]
+fn select_namespace_refused_while_command_is_assessing() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+    keyspace(&mut s, ws).command.text = "GET k".into();
+    assert!(s.run_command(ws).is_some());
+
+    // Act
+    let cmds = s.select_namespace(ws, "3");
+
+    // Assert
+    assert!(cmds.is_empty());
+    assert_eq!(keyspace(&mut s, ws).current, "0");
+}
+
+#[test]
+fn select_namespace_refused_while_safety_dialog_open() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+    keyspace(&mut s, ws).command.text = "FLUSHDB".into();
+    let Some(Command::AssessCommand { req, .. }) = s.run_command(ws) else {
+        panic!("expected AssessCommand");
+    };
+    s.apply(Event::CommandAssessed {
+        req,
+        result: Ok((
+            crustdb_core::safety::Verdict::Password,
+            "can wipe data".into(),
+        )),
+    });
+    assert!(s.dialogs.has_store_safety(ws));
+
+    // Act
+    let cmds = s.select_namespace(ws, "3");
+
+    // Assert
+    assert!(cmds.is_empty());
+    assert_eq!(keyspace(&mut s, ws).current, "0");
+}
+
+#[test]
+fn select_namespace_keeps_the_filter_pattern() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+    keyspace(&mut s, ws).set_filter("user:*".into(), RequestId(60));
+
+    // Act
+    let cmds = s.select_namespace(ws, "3");
+
+    // Assert
+    assert!(matches!(
+        &cmds[..],
+        [_, Command::ScanKeys { pattern: Some(p), .. }] if p == "user:*"
+    ));
+}

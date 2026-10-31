@@ -38,6 +38,11 @@ pub struct CommandPane {
 }
 
 impl CommandPane {
+    /// A command is being assessed, awaiting approval or running.
+    pub fn is_busy(&self) -> bool {
+        !matches!(self.phase, Phase::Idle)
+    }
+
     pub fn is_running(&self) -> bool {
         matches!(self.phase, Phase::Running(_))
     }

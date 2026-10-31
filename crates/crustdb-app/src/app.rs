@@ -348,6 +348,14 @@ impl CrustApp {
                     .and_then(|ws| self.state.cancel_command(ws));
                 self.send(cmd);
             }
+            Intent::SelectNamespace(ns) => {
+                let cmds = self
+                    .state
+                    .active
+                    .map(|ws| self.state.select_namespace(ws, &ns))
+                    .unwrap_or_default();
+                cmds.into_iter().for_each(|c| self.send(Some(c)));
+            }
             i @ (Intent::LoadMoreKeys
             | Intent::KeyFilter(_)
             | Intent::ToggleKey(_)

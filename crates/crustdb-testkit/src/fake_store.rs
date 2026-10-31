@@ -28,6 +28,8 @@ pub struct FakeStoreLog {
     pub hang_run: AtomicBool,
     /// Purpose of every connect, in order.
     pub purposes: Mutex<Vec<SessionPurpose>>,
+    /// `database` of every connect target, in order.
+    pub databases: Mutex<Vec<Option<String>>>,
 }
 
 impl FakeStoreLog {
@@ -89,9 +91,12 @@ impl StoreDriver for FakeStore {
 
     async fn connect(
         &self,
-        _t: &ConnectTarget,
+        t: &ConnectTarget,
         p: SessionPurpose,
     ) -> Result<Box<dyn StoreSession>, DriverError> {
+        if let Ok(mut v) = self.log.databases.lock() {
+            v.push(t.database.clone());
+        }
         if let Ok(mut v) = self.log.purposes.lock() {
             v.push(p);
         }

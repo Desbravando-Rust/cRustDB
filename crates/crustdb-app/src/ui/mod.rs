@@ -123,6 +123,8 @@ pub enum Intent {
     CancelCommand,
     /// Glob pattern of the key scan; empty clears it.
     KeyFilter(String),
+    /// Switches the logical database of the active key-value workspace.
+    SelectNamespace(String),
     ToggleKey(Vec<u8>),
     OpenKey(crustdb_core::store::keyspace::EntryKey),
     /// ER diagram of a schema (PG) or database (MySQL, `schema: None`).
