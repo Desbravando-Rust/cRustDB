@@ -160,6 +160,8 @@ mod tests {
         h.run();
 
         // Assert
+        h.get_by_label("New query");
+        assert!(h.query_by_role(egui::accesskit::Role::Image).is_none());
         assert!(h.query_by_label("cRustDB logo").is_none());
     }
 
