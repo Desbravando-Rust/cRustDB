@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use crustdb_core::driver::{ConnectTarget, Driver, SessionPurpose, TlsConfig, TlsMode};
+use crustdb_core::error::ErrorKind;
 use crustdb_mysql::MysqlDriver;
 use crustdb_testkit::{MysqlContainer, TestCerts, certs_for, start_mysql_mtls};
 use secrecy::SecretString;
@@ -58,5 +59,7 @@ async fn mtls_rejects_without_client_cert() {
         .err();
 
     // Assert
-    assert!(err.is_some());
+    let e = err.expect("must fail");
+    assert_eq!(e.kind, ErrorKind::Auth, "{e:?}");
+    assert!(e.message.contains("Access denied"), "{}", e.message);
 }
