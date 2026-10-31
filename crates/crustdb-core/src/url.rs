@@ -90,7 +90,7 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
 
     let query_path = |names: [&str; 2]| {
         url.query_pairs()
-            .find(|(k, _)| names.contains(&k.as_ref()))
+            .find(|(k, v)| names.contains(&k.as_ref()) && !v.is_empty())
             .map(|(_, v)| PathBuf::from(v.into_owned()))
     };
     let client_cert_path = query_path(["sslcert", "ssl-cert"]);
@@ -205,6 +205,15 @@ mod tests {
         // Assert
         assert_eq!(p.client_cert_path, Some(PathBuf::from("/c/client.crt")));
         assert_eq!(p.client_key_path, Some(PathBuf::from("/c/client.key")));
+    }
+
+    #[test]
+    fn empty_cert_and_key_are_ignored() {
+        // Act
+        let p = parse_connection_url("postgres://h/db?sslcert=&sslkey=").unwrap();
+
+        // Assert
+        assert_eq!((p.client_cert_path, p.client_key_path), (None, None));
     }
 
     #[test]
