@@ -49,6 +49,7 @@ async fn walk(
     o: &ObjectRef,
     sorts: &[Sort],
     keyset: bool,
+    expected: bool,
 ) -> Vec<String> {
     let columns: Vec<_> = DRIVER
         .introspector()
@@ -81,15 +82,18 @@ async fn walk(
         }
         q.offset += SIZE;
         if keyset {
-            q.after = Some(after(&q, rows.last().unwrap()).expect("keyset-safe order"));
+            let next = after(&q, rows.last().unwrap());
+            assert_eq!(next.is_some(), expected, "cursor for {sorts:?}");
+            q.after = next;
         }
     }
 }
 
-async fn check(s: &mut Box<dyn Session>, sorts: Vec<Sort>) {
+/// `keyset_expected`: whether `after()` must yield a cursor (false = OFFSET fallback).
+async fn check(s: &mut Box<dyn Session>, sorts: Vec<Sort>, keyset_expected: bool) {
     let o = obj();
-    let by_offset = walk(s, &o, &sorts, false).await;
-    let by_keyset = walk(s, &o, &sorts, true).await;
+    let by_offset = walk(s, &o, &sorts, false, false).await;
+    let by_keyset = walk(s, &o, &sorts, true, keyset_expected).await;
     assert_eq!(by_offset.len(), 50);
     assert_eq!(by_keyset, by_offset);
 }
@@ -118,20 +122,28 @@ async fn keyset_pages_match_offset_pages() {
         .await
         .unwrap();
     for sql in [
-        "CREATE TABLE ks(id INTEGER NOT NULL, tag TEXT NOT NULL, v INTEGER NOT NULL, PRIMARY KEY(id, tag))",
-        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 49) INSERT INTO ks SELECT i % 10, 'g' || (i / 10), i % 7 FROM n",
+        "CREATE TABLE ks(id INTEGER NOT NULL, tag TEXT NOT NULL, v INTEGER NOT NULL, d NUMERIC NOT NULL, PRIMARY KEY(id, tag))",
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 49) INSERT INTO ks SELECT i % 10, 'g' || (i / 10), i % 7, CASE WHEN i % 2 = 0 THEN 0.3 ELSE 0.1 + 0.2 END FROM n",
     ] {
         s.start(sql, ExecMode::Other).await.unwrap();
         s.finish().await.unwrap();
     }
 
     // Act & Assert
-    check(&mut s, vec![sort("id", false), sort("tag", false)]).await;
-    check(&mut s, vec![sort("id", true), sort("tag", false)]).await;
-    check(&mut s, vec![sort("id", true), sort("tag", true)]).await;
+    check(&mut s, vec![sort("id", false), sort("tag", false)], true).await;
+    check(&mut s, vec![sort("id", true), sort("tag", false)], true).await;
+    check(&mut s, vec![sort("id", true), sort("tag", true)], true).await;
+    // NUMERIC is stored as REAL and compares inexactly with the text cursor: OFFSET.
+    check(
+        &mut s,
+        vec![sort("d", false), sort("id", false), sort("tag", false)],
+        false,
+    )
+    .await;
     check(
         &mut s,
         vec![sort("v", false), sort("id", false), sort("tag", false)],
+        true,
     )
     .await;
 }
