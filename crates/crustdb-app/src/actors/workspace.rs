@@ -309,10 +309,7 @@ impl WorkspaceActor {
                 if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
                     self.mark_down(key);
                 }
-                self.out.emit(Event::Notice {
-                    tab: NO_TAB,
-                    text: e.message.clone(),
-                });
+                tracing::warn!("children load failed: {}", e.message);
                 self.out.emit(Event::ChildrenFailed {
                     req,
                     error: e.message,

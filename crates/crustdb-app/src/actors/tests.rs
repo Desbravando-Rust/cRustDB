@@ -475,7 +475,7 @@ async fn load_children_failure_answers_with_children_failed() {
 
     // Assert
     let ev = drain(&h.rx);
-    assert!(ev.iter().any(|e| matches!(e, Event::Notice { .. })));
+    assert!(!ev.iter().any(|e| matches!(e, Event::Notice { .. })));
     assert!(ev.iter().any(|e| matches!(
         e,
         Event::ChildrenFailed {
