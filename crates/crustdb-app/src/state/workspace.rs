@@ -53,8 +53,8 @@ impl WorkspaceState {
     /// Commands that (re)load the tables folder of the configured database; idempotent.
     pub fn expand_home(&mut self) -> Vec<Command> {
         match self.config.database.clone() {
-            Some(db) => self.tree.expand_tables_of(&db),
-            None => vec![],
+            Some(db) if self.capabilities().table_tab => self.tree.expand_tables_of(&db),
+            _ => vec![],
         }
     }
 
@@ -155,6 +155,7 @@ impl AppState {
     ) -> Vec<Command> {
         let id = self.next_tab_id();
         self.workspace_mut(ws)
+            .filter(|w| w.capabilities().table_tab)
             .map(|w| {
                 let open = w
                     .tabs
@@ -176,6 +177,9 @@ impl AppState {
     pub fn open_query(&mut self, ws: WorkspaceId, database: Option<String>) -> Option<Command> {
         let id = self.next_tab_id();
         let w = self.workspace_mut(ws)?;
+        if !w.capabilities().sql_editor {
+            return None;
+        }
         w.queries
             .push(QueryTab::new(id, w.config.driver, database.clone()));
         w.active_tab = Some(id);

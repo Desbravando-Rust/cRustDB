@@ -37,24 +37,28 @@ impl Diagram {
 }
 
 impl WorkspaceState {
-    /// Replaces any open diagram with a pending one for `database`/`schema`.
+    /// Replaces any open diagram with a pending one for `database`/`schema`;
+    /// `None` when the data model has no ER diagram.
     pub fn open_diagram(
         &mut self,
         req: RequestId,
         database: String,
         schema: Option<String>,
-    ) -> Command {
+    ) -> Option<Command> {
+        if !self.capabilities().er_diagram {
+            return None;
+        }
         let title = match &schema {
             Some(s) => format!("{database}.{s}"),
             None => database.clone(),
         };
         self.diagram = Some(Diagram::new(req, title));
-        Command::LoadDiagram {
+        Some(Command::LoadDiagram {
             ws: self.id,
             req,
             database,
             schema,
-        }
+        })
     }
 }
 
@@ -187,10 +191,10 @@ mod tests {
         let cmd = w.open_diagram(RequestId(3), "d".into(), Some("public".into()));
         assert!(matches!(
             cmd,
-            Command::LoadDiagram {
+            Some(Command::LoadDiagram {
                 req: RequestId(3),
                 ..
-            }
+            })
         ));
         s.apply(Event::Diagram {
             req: RequestId(2),

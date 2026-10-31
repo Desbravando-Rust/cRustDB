@@ -410,7 +410,9 @@ impl CrustApp {
 
     fn tree_mut(&mut self) -> Option<&mut crate::state::tree::ObjectTree> {
         let id = self.state.active?;
-        self.state.workspace_mut(id).map(|w| &mut w.tree)
+        self.state
+            .workspace_mut(id)
+            .and_then(|w| w.tree_if_supported())
     }
 
     /// A refresh may drop the home's tables folder; request it again.
