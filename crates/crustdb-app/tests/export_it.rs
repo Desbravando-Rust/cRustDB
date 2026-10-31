@@ -35,6 +35,8 @@ async fn export_table(
     let tls = TlsConfig {
         mode: TlsMode::Disable,
         ca_path: None,
+        client_cert_path: None,
+        client_key_path: None,
     };
     let target = ConnectTarget {
         host: host.clone(),

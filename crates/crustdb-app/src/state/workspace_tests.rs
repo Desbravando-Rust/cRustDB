@@ -26,6 +26,8 @@ pub(crate) fn conn(name: &str) -> ConnectionConfig {
         tls: TlsConfig {
             mode: TlsMode::VerifyFull,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         },
         ssh: None,
         page_size: 300,

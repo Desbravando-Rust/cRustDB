@@ -27,6 +27,10 @@ pub enum TlsMode {
 pub struct TlsConfig {
     pub mode: TlsMode,
     pub ca_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_cert_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_key_path: Option<PathBuf>,
 }
 
 /// `host` is always the real host (TLS name); `connect_addr` is the tunnel address, if any.
@@ -158,4 +162,40 @@ pub trait Introspector: Send + Sync {
         s: &mut dyn Session,
         o: &ObjectRef,
     ) -> Result<Option<u64>, DriverError>;
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls_config_without_client_cert_fields_deserializes() {
+        // Arrange
+        let json = r#"{"mode":"require","ca_path":null}"#;
+
+        // Act
+        let tls: TlsConfig = serde_json::from_str(json).unwrap();
+
+        // Assert
+        assert_eq!(tls.client_cert_path, None);
+        assert_eq!(tls.client_key_path, None);
+    }
+
+    #[test]
+    fn tls_config_without_client_cert_serializes_unchanged() {
+        // Arrange
+        let tls = TlsConfig {
+            mode: TlsMode::Require,
+            ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
+        };
+
+        // Act
+        let json = serde_json::to_string(&tls).unwrap();
+
+        // Assert
+        assert_eq!(json, r#"{"mode":"require","ca_path":null}"#);
+    }
 }

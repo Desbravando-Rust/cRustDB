@@ -74,6 +74,8 @@ fn pg_target(pg_password: &str, host: &str, t: &Tunnel, ca: PathBuf) -> ConnectT
         tls: TlsConfig {
             mode: TlsMode::VerifyFull,
             ca_path: Some(ca),
+            client_cert_path: None,
+            client_key_path: None,
         },
         connect_timeout: Duration::from_secs(10),
     }
