@@ -129,7 +129,9 @@ jobs:
               }
               exit bad
             }' lcov.info
+      # Dependabot runs get no repo secrets (CODECOV_TOKEN is empty), so the upload cannot succeed.
       - uses: codecov/codecov-action@v5
+        if: github.actor != 'dependabot[bot]'
         with:
           files: lcov.info
           fail_ci_if_error: true
