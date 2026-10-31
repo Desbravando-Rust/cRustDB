@@ -288,6 +288,38 @@ mod tests {
     }
 
     #[test]
+    fn actor_crash_while_resolving_cancels_disconnect() {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+        s.request_disconnect(ws);
+        s.resolve_disconnect(TxOp::Commit);
+
+        // Act
+        s.apply(Event::ActorCrashed { tab });
+        s.apply(Event::TxChanged {
+            tab,
+            state: TxState::Idle,
+        });
+
+        // Assert
+        assert_eq!(s.workspaces.len(), 1);
+        assert!(s.take_commands().is_empty());
+    }
+
+    #[test]
+    fn actor_crash_resets_tx_so_disconnect_is_direct() {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+
+        // Act
+        s.apply(Event::ActorCrashed { tab });
+        let cmds = s.request_disconnect(ws);
+
+        // Assert
+        assert!(matches!(cmds.as_slice(), [Command::Disconnect { ws: w }] if *w == ws));
+    }
+
+    #[test]
     fn failed_commit_of_one_tab_keeps_workspace_connected_and_other_tab_alive() {
         // Arrange
         let (mut s, ws, a) = with_tx();
