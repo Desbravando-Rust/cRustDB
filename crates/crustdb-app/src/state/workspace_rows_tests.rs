@@ -154,3 +154,20 @@ fn request_delete_rows_while_busy_opens_no_dialog_and_explains() {
         assert_eq!(s.table_mut(tab).unwrap().notice.as_deref(), Some(text));
     }
 }
+
+#[test]
+fn delete_rows_busy_follows_table_state() {
+    // Arrange
+    let (mut s, tab) = setup();
+    assert!(!s.delete_rows_busy());
+    s.request_delete_rows(tab);
+
+    // Act
+    let idle = s.delete_rows_busy();
+    s.table_mut(tab).unwrap().edit_req = Some(RequestId(3));
+    let saving = s.delete_rows_busy();
+
+    // Assert
+    assert!(!idle);
+    assert!(saving);
+}

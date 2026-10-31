@@ -148,7 +148,12 @@ impl CrustApp {
                 },
             }
         });
-        intents.extend(ui::confirm_dialog::show(ui.ctx(), &mut self.state.dialogs));
+        let busy = self.state.delete_rows_busy();
+        intents.extend(ui::confirm_dialog::show(
+            ui.ctx(),
+            &mut self.state.dialogs,
+            busy,
+        ));
         if let Some(w) = self
             .state
             .active
