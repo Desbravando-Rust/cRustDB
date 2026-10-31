@@ -24,6 +24,15 @@ impl KeyScan {
         }
     }
 
+    pub fn is_pending(&self, req: RequestId) -> bool {
+        self.pending == Some(req)
+    }
+
+    /// A batch is in flight.
+    pub fn is_loading(&self) -> bool {
+        self.pending.is_some()
+    }
+
     pub fn is_done(&self) -> bool {
         self.done
     }

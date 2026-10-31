@@ -112,6 +112,16 @@ impl CrustApp {
                 intents.extend(ui::editor::show(ui, q, &w.tree, &w.columns));
                 return;
             }
+            if let Some(w) = self
+                .state
+                .active
+                .and_then(|ws| self.state.workspace_mut(ws))
+                && matches!(w.status, crate::state::Status::Online(_))
+                && let Some(ks) = w.keyspace.as_mut()
+            {
+                intents.extend(ui::keyspace::value_panel(ui, ks));
+                return;
+            }
             let tab = self
                 .state
                 .active

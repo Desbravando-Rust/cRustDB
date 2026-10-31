@@ -1,5 +1,7 @@
 //! Opening a workspace: a retry reuses the failed workspace of the same connection.
 use super::*;
+use crate::state::keyspace::Keyspace;
+use crustdb_core::model::DataModel;
 
 impl AppState {
     pub fn open_workspace(&mut self, config: ConnectionConfig) -> WorkspaceId {
@@ -41,6 +43,7 @@ impl AppState {
         }
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
+        let is_kv = config.driver.data_model() == DataModel::KeyValue;
         self.workspaces.push(WorkspaceState {
             id,
             tree: ObjectTree::new(id, config.driver),
@@ -52,6 +55,7 @@ impl AppState {
             active_tab: None,
             diagram: None,
             session_password: None,
+            keyspace: is_kv.then(|| Keyspace::new(id)),
         });
         self.active = Some(id);
         id

@@ -34,6 +34,8 @@ pub struct WorkspaceState {
     pub diagram: Option<super::diagram::Diagram>,
     /// The password this session connected with, for the safety prompt (never read from the keyring).
     pub session_password: Option<SecretString>,
+    /// Key tree and value viewer; only for key-value data models.
+    pub keyspace: Option<super::keyspace::Keyspace>,
 }
 
 #[derive(Debug)]
@@ -108,7 +110,7 @@ pub struct AppState {
     next_ws: u64,
     next_tab: u64,
     pub(super) evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
-    next_exec: u64,
+    pub(super) next_exec: u64,
     pub(super) outbox: Vec<Command>,
     /// Workspaces waiting for their editors' COMMIT/ROLLBACK before the real `Disconnect`.
     pub(super) disconnecting: HashMap<WorkspaceId, HashSet<TabId>>,
@@ -297,6 +299,7 @@ impl AppState {
                     cmds = w.expand_home();
                 }
                 self.outbox.extend(cmds);
+                self.start_keyspace(ws);
             }
             Event::ConnectFailed { ws, error } => {
                 if let Some(w) = self.workspace_mut(ws) {
@@ -441,6 +444,9 @@ impl AppState {
                 host,
                 fingerprint,
             }),
+            Event::Namespaces { .. } | Event::KeysScanned { .. } | Event::EntryRead { .. } => {
+                self.apply_keyspace(&e);
+            }
             _ => {}
         }
     }

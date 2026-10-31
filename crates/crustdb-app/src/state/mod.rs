@@ -8,6 +8,7 @@ pub mod filter_draft;
 pub mod find;
 pub mod home_filter;
 pub mod key_scan;
+pub mod keyspace;
 pub mod query_tab;
 pub mod result_pane;
 pub mod status;
