@@ -251,6 +251,42 @@ mod tests {
         resolve_waits_for_idle(TxOp::Rollback);
     }
 
+    /// Commit sent through `note_sent`, then a failure Notice and the late `TxChanged{Idle}`.
+    fn failed_resolve(text: &str) {
+        // Arrange
+        let (mut s, ws, tab) = with_tx();
+        s.request_disconnect(ws);
+        for c in s.resolve_disconnect(TxOp::Commit) {
+            s.note_sent(&c);
+        }
+
+        // Act
+        s.apply(Event::Notice {
+            tab,
+            text: text.into(),
+        });
+        s.apply(Event::TxChanged {
+            tab,
+            state: TxState::Idle,
+        });
+
+        // Assert
+        assert_eq!(s.workspaces.len(), 1);
+        assert_eq!(s.workspaces[0].queries.len(), 1);
+        assert_eq!(s.workspaces[0].queries[0].pane.messages.len(), 1);
+        assert!(s.take_commands().is_empty());
+    }
+
+    #[test]
+    fn failed_commit_through_note_sent_shows_error_and_stays_connected() {
+        failed_resolve("commit failed");
+    }
+
+    #[test]
+    fn no_actor_commit_through_note_sent_shows_error_and_stays_connected() {
+        failed_resolve("no actor for this command");
+    }
+
     #[test]
     fn failed_commit_of_one_tab_keeps_workspace_connected_and_other_tab_alive() {
         // Arrange
