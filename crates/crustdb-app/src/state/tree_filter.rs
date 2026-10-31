@@ -69,8 +69,8 @@ mod tests {
         }
     }
 
-    fn pg_tree() -> ObjectTree {
-        let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Postgres);
+    fn tree(driver: DriverKind) -> ObjectTree {
+        let mut t = ObjectTree::new(WorkspaceId(1), driver);
         let Some(Command::LoadChildren { req, .. }) = t.load_roots() else {
             panic!("expected roots load");
         };
@@ -85,10 +85,20 @@ mod tests {
         t.apply_children(*req, items);
     }
 
+    fn is_table(c: &Command) -> bool {
+        matches!(
+            c,
+            Command::LoadChildren {
+                kind: Some(ObjectKind::Table),
+                ..
+            }
+        )
+    }
+
     #[test]
-    fn filter_loads_unloaded_nodes() {
+    fn filter_requests_schemas_of_loaded_database() {
         // Arrange
-        let mut t = pg_tree();
+        let mut t = tree(DriverKind::Postgres);
         t.filter("ord");
 
         // Act
@@ -99,42 +109,129 @@ mod tests {
             cmds.as_slice(),
             [Command::LoadChildren { kind: Some(ObjectKind::Schema), database, .. }] if database == "app"
         ));
+    }
+
+    #[test]
+    fn filter_requests_folders_of_loaded_schema() {
+        // Arrange
+        let mut t = tree(DriverKind::Postgres);
+        t.filter("ord");
+        let cmds = t.load_for_filter();
+        apply(
+            &mut t,
+            &cmds[0],
+            vec![obj(None, "public", ObjectKind::Schema)],
+        );
+
+        // Act
+        let cmds = t.load_for_filter();
+
+        // Assert
+        assert_eq!(cmds.len(), folder_kinds(DriverKind::Postgres).len());
+        assert!(cmds.iter().any(is_table));
+    }
+
+    #[test]
+    fn filter_shows_match_after_folder_load() {
+        // Arrange
+        let mut t = tree(DriverKind::Postgres);
+        t.filter("ord");
+        let cmds = t.load_for_filter();
         apply(
             &mut t,
             &cmds[0],
             vec![obj(None, "public", ObjectKind::Schema)],
         );
         let cmds = t.load_for_filter();
-        assert_eq!(cmds.len(), folder_kinds(DriverKind::Postgres).len());
-        let table = cmds
-            .iter()
-            .find(|c| {
-                matches!(
-                    c,
-                    Command::LoadChildren {
-                        kind: Some(ObjectKind::Table),
-                        ..
-                    }
-                )
-            })
-            .unwrap();
+        let table = cmds.iter().find(|c| is_table(c)).unwrap();
+
+        // Act
         apply(
             &mut t,
             table,
             vec![obj(Some("public"), "orders", ObjectKind::Table)],
         );
+
+        // Assert
         assert!(t.visible().any(|n| n.label == "orders"));
     }
 
-    #[test]
-    fn filter_load_is_noop_without_filter_or_when_loaded() {
+    fn assert_flat_folders(driver: DriverKind) {
         // Arrange
-        let mut t = pg_tree();
+        let mut t = tree(driver);
+        t.filter("ord");
 
-        // Act & Assert
-        assert!(t.load_for_filter().is_empty());
+        // Act
+        let cmds = t.load_for_filter();
+
+        // Assert
+        let kinds: Vec<_> = cmds
+            .iter()
+            .map(|c| match c {
+                Command::LoadChildren {
+                    kind: Some(k),
+                    database,
+                    schema: None,
+                    ..
+                } if database == "app" => *k,
+                other => panic!("unexpected command for {driver:?}: {other:?}"),
+            })
+            .collect();
+        assert_eq!(kinds, folder_kinds(driver));
+    }
+
+    #[test]
+    fn filter_loads_folders_for_mysql() {
+        assert_flat_folders(DriverKind::Mysql);
+    }
+
+    #[test]
+    fn filter_loads_folders_for_sqlite() {
+        assert_flat_folders(DriverKind::Sqlite);
+    }
+
+    #[test]
+    fn filter_does_not_rerequest_after_empty_response() {
+        // Arrange
+        let mut t = tree(DriverKind::Postgres);
+        t.filter("x");
+        let cmds = t.load_for_filter();
+        apply(&mut t, &cmds[0], vec![]);
+        assert!(matches!(
+            t.entries.get(&NodePath::Database("app".into())).map(|e| &e.load),
+            Some(Load::Done(v)) if v.is_empty()
+        ));
+
+        // Act
+        let again = t.load_for_filter();
+
+        // Assert
+        assert!(again.is_empty());
+    }
+
+    #[test]
+    fn no_filter_is_noop() {
+        // Arrange
+        let mut t = tree(DriverKind::Postgres);
+
+        // Act
+        let cmds = t.load_for_filter();
+
+        // Assert
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn pending_nodes_are_not_rerequested() {
+        // Arrange
+        let mut t = tree(DriverKind::Postgres);
         t.filter("x");
         assert_eq!(t.load_for_filter().len(), 1);
-        assert!(t.load_for_filter().is_empty());
+
+        // Act
+        let again = t.load_for_filter();
+
+        // Assert
+        assert!(again.is_empty());
     }
 }
