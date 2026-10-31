@@ -163,7 +163,7 @@ impl StatusBoard {
         };
         let ws = match e {
             Event::Connected { ws, .. } | Event::Reconnecting { ws } | Event::Ping { ws, .. } => {
-                Some(*ws)
+                state.workspaces.iter().any(|w| w.id == *ws).then_some(*ws)
             }
             Event::TxChanged { tab, .. } => by_tab(tab),
             Event::StatementDone { .. }
@@ -323,6 +323,61 @@ mod tests {
 
         // Assert
         assert!(!b.models.contains_key(&ws));
+    }
+
+    fn server() -> ServerVersion {
+        ServerVersion {
+            product: crustdb_core::model::Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        }
+    }
+
+    #[test]
+    fn connection_events_for_unknown_workspace_create_no_model() {
+        // Arrange
+        let (mut b, t0) = (StatusBoard::default(), Instant::now());
+        let mut s = super::super::workspace::tests::state(&["a"]);
+        let closed = s.open_workspace(s.config.connections[0].clone());
+        s.close_workspace(closed);
+        let probe = s.reserve_ws();
+
+        // Act
+        for ws in [closed, probe] {
+            for e in [
+                Event::Connected {
+                    ws,
+                    server: server(),
+                },
+                Event::Reconnecting { ws },
+                Event::Ping {
+                    ws,
+                    latency: Duration::from_millis(5),
+                },
+            ] {
+                b.on_event(&e, &s, t0);
+            }
+        }
+
+        // Assert
+        assert!(b.models.is_empty());
+    }
+
+    #[test]
+    fn ping_for_open_workspace_updates_its_model() {
+        // Arrange
+        let (mut b, t0) = (StatusBoard::default(), Instant::now());
+        let mut s = super::super::workspace::tests::state(&["a"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let latency = Duration::from_millis(5);
+
+        // Act
+        b.on_event(&Event::Ping { ws, latency }, &s, t0);
+
+        // Assert
+        assert_eq!(b.models[&ws].latency, Some(latency));
     }
 
     #[test]
