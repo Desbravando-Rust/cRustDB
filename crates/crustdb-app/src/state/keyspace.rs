@@ -42,6 +42,8 @@ pub struct EntryPane {
 #[derive(Debug)]
 pub struct Keyspace {
     ws: WorkspaceId,
+    /// Bumped each time the keyspace is recreated; keys the UI filter draft.
+    pub epoch: u64,
     pub namespaces: Vec<String>,
     /// Logical database the sessions are on.
     pub current: String,
@@ -62,6 +64,7 @@ impl Keyspace {
     pub fn new(ws: WorkspaceId, current: String) -> Self {
         Self {
             ws,
+            epoch: 0,
             namespaces: vec![],
             current,
             ns_req: None,
@@ -286,7 +289,9 @@ impl AppState {
         };
         let db = w.config.database.clone().unwrap_or_else(|| "0".into());
         if let Some(ks) = w.keyspace.as_mut() {
+            let epoch = ks.epoch + 1;
             *ks = Keyspace::new(ws, db);
+            ks.epoch = epoch;
             let cmds = ks.start(ns, scan);
             self.outbox.extend(cmds);
         }

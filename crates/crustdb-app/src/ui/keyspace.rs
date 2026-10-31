@@ -24,7 +24,7 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
             },
         );
     }
-    let id = ui.scope_id().with(ks.ws());
+    let id = ui.scope_id().with((ks.ws(), ks.epoch));
     let mut draft: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
     let r = ui.add(
         egui::TextEdit::singleline(&mut draft)

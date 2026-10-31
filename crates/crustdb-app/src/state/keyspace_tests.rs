@@ -416,3 +416,29 @@ fn select_namespace_keeps_the_filter_pattern() {
         [_, Command::ScanKeys { pattern: Some(p), .. }] if p == "user:*"
     ));
 }
+
+#[test]
+fn recreating_the_keyspace_bumps_the_epoch_that_keys_the_filter_draft() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+    let before = s
+        .workspace_mut(ws)
+        .unwrap()
+        .keyspace
+        .as_ref()
+        .unwrap()
+        .epoch;
+
+    // Act
+    s.start_keyspace(ws);
+
+    // Assert
+    let after = s
+        .workspace_mut(ws)
+        .unwrap()
+        .keyspace
+        .as_ref()
+        .unwrap()
+        .epoch;
+    assert_eq!(after, before + 1);
+}
