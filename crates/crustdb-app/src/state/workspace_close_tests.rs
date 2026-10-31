@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-use crate::runtime::{Command, Event, RequestId, TxOp, TxState};
+use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState, WorkspaceId};
 use crate::state::workspace::tests::state;
-use crate::state::{Dialog, Tab};
+use crate::state::{AppState, Dialog, Tab};
 use crustdb_core::model::{ObjectKind, ObjectRef};
 
 fn table_ref() -> ObjectRef {
@@ -259,15 +259,14 @@ fn new_pending_edit_during_resolve_reopens_dialog() {
     );
 }
 
-#[test]
-fn sibling_query_running_during_resolve_reopens_dialog() {
+fn sibling_busy_reopens(setup: fn(&mut AppState, WorkspaceId, TabId)) {
     // Arrange
     let (mut s, ws, a) = with_tx();
     s.open_query(ws, None);
     let b = s.workspaces[0].queries[1].id;
     s.request_disconnect(ws);
     s.resolve_disconnect(TxOp::Commit);
-    s.register_evaluate(RequestId(9), ws, b);
+    setup(&mut s, ws, b);
 
     // Act
     s.apply(Event::TxChanged {
@@ -286,6 +285,16 @@ fn sibling_query_running_during_resolve_reopens_dialog() {
             pending_rows: 0
         })
     );
+}
+
+#[test]
+fn sibling_query_evaluating_during_resolve_reopens_dialog() {
+    sibling_busy_reopens(|s, ws, b| s.register_evaluate(RequestId(9), ws, b));
+}
+
+#[test]
+fn sibling_query_running_during_resolve_reopens_dialog() {
+    sibling_busy_reopens(|s, _, _| s.workspaces[0].queries[1].begin_run(RequestId(9)));
 }
 
 #[test]
