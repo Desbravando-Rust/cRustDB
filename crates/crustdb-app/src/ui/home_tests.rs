@@ -453,3 +453,29 @@ fn home_list_has_no_logo_or_banner() {
     assert!(h.query_by_label("cRustDB logo").is_none());
     assert!(h.query_by_label("Desbravando Rust book cover").is_none());
 }
+
+#[test]
+fn home_connection_address_is_gray() {
+    // Arrange
+    let s = state(&["alpha"]);
+    let c = &s.config.connections[0];
+    let addr = format!("{}@{}:{}", c.user, c.host, c.port);
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    let color = h.output().shapes.iter().find_map(|s| match &s.shape {
+        egui::Shape::Text(t) if t.galley.text() == addr => {
+            Some(t.galley.job.sections[0].format.color)
+        }
+        _ => None,
+    });
+    assert_eq!(color, Some(egui::Color32::GRAY));
+}
