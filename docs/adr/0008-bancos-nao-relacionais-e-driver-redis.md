@@ -189,3 +189,11 @@ Apenas listadas, não criadas aqui.
 
 1. O gate de `Capabilities` (#166) entrou antes do registro do driver; com o `RedisDriver` agora registrado em `runtime::drivers()`, os braços `DriverKind::Redis` dos caminhos SQL continuam inalcançáveis, e os comentários passam a citar o gate em vez da ausência do driver.
 2. O registry padrão saiu de `main.rs` para `runtime::drivers()`, para ser testável.
+
+## Ajustes da fase de código (#168)
+
+1. `Command::AssessCommand` classifica com `StoreDriver::assess` (síncrono, sem IO) e responde `Event::CommandAssessed`; `Err(Refused)` vira erro visível no painel, sem diálogo. `Command::RunCommand` carrega o `argv` (`Vec<Vec<u8>>`, produzido por `tokenize`, nunca concatenado) e responde `Event::CommandReply`.
+2. O ator `Store` abre uma sessão `SessionPurpose::Editor` preguiçosa, separada da `Data` (`with_session`/`reopen` ganharam o parâmetro de propósito). `CancelStore` em um `RunCommand` derruba só a sessão Editor (D8); o próximo comando reconecta sob demanda e a sessão `Data` não é afetada.
+3. `Dialog::StoreSafety` guarda `argv`, veredito e motivo. `Confirm` pede só confirmação; `Password` compara com `verify_password` (3 tentativas, `APPROVAL_GRACE`), com a mesma regra do `Dialog::Safety` do SQL (lógica comum em `approve`). O diálogo é independente de `Evaluation`.
+4. `Reply::to_rows` (core) mostra a resposta no grid: array uma linha por elemento, mapa `key`/`value`, escalar uma linha.
+5. Fora de escopo: edição de valores e `SCRIPT KILL`. Cancelar o diálogo deixa o painel pronto para nova execução; não há histórico de comandos.
