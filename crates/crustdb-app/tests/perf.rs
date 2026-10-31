@@ -94,7 +94,7 @@ fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
 }
 
 fn scroll_frames(h: &mut Harness<'_>, n: usize) -> Vec<Duration> {
-    h.hover_at(egui::pos2(640.0, 360.0));
+    h.hover_at(egui::pos2(200.0, 360.0));
     h.step();
     (0..n)
         .map(|_| {
@@ -314,4 +314,56 @@ fn wide_table_frame_time() {
     let mut h = grid_harness(250, rows(1000, 250));
     let frames = scroll_frames(&mut h, 30);
     summary("wide table 250 columns", &frames);
+}
+
+/// 100k keys without a separator: the tree is 100k visible rows, the worst case for the sidebar.
+#[test]
+#[ignore = "perf"]
+fn keyspace_100k_keys_frame_under_16ms() {
+    use crustdb_app::runtime::{Event, RequestId};
+    use crustdb_app::state::keyspace::Keyspace;
+    use crustdb_app::ui::keyspace::sidebar;
+    use crustdb_core::store::keyspace::EntryKey;
+    use crustdb_core::store::{KeyEntry, ScanPage, ValueKind};
+
+    // Arrange
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let mut ks = Keyspace::new(WorkspaceId(1));
+    ks.start(RequestId(1), RequestId(2));
+    let entries = (0..100_000)
+        .map(|i| KeyEntry {
+            key: EntryKey(format!("key{i:07}").into_bytes()),
+            kind: ValueKind::Text,
+            ttl: None,
+        })
+        .collect();
+    ks.apply(&Event::KeysScanned {
+        req: RequestId(2),
+        result: Ok(ScanPage {
+            entries,
+            next: None,
+        }),
+    });
+    let mut ready = false;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(400.0, 720.0))
+        .with_accessibility_check(false)
+        .build_ui(move |ui| {
+            if !std::mem::replace(&mut ready, true) {
+                install_theme(ui.ctx());
+                return;
+            }
+            sidebar(ui, &ks);
+        });
+    h.run();
+
+    // Act
+    let frames = scroll_frames(&mut h, 120);
+
+    // Assert
+    let (mean, _) = summary("keyspace 100k keys", &frames);
+    assert!(mean <= 16.0, "{mean:.2} ms");
 }
