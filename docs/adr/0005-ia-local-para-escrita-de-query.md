@@ -37,7 +37,7 @@ O caso 4 exige latência abaixo de ~200 ms por tecla e cancelamento agressivo. E
 6. **Não fazer.** Manter só o autocomplete determinístico.
 
 ### Modelos avaliados (para recomendar ao usuário, não para distribuir)
-Licenças e tags foram conferidas em 2026-10-31 nas APIs do Hugging Face (`https://huggingface.co/api/models/<org>/<modelo>`: Qwen/Qwen2.5-Coder-{1.5B,3B,7B}-Instruct (o 3B devolve `license: other`, `license_name: qwen-research`), defog/sqlcoder-7b-2, meta-llama/Llama-3.2-3B-Instruct, microsoft/Phi-4-mini-instruct) e na biblioteca Ollama (`https://ollama.com/library/qwen2.5-coder/tags`, tag `qwen2.5-coder:7b`). Os tamanhos (não reconferidos) são de pesos quantizados em Q4 (aproximados).
+Licenças e tags foram conferidas em 2026-10-31 nas APIs do Hugging Face (`https://huggingface.co/api/models/<org>/<modelo>`: Qwen/Qwen2.5-Coder-{1.5B,3B,7B}-Instruct (o 3B devolve `license: other`, `license_name: qwen-research`; o "não comercial" vem do LICENSE em `https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct/blob/main/LICENSE`, lido em 2026-10-31), defog/sqlcoder-7b-2, meta-llama/Llama-3.2-3B-Instruct, microsoft/Phi-4-mini-instruct) e na biblioteca Ollama (`https://ollama.com/library/qwen2.5-coder/tags`, tag `qwen2.5-coder:7b`). Os tamanhos (não reconferidos) são de pesos quantizados em Q4 (aproximados).
 
 | Modelo | Params | Disco/RAM (Q4) | Licença | Observação |
 |---|---|---|---|---|
