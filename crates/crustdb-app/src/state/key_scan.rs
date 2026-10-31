@@ -24,6 +24,10 @@ impl KeyScan {
         }
     }
 
+    pub fn is_pending(&self, req: RequestId) -> bool {
+        self.pending == Some(req)
+    }
+
     pub fn is_done(&self) -> bool {
         self.done
     }
