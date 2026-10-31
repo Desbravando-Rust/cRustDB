@@ -82,7 +82,8 @@ async fn walk(
         }
         q.offset += SIZE;
         if keyset {
-            q.after = Some(after(&q, rows.last().unwrap()).expect("keyset-safe order"));
+            // ENUM orders yield None here: that page then uses OFFSET.
+            q.after = after(&q, rows.last().unwrap());
         }
     }
 }
@@ -121,8 +122,8 @@ async fn keyset_pages_match_offset_pages() {
         .unwrap();
     for sql in [
         "CREATE DATABASE ks_db",
-        "CREATE TABLE ks_db.ks(id INT NOT NULL, tag VARCHAR(20) NOT NULL, v INT NOT NULL, PRIMARY KEY(id, tag))",
-        "INSERT INTO ks_db.ks SELECT i % 10, CONCAT('g', i DIV 10), i % 7 FROM (WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 49) SELECT i FROM n) AS t",
+        "CREATE TABLE ks_db.ks(id INT NOT NULL, tag VARCHAR(20) NOT NULL, v INT NOT NULL, e ENUM('b','a','c') NOT NULL, PRIMARY KEY(id, tag))",
+        "INSERT INTO ks_db.ks SELECT i % 10, CONCAT('g', i DIV 10), i % 7, ELT(i % 3 + 1, 'a', 'b', 'c') FROM (WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 49) SELECT i FROM n) AS t",
     ] {
         s.start(sql, ExecMode::Other).await.unwrap();
         s.finish().await.unwrap();
@@ -131,6 +132,13 @@ async fn keyset_pages_match_offset_pages() {
     // Act & Assert
     check(&mut s, vec![sort("id", false), sort("tag", false)]).await;
     check(&mut s, vec![sort("id", true), sort("tag", false)]).await;
+    check(&mut s, vec![sort("id", true), sort("tag", true)]).await;
+    // ENUM sorts by declaration index: must fall back to OFFSET.
+    check(
+        &mut s,
+        vec![sort("e", false), sort("id", false), sort("tag", false)],
+    )
+    .await;
     check(
         &mut s,
         vec![sort("v", false), sort("id", false), sort("tag", false)],

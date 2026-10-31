@@ -128,6 +128,7 @@ async fn keyset_pages_match_offset_pages() {
     // Act & Assert
     check(&mut s, vec![sort("id", false), sort("tag", false)]).await;
     check(&mut s, vec![sort("id", true), sort("tag", false)]).await;
+    check(&mut s, vec![sort("id", true), sort("tag", true)]).await;
     check(
         &mut s,
         vec![sort("v", false), sort("id", false), sort("tag", false)],
