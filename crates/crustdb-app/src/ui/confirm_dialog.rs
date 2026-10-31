@@ -25,6 +25,21 @@ pub fn flag_rows(ev: &Evaluation) -> Vec<String> {
         .collect()
 }
 
+const ARGV_PREVIEW_CAP: usize = 300;
+
+/// Arguments shown one by one, quoted, so spaces inside an argument stay visible; capped.
+pub fn argv_preview(argv: &[Vec<u8>]) -> String {
+    let line = argv
+        .iter()
+        .map(|a| format!("{:?}", String::from_utf8_lossy(a)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    match line.char_indices().nth(ARGV_PREVIEW_CAP) {
+        Some((end, _)) => format!("{}…", &line[..end]),
+        None => line,
+    }
+}
+
 fn password_id(exec: RequestId) -> egui::Id {
     egui::Id::unique(("safety_password", exec.0))
 }
@@ -91,12 +106,14 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
             }
             Dialog::StoreSafety {
                 req,
+                argv,
                 verdict,
                 reason,
                 input,
                 attempts,
                 ..
             } => {
+                ui.monospace(argv_preview(argv));
                 ui.label(reason.as_str());
                 if *verdict == Verdict::Password {
                     password_field(ui, password_id(*req), input, *attempts);
@@ -197,4 +214,24 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
         st.store(ctx, id);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn argv_preview_separates_quotes_and_caps() {
+        // Arrange
+        let argv = vec![b"SET".to_vec(), b"a b".to_vec()];
+        let long = vec![vec![b'x'; 1000]];
+
+        // Act
+        let short = argv_preview(&argv);
+        let capped = argv_preview(&long);
+
+        // Assert
+        assert_eq!(short, "\"SET\" \"a b\"");
+        assert!(capped.chars().count() <= ARGV_PREVIEW_CAP + 1);
+    }
 }
