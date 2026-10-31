@@ -128,3 +128,34 @@ fn nullable_sort_column_falls_back_to_offset() {
     assert_eq!(q.after, None);
     assert_eq!(q.offset, 2);
 }
+
+#[test]
+fn add_row_does_not_change_keyset_anchors() {
+    // Arrange
+    let mut t = tab();
+    t.apply_page(page(1, 2));
+    let before = t.anchors.clone();
+
+    // Act
+    t.add_row();
+
+    // Assert
+    assert!(t.inserting);
+    assert_eq!(t.anchors, before);
+}
+
+#[test]
+fn discarded_insert_keeps_server_row_as_keyset_cursor() {
+    // Arrange
+    let mut t = tab();
+    t.apply_page(page(1, 2));
+    t.add_row();
+    t.discard_pending();
+
+    // Act
+    let moved = t.next_page();
+
+    // Assert
+    assert!(moved);
+    assert_eq!(t.query().after, Some(vec!["2".to_string()]));
+}
