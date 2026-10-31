@@ -117,7 +117,7 @@ pub fn after(q: &TableQuery, row: &[Cell]) -> Option<Vec<String>> {
 /// costs huge keys); upgrade path is a typed bind in `MysqlDialect::param`.
 fn exact_as_double(cat: TypeCategory, v: &str) -> bool {
     match cat {
-        TypeCategory::Integer => v.parse::<i128>().is_ok_and(|n| n.unsigned_abs() <= 1 << 53),
+        TypeCategory::Integer => v.parse::<i128>().is_ok_and(|n| n.unsigned_abs() < 1 << 53),
         TypeCategory::Decimal => {
             v.chars()
                 .filter(char::is_ascii_digit)
@@ -214,9 +214,10 @@ mod tests {
     #[test]
     fn cursor_none_for_keys_beyond_double_precision() {
         // Act & Assert
-        assert!(cursor_for("9007199254740992", |_| {}).is_some());
-        assert!(cursor_for("-9007199254740992", |_| {}).is_some());
-        assert!(cursor_for("9007199254740993", |_| {}).is_none());
+        assert!(cursor_for("9007199254740991", |_| {}).is_some());
+        assert!(cursor_for("-9007199254740991", |_| {}).is_some());
+        assert!(cursor_for("9007199254740992", |_| {}).is_none());
+        assert!(cursor_for("-9007199254740992", |_| {}).is_none());
         let dec = |v: &str| {
             cursor_for(v, |q| {
                 q.columns[0].category = TypeCategory::Decimal;
