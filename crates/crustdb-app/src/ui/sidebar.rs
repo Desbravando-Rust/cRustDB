@@ -151,10 +151,39 @@ mod tests {
 
     use crustdb_core::model::{Product, ServerVersion};
 
+    use crate::runtime::Command;
+
     use super::*;
     use crate::state::Status;
     use crate::state::workspace::tests::state;
     use crate::ui::home::tests::ready;
+
+    #[test]
+    fn sidebar_failed_root_shows_error_and_retry() {
+        // Arrange
+        let mut s = online();
+        let Some(Command::LoadChildren { req, .. }) = s.workspaces[0].tree.load_roots() else {
+            panic!("expected roots load");
+        };
+        s.workspaces[0].tree.fail_children(req, "boom".into());
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                got.extend(show(ui, &s));
+            }
+        });
+        h.run();
+
+        // Act
+        h.get_by_label("Retry").click();
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label_contains("boom").is_some());
+        drop(h);
+        assert!(got.contains(&Intent::RefreshRoot));
+    }
 
     #[test]
     fn sidebar_has_no_logo() {

@@ -178,7 +178,7 @@ fn double_click_table_opens_data_tab_function_opens_ddl() {
 }
 
 #[test]
-fn failed_load_shows_error_and_retries_on_expand() {
+fn failed_load_shows_error_and_retries_on_first_click() {
     // Arrange
     let mut t = tree(DriverKind::Mysql);
     t.expand(NodePath::Database("app".into()));
@@ -192,9 +192,8 @@ fn failed_load_shows_error_and_retries_on_expand() {
     let row = t.visible().find(|n| n.label == "Tables").unwrap();
     assert_eq!(row.error.as_deref(), Some("boom"));
     assert!(!row.loading);
-    assert!(t.toggle(f.clone()).is_none(), "collapse");
     let r2 = req_of(t.toggle(f));
-    assert_ne!(r, r2, "re-expanding a failed node retries");
+    assert_ne!(r, r2, "first click on a failed node retries");
     assert!(t.visible().find(|n| n.label == "Tables").unwrap().loading);
 }
 

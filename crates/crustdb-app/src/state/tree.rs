@@ -203,7 +203,9 @@ impl ObjectTree {
     }
 
     pub fn toggle(&mut self, node: NodePath) -> Option<Command> {
-        if self.entries.get(&node).is_some_and(|e| e.expanded) {
+        let e = self.entries.get(&node);
+        // A failed node stays expanded; clicking it retries instead of collapsing.
+        if e.is_some_and(|e| e.expanded && !matches!(e.load, Load::Failed(_))) {
             self.entries.entry(node).or_default().expanded = false;
             None
         } else {

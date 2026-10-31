@@ -267,10 +267,22 @@ mod tests {
         let second = t.load_for_filter();
         apply(&mut t, &first[0], vec![]);
         let third = t.load_for_filter();
+        let Command::LoadChildren { req, .. } = &first[1] else {
+            panic!("expected load");
+        };
+        t.fail_children(*req, "boom".into());
+        let fourth = t.load_for_filter();
+        let fifth = t.load_for_filter();
 
         // Assert
         assert_eq!(first.len(), 8);
         assert!(second.is_empty());
         assert_eq!(third.len(), 1);
+        assert_eq!(
+            fourth.len(),
+            1,
+            "failed node frees a slot but is not retried"
+        );
+        assert!(fifth.is_empty());
     }
 }
