@@ -289,3 +289,17 @@ fn sqlite_and_redis_clear_client_cert() {
         assert!(cfg.tls.client_cert_path.is_none() && cfg.tls.client_key_path.is_none());
     }
 }
+
+#[test]
+fn tls_disabled_clears_client_cert() {
+    // Arrange
+    let mut f = form();
+    f.draft.tls.mode = TlsMode::Disable;
+    f.draft.tls.client_cert_path = Some("/nonexistent/c.crt".into());
+
+    // Act
+    let (cfg, _) = f.to_save(&[]).unwrap();
+
+    // Assert
+    assert!(cfg.tls.client_cert_path.is_none() && cfg.tls.client_key_path.is_none());
+}

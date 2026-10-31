@@ -198,8 +198,10 @@ impl ConnectionForm {
             c.tls.ca_path = None;
             c.save_password = false;
         }
-        if matches!(c.driver, DriverKind::Sqlite | DriverKind::Redis) {
-            // mTLS is PostgreSQL/MySQL only.
+        if matches!(c.driver, DriverKind::Sqlite | DriverKind::Redis)
+            || c.tls.mode == TlsMode::Disable
+        {
+            // mTLS is PostgreSQL/MySQL with TLS on; the rows are hidden otherwise.
             c.tls.client_cert_path = None;
             c.tls.client_key_path = None;
         }
