@@ -15,6 +15,16 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         return out;
     }
     ui.weak("Tables - double-click to open");
+    if let Some(msg) = w.tree.tables_error(db) {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            format!("Failed to load tables: {msg}"),
+        );
+        if ui.button("Retry").clicked() {
+            out.push(Intent::RefreshNode(w.tree.home_tables_node(db)));
+        }
+        return out;
+    }
     let Some(tables) = w.tree.loaded_tables(db) else {
         ui.label("Loading…");
         return out;
@@ -97,6 +107,77 @@ mod tests {
         assert!(w.tree.loaded_tables("d").is_none());
     }
 
+    fn tables_folder() -> crate::state::tree::NodePath {
+        crate::state::tree::NodePath::Folder {
+            database: "d".into(),
+            schema: Some("public".into()),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    #[test]
+    fn refresh_unrelated_node_keeps_tables_collapsed() {
+        // Arrange
+        let (mut w, _) = pending();
+        let obj = |schema: Option<&str>, name: &str, kind| ObjectRef {
+            database: "d".into(),
+            schema: schema.map(Into::into),
+            name: name.into(),
+            kind,
+        };
+        let Some(Command::LoadChildren { req, .. }) = w.tree.refresh_root() else {
+            panic!("no roots load");
+        };
+        w.tree
+            .apply_children(req, vec![obj(None, "d", ObjectKind::Database)]);
+        let cmds = w.expand_home();
+        let reqs: Vec<_> = cmds
+            .iter()
+            .filter_map(|c| match c {
+                Command::LoadChildren { req, .. } => Some(*req),
+                _ => None,
+            })
+            .collect();
+        w.tree
+            .apply_children(reqs[0], vec![obj(None, "public", ObjectKind::Schema)]);
+        w.tree.apply_children(reqs[1], vec![]);
+        w.tree.toggle(tables_folder());
+        let views = crate::state::tree::NodePath::Folder {
+            database: "d".into(),
+            schema: Some("public".into()),
+            kind: ObjectKind::View,
+        };
+        w.tree.refresh(views);
+
+        // Act
+        let cmds = w.expand_home();
+
+        // Assert
+        assert!(cmds.is_empty());
+        let row = w.tree.visible().find(|n| n.label == "Tables");
+        assert!(row.is_some_and(|n| !n.expanded));
+    }
+
+    #[test]
+    fn refresh_database_then_expand_home_requests_tables_folder() {
+        // Arrange
+        let (mut w, _) = pending();
+        w.tree
+            .refresh(crate::state::tree::NodePath::Database("d".into()));
+
+        // Act
+        let cmds = w.expand_home();
+
+        // Assert
+        assert!(matches!(
+            cmds.last(),
+            Some(Command::LoadChildren {
+                kind: Some(ObjectKind::Table),
+                ..
+            })
+        ));
+    }
+
     #[test]
     fn workspace_home_while_loading_shows_loading() {
         // Arrange
@@ -114,6 +195,32 @@ mod tests {
         // Assert
         h.get_by_label("Loading…");
         assert!(h.query_by_label("No tables").is_none());
+    }
+
+    #[test]
+    fn workspace_home_failed_load_shows_error_and_retry() {
+        // Arrange
+        let (mut w, req) = pending();
+        w.tree.fail_children(req, "boom".into());
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                got.extend(show(ui, &w));
+            }
+        });
+        h.run();
+
+        // Act
+        h.get_by_label("Retry").click();
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label_contains("boom").is_some());
+        assert!(h.query_by_label("Loading…").is_none());
+        assert!(h.query_by_label("No tables").is_none());
+        drop(h);
+        assert!(got.contains(&Intent::RefreshNode(w.tree.home_tables_node("d"))));
     }
 
     #[test]

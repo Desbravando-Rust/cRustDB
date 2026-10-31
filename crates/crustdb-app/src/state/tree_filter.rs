@@ -4,8 +4,11 @@ use crustdb_core::model::{DriverKind, ObjectKind};
 use super::tree::{Load, NodePath, ObjectTree, folder_kinds};
 use crate::runtime::Command;
 
+/// Most loads in flight at once while filtering, so a big server is not flooded.
+const MAX_FILTER_LOADS: usize = 8;
+
 impl ObjectTree {
-    /// Requests every reachable node still `Idle`; call each frame, the cascade advances as
+    /// Requests reachable nodes still `Idle`, up to `MAX_FILTER_LOADS` in flight; call each frame, the cascade advances as
     /// results arrive. Empty with no filter.
     pub fn load_for_filter(&mut self) -> Vec<Command> {
         if self.filter_text().is_empty() {
@@ -28,13 +31,23 @@ impl ObjectTree {
                 paths.extend(folder_paths(self.driver, &d, None));
             }
         }
+        let pending = self
+            .entries
+            .values()
+            .filter(|e| matches!(e.load, Load::Pending(_)))
+            .count();
+        let mut room = MAX_FILTER_LOADS.saturating_sub(pending);
         let mut cmds = vec![];
         for p in paths {
+            if room == 0 {
+                break;
+            }
             let idle = self
                 .entries
                 .get(&p)
                 .is_none_or(|e| matches!(e.load, Load::Idle));
             if idle && let Some(c) = self.request(&p) {
+                room -= 1;
                 cmds.push(c);
             }
         }
@@ -233,5 +246,43 @@ mod tests {
 
         // Assert
         assert!(again.is_empty());
+    }
+
+    #[test]
+    fn filter_caps_in_flight_loads() {
+        // Arrange
+        let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Postgres);
+        let Some(Command::LoadChildren { req, .. }) = t.load_roots() else {
+            panic!("expected roots load");
+        };
+        let dbs = ["a", "b", "c"].map(|n| obj(None, n, ObjectKind::Database));
+        t.apply_children(req, dbs.to_vec());
+        t.filter("x");
+        for c in t.load_for_filter() {
+            apply(&mut t, &c, vec![obj(None, "public", ObjectKind::Schema)]);
+        }
+
+        // Act
+        let first = t.load_for_filter();
+        let second = t.load_for_filter();
+        apply(&mut t, &first[0], vec![]);
+        let third = t.load_for_filter();
+        let Command::LoadChildren { req, .. } = &first[1] else {
+            panic!("expected load");
+        };
+        t.fail_children(*req, "boom".into());
+        let fourth = t.load_for_filter();
+        let fifth = t.load_for_filter();
+
+        // Assert
+        assert_eq!(first.len(), 8);
+        assert!(second.is_empty());
+        assert_eq!(third.len(), 1);
+        assert_eq!(
+            fourth.len(),
+            1,
+            "failed node frees a slot but is not retried"
+        );
+        assert!(fifth.is_empty());
     }
 }
