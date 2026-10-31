@@ -82,13 +82,13 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    ui.label("TLS mode").on_hover_text(
+    let tls_label = ui.label("TLS mode").on_hover_text(
         "Disable: no encryption.\n\
          Require: encrypt, don't verify the server certificate.\n\
          VerifyCa: encrypt and verify the certificate is signed by a trusted CA.\n\
          VerifyFull: VerifyCa plus check the host name matches the certificate.",
     );
-    egui::ComboBox::from_id_salt("tls")
+    let tls = egui::ComboBox::from_id_salt("tls")
         .selected_text(format!("{:?}", f.draft.tls.mode))
         .show_ui(ui, |ui| {
             for (m, l) in [
@@ -100,6 +100,7 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
                 ui.selectable_value(&mut f.draft.tls.mode, m, l);
             }
         });
+    tls.response.labelled_by(tls_label.id);
     ui.end_row();
     for n in f.tls_notes() {
         ui.label("");
@@ -149,9 +150,9 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     error_for(ui, f, "name");
                     ui.end_row();
 
-                    ui.label("Driver");
+                    let driver_label = ui.label("Driver");
                     let mut driver = f.draft.driver;
-                    egui::ComboBox::from_id_salt("driver")
+                    let driver_combo = egui::ComboBox::from_id_salt("driver")
                         .selected_text(match driver {
                             DriverKind::Postgres => "PostgreSQL",
                             DriverKind::Mysql => "MySQL/MariaDB",
@@ -164,6 +165,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                             ui.selectable_value(&mut driver, DriverKind::Sqlite, "SQLite");
                             ui.selectable_value(&mut driver, DriverKind::Redis, "Redis");
                         });
+                    driver_combo.response.labelled_by(driver_label.id);
                     if driver != f.draft.driver {
                         f.set_driver(driver);
                     }
@@ -231,13 +233,13 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     ui.label("SSH user");
                     ui.text_edit_singleline(&mut ssh.user);
                     ui.end_row();
-                    ui.label("Auth");
+                    let auth_label = ui.label("Auth");
                     let cur = match ssh.auth {
                         SshAuth::Password => "Password",
                         SshAuth::Key { .. } => "Key file",
                         SshAuth::Agent => "Agent",
                     };
-                    egui::ComboBox::from_id_salt("ssh_auth")
+                    let auth_combo = egui::ComboBox::from_id_salt("ssh_auth")
                         .selected_text(cur)
                         .show_ui(ui, |ui| {
                             if ui.selectable_label(cur == "Password", "Password").clicked() {
@@ -254,6 +256,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                                 ssh.auth = SshAuth::Agent;
                             }
                         });
+                    auth_combo.response.labelled_by(auth_label.id);
                     ui.end_row();
                     match &mut ssh.auth {
                         SshAuth::Password => {

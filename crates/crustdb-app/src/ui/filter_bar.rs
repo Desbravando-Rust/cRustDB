@@ -4,6 +4,10 @@ use super::Intent;
 use crate::state::TableTab;
 use crate::state::filter_draft::label;
 
+fn named(r: &egui::Response, name: &'static str) {
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, name));
+}
+
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     let mut out = vec![];
     let mut remove = None;
@@ -13,7 +17,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         let d = &mut tab.drafts[i];
         ui.horizontal(|ui| {
             let mut picked = None;
-            egui::ComboBox::from_id_salt(("fcol", tab.id.0, i))
+            let col = egui::ComboBox::from_id_salt(("fcol", tab.id.0, i))
                 .selected_text(d.column.clone())
                 .show_ui(ui, |ui| {
                     for n in &names {
@@ -22,16 +26,18 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                         }
                     }
                 });
+            named(&col.response, "Filter column");
             if let Some(n) = picked {
                 d.set_column(&tab.columns, tab.driver, &n);
             }
-            egui::ComboBox::from_id_salt(("fop", tab.id.0, i))
+            let op = egui::ComboBox::from_id_salt(("fop", tab.id.0, i))
                 .selected_text(label(d.op))
                 .show_ui(ui, |ui| {
                     for op in ops {
                         ui.selectable_value(&mut d.op, *op, label(*op));
                     }
                 });
+            named(&op.response, "Filter operator");
             let r = ui.text_edit_singleline(&mut d.input);
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Intent::ApplyFilters(tab.id));
@@ -59,4 +65,41 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         }
     });
     out
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crustdb_core::model::{ObjectKind, ObjectRef};
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    use super::*;
+    use crate::runtime::TabId;
+
+    #[test]
+    fn filter_combos_have_accessible_names() {
+        // Arrange
+        let object = ObjectRef {
+            database: "d".into(),
+            schema: Some("public".into()),
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        };
+        let mut tab = TableTab::new(TabId(1), object, 100);
+        tab.add_draft();
+        let mut h = Harness::builder()
+            .with_accessibility_check(false) // value text input is still unnamed (follow-up issue)
+            .build_ui(|ui| {
+                show(ui, &mut tab);
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        for name in ["Filter column", "Filter operator"] {
+            h.get_by_role_and_label(egui::accesskit::Role::ComboBox, name);
+        }
+    }
 }

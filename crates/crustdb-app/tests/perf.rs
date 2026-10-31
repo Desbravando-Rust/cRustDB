@@ -70,7 +70,6 @@ fn grid_harness(cols: usize, data: Vec<Row>) -> Harness<'static> {
     let mut ready = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1280.0, 720.0))
-        .with_accessibility_check(false)
         .build_ui(move |ui| {
             if !std::mem::replace(&mut ready, true) {
                 install_theme(ui.ctx());
@@ -251,7 +250,6 @@ fn typing_mean_ms(lines: usize) -> f64 {
     let mut ready = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1280.0, 720.0))
-        .with_accessibility_check(false)
         .build_ui(move |ui| {
             if !std::mem::replace(&mut ready, true) {
                 install_theme(ui.ctx());
@@ -350,7 +348,6 @@ fn keyspace_100k_keys_frame_under_16ms() {
     let mut ready = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(400.0, 720.0))
-        .with_accessibility_check(false)
         .build_ui(move |ui| {
             if !std::mem::replace(&mut ready, true) {
                 install_theme(ui.ctx());

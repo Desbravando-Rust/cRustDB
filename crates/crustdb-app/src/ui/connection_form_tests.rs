@@ -10,7 +10,7 @@ fn form_shows_keyring_hint_and_buttons() {
     let mut f = ConnectionForm::new(DriverKind::Postgres, false);
     f.set_ssh(true);
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             show(ui, &mut f, &[]);
         });
@@ -29,7 +29,7 @@ fn url_box_shows_example_hint() {
     // Arrange
     let mut f = ConnectionForm::new(DriverKind::Postgres, true);
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             show(ui, &mut f, &[]);
         });
@@ -47,7 +47,7 @@ fn sqlite_form_shows_only_file_fields() {
     // Arrange
     let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             show(ui, &mut f, &[]);
         });
@@ -67,7 +67,7 @@ fn sqlite_form_browse_emits_intent() {
     let mut f = ConnectionForm::new(DriverKind::Sqlite, true);
     let mut intents = vec![];
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             intents.extend(show(ui, &mut f, &[]));
         });
@@ -88,8 +88,8 @@ fn buttons_reachable_in_small_window() {
     let mut f = ConnectionForm::new(DriverKind::Postgres, true);
     f.set_ssh(true);
     let mut h = Harness::builder()
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .with_size(egui::vec2(400.0, 240.0))
-        .with_accessibility_check(false)
         .build_ui(|ui| {
             show(ui, &mut f, &[]);
         });
@@ -112,7 +112,7 @@ fn field_labels_show_help_on_hover() {
     let mut f = ConnectionForm::new(DriverKind::Postgres, false);
     f.set_ssh(false);
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             show(ui, &mut f, &[]);
         });
@@ -128,7 +128,9 @@ fn field_labels_show_help_on_hover() {
         ("SSH tunnel", "Connect through an SSH server"),
     ] {
         // Act
-        h.get_by_label(label).hover();
+        // A combo labelled by the label replaces its node: hover the label cell.
+        let r = h.get_all_by_label(label).last().unwrap().rect();
+        h.hover_at(egui::pos2(12.0, r.center().y));
         h.run();
 
         // Assert
@@ -146,7 +148,7 @@ fn label_picker_selects_one_or_none() {
     let mut f = ConnectionForm::new(DriverKind::Postgres, false);
     f.draft.label = Some("dev".into());
     let mut h = Harness::builder()
-        .with_accessibility_check(false)
+        .with_accessibility_check(false) // text inputs and spin buttons are unnamed
         .build_ui(|ui| {
             show(ui, &mut f, &cat);
         });
@@ -173,4 +175,24 @@ fn label_picker_selects_one_or_none() {
 
     // Assert
     assert_eq!(f.draft.label.as_deref(), Some("prod"));
+}
+
+#[test]
+fn combos_have_accessible_names() {
+    // Arrange
+    let mut f = ConnectionForm::new(DriverKind::Postgres, false);
+    f.set_ssh(true);
+    let mut h = Harness::builder()
+        .with_accessibility_check(false) // Text inputs and spin buttons are still unnamed (follow-up issue).
+        .build_ui(|ui| {
+            show(ui, &mut f, &[]);
+        });
+
+    // Act
+    h.run();
+
+    // Assert
+    for name in ["TLS mode", "Driver", "Auth"] {
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, name);
+    }
 }

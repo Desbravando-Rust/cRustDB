@@ -36,7 +36,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             ui.painter().rect_filled(bar, 1.0, c);
             ui.add_space(5.0);
         }
-        egui::ComboBox::from_id_salt("workspace")
+        let ws_combo = egui::ComboBox::from_id_salt("workspace")
             .selected_text(&active.config.name)
             .show_ui(ui, |ui| {
                 for w in &state.workspaces {
@@ -48,6 +48,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     }
                 }
             });
+        ws_combo
+            .response
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Workspace"));
         if let Some(n) = label {
             super::labels::chip(ui, n, &state.config.labels);
         }
@@ -154,13 +157,11 @@ mod tests {
         });
         s.active = Some(ws);
         let mut done = false;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
 
         // Act
         h.run();
@@ -195,13 +196,11 @@ mod tests {
             color: [1, 2, 3],
         }];
         let mut done = false;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
 
         // Act
         h.run();
@@ -217,13 +216,11 @@ mod tests {
         s.config.connections[0].label = Some("dev".into());
         f(&mut s);
         let mut done = false;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
         h.run();
         (
             h.query_by_label("new").is_some(),
@@ -254,13 +251,11 @@ mod tests {
         // Arrange
         let s = online();
         let mut done = false;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
 
         // Act
         h.run();
@@ -275,13 +270,11 @@ mod tests {
         // Arrange
         let s = online();
         let mut done = false;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| {
-                if ready(ui, &mut done) {
-                    show(ui, &s);
-                }
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
 
         // Act
         h.run();
@@ -290,5 +283,23 @@ mod tests {
         let new = h.get_by_label("New query").rect();
         let disc = h.get_by_label("Disconnect").rect();
         assert!(disc.left() - new.right() >= 8.0 + h.ctx.global_style().spacing.item_spacing.x);
+    }
+
+    #[test]
+    fn workspace_combo_has_accessible_name() {
+        // Arrange
+        let s = online();
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("Workspace");
     }
 }
