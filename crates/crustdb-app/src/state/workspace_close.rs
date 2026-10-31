@@ -20,7 +20,7 @@ impl AppState {
             .iter()
             .filter(|w| w.id == ws)
             .flat_map(|w| &w.tabs)
-            .filter(|Tab::Table(t)| !t.pending.is_empty())
+            .filter(|Tab::Table(t)| t.has_pending())
             .count();
         if !has_tx && pending_rows == 0 {
             return false;

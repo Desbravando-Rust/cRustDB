@@ -236,3 +236,157 @@ fn discard_pending_clears_only_the_pending_notice() {
     // Assert
     assert_eq!(t.notice.as_deref(), Some("boom"));
 }
+
+fn update_sql(cmd: Option<Command>) -> (String, usize) {
+    match cmd {
+        Some(Command::UpdateCell { update, .. }) => (update.sql, update.params.len()),
+        other => panic!("expected UpdateCell, got {other:?}"),
+    }
+}
+
+#[test]
+fn add_row_appends_placeholder_and_sets_pending_row() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+
+    // Act
+    t.add_row();
+
+    // Assert
+    assert_eq!(t.rows.len(), 3);
+    assert!(t.rows[2].iter().all(|c| matches!(c, Cell::Null)));
+    assert!(t.inserting);
+    assert_eq!((t.pending_row, t.selected_row), (Some(2), Some(2)));
+}
+
+#[test]
+fn add_row_refused_without_pk_or_with_pending() {
+    // Arrange
+    let mut view = editable_tab(ObjectKind::View, true);
+    let mut no_pk = editable_tab(ObjectKind::Table, false);
+    let mut busy = editable_tab(ObjectKind::Table, true);
+    type_and_commit(&mut busy, 0, 1, "a");
+
+    // Act
+    view.add_row();
+    no_pk.add_row();
+    busy.add_row();
+
+    // Assert
+    for t in [&view, &no_pk, &busy] {
+        assert!(!t.inserting);
+        assert_eq!(t.rows.len(), 2);
+        assert!(t.notice.is_some());
+    }
+    assert_eq!(busy.notice.as_deref(), Some(NOTICE));
+}
+
+#[test]
+fn stage_on_insert_row_skips_update_check() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+
+    // Act
+    type_and_commit(&mut t, 2, 0, "9");
+
+    // Assert
+    assert_eq!(t.pending, vec![(0, Some("9".to_string()))]);
+    assert_eq!(t.pending_value(2, 0), Some(Some("9".into())));
+    assert!(t.notice.is_none());
+}
+
+#[test]
+fn set_null_on_insert_row_stages_explicit_null() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+
+    // Act
+    t.set_null(2, 1);
+
+    // Assert
+    assert_eq!(t.pending, vec![(1, None)]);
+}
+
+#[test]
+fn save_on_insert_row_sends_insert() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+    type_and_commit(&mut t, 2, 0, "9");
+
+    // Act
+    let cmd = t.save_pending(RequestId(4));
+
+    // Assert
+    let (sql, params) = update_sql(cmd);
+    assert!(
+        sql.starts_with(r#"INSERT INTO "public"."t" ("id") VALUES"#),
+        "{sql}"
+    );
+    assert_eq!(params, 1);
+    assert_eq!(t.edit_req, Some(RequestId(4)));
+}
+
+#[test]
+fn discard_removes_placeholder() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+    type_and_commit(&mut t, 2, 0, "9");
+
+    // Act
+    t.discard_pending();
+
+    // Assert
+    assert_eq!(t.rows.len(), 2);
+    assert!(!t.inserting && t.pending.is_empty() && t.pending_row.is_none());
+}
+
+#[test]
+fn pending_blocks_with_empty_insert_row() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+
+    // Act & Assert
+    assert!(t.pending_blocks());
+    assert!(t.save_pending(RequestId(1)).is_none() || t.notice.is_some());
+}
+
+#[test]
+fn delete_selected_builds_one_delete_for_range() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.selected_row = Some(1);
+    t.select_anchor = Some(0);
+
+    // Act
+    let cmd = t.delete_selected(RequestId(5));
+
+    // Assert
+    let (sql, params) = update_sql(cmd);
+    assert!(
+        sql.starts_with(r#"DELETE FROM "public"."t" WHERE ("#),
+        "{sql}"
+    );
+    assert_eq!(params, 2);
+    assert_eq!(t.edit_req, Some(RequestId(5)));
+}
+
+#[test]
+fn delete_refused_while_pending() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    type_and_commit(&mut t, 0, 1, "a");
+    t.selected_row = Some(0);
+
+    // Act
+    let cmd = t.delete_selected(RequestId(5));
+
+    // Assert
+    assert!(cmd.is_none());
+    assert_eq!(t.notice.as_deref(), Some(NOTICE));
+    assert!(t.edit_req.is_none());
+}
