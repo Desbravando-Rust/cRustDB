@@ -8,14 +8,11 @@ use crate::state::workspace::tests::state;
 
 fn empty_state_harness(s: &AppState, size: egui::Vec2) -> Harness<'_> {
     let mut done = false;
-    let mut h = Harness::builder()
-        .with_size(size)
-        .with_accessibility_check(false)
-        .build_ui(move |ui| {
-            if ready(ui, &mut done) {
-                empty_state(ui, s);
-            }
-        });
+    let mut h = Harness::builder().with_size(size).build_ui(move |ui| {
+        if ready(ui, &mut done) {
+            empty_state(ui, s);
+        }
+    });
     h.run();
     h
 }

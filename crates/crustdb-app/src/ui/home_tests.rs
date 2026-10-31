@@ -369,7 +369,6 @@ fn size_of(label: &str) -> egui::Vec2 {
     let mut done = false;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1000.0, 800.0))
-        .with_accessibility_check(false)
         .build_ui(|ui| {
             if ready(ui, &mut done) {
                 empty_state(ui, &s);
