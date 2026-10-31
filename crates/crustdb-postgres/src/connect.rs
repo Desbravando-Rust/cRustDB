@@ -136,9 +136,22 @@ fn tls_connector(t: &ConnectTarget) -> Result<Option<MakeRustlsConnect>, DriverE
             })),
     };
     let cfg = match client_auth(&t.tls)? {
-        Some((chain, key)) => wants_auth
-            .with_client_auth_cert(chain, key)
-            .map_err(|e| err(ErrorKind::Tls, format!("invalid client certificate: {e}")))?,
+        Some((chain, key)) => wants_auth.with_client_auth_cert(chain, key).map_err(|e| {
+            let (c, k) = (&t.tls.client_cert_path, &t.tls.client_key_path);
+            let show = |p: &Option<std::path::PathBuf>| {
+                p.as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            };
+            err(
+                ErrorKind::Tls,
+                format!(
+                    "invalid client certificate {} / key {}: {e}",
+                    show(c),
+                    show(k)
+                ),
+            )
+        })?,
         None => wants_auth.with_no_client_auth(),
     };
     Ok(Some(MakeRustlsConnect::new(cfg)))
