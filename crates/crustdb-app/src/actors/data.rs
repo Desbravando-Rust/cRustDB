@@ -259,18 +259,16 @@ async fn drive(
     (res, cancelled)
 }
 
-/// Fetches `limit + 1` rows to learn `has_more`; the estimate is only meaningful unfiltered.
+/// Fetches `q.limit` rows, which already include the caller's lookahead row, so `has_more` is
+/// `rows.len() >= limit`; the estimate is only meaningful unfiltered.
 async fn read_page(
     s: &mut dyn Session,
     shared: &Shared,
-    mut q: TableQuery,
+    q: TableQuery,
 ) -> Result<Page, DriverError> {
-    let limit = q.limit.unwrap_or(u64::from(shared.config.page_size));
-    let want = usize::try_from(limit)
-        .unwrap_or(usize::MAX)
-        .saturating_add(1);
+    let limit = q.limit.unwrap_or(u64::from(shared.config.page_size) + 1);
+    let want = usize::try_from(limit).unwrap_or(usize::MAX);
     let (object, filtered) = (q.object.clone(), !q.filters.is_empty());
-    q.limit = Some(limit.saturating_add(1));
     let built = build_table_query(shared.driver.dialect(), &q).map_err(|e| DriverError {
         kind: ErrorKind::Query {
             code: None,
@@ -281,10 +279,9 @@ async fn read_page(
     let header = s.start_params(&built.sql, &built.params).await?;
     let body = read_rows(s, want).await;
     let done = s.finish().await;
-    let mut rows = body?;
+    let rows = body?;
     done?;
     let has_more = rows.len() >= want;
-    rows.truncate(want - 1);
     let estimate = if filtered {
         None
     } else {
