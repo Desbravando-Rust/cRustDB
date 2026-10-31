@@ -22,7 +22,7 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
             },
         );
     }
-    let id = ui.scope_id();
+    let id = ui.scope_id().with(ks.ws());
     let mut draft: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
     let r = ui.add(
         egui::TextEdit::singleline(&mut draft)
@@ -33,7 +33,10 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
         out.push(Intent::KeyFilter(draft.clone()));
     }
     ui.data_mut(|d| d.insert_temp(id, draft));
-    if let Some(e) = &ks.error {
+    for e in [&ks.ns_error, &ks.scan_error, &ks.entry_error]
+        .into_iter()
+        .flatten()
+    {
         ui.colored_label(ui.visuals().error_fg_color, e);
     }
     let nodes = ks.nodes();
@@ -72,12 +75,14 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
     ui.horizontal(|ui| {
         ui.weak(format!("{} keys", ks.scan.entries.len()));
         if !ks.scan.is_done() {
-            let label = if ks.error.is_some() {
+            let label = if ks.scan_error.is_some() {
                 "Retry"
             } else {
                 "Load more"
             };
-            if ui.button(label).clicked() {
+            if ks.scan.is_loading() {
+                ui.weak("Loading…");
+            } else if ui.button(label).clicked() {
                 out.push(Intent::LoadMoreKeys);
             }
         }

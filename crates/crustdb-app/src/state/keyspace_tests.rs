@@ -122,7 +122,7 @@ fn scan_error_is_shown_and_retryable() {
         req: RequestId(10),
         result: Err("boom".into()),
     });
-    let error = keyspace(&mut s, ws).error.clone();
+    let error = keyspace(&mut s, ws).scan_error.clone();
     let retry = keyspace(&mut s, ws).load_more(RequestId(11));
 
     // Assert
@@ -131,7 +131,11 @@ fn scan_error_is_shown_and_retryable() {
         retry,
         Some(Command::ScanKeys { cursor: Some(c), .. }) if c == "7"
     ));
-    assert_eq!(keyspace(&mut s, ws).error, None, "retry clears the error");
+    assert_eq!(
+        keyspace(&mut s, ws).scan_error,
+        None,
+        "retry clears the error"
+    );
 }
 
 #[test]
@@ -151,7 +155,7 @@ fn namespaces_and_entry_errors_are_shown() {
         req: ns_req,
         result: Err("no acl".into()),
     });
-    let ns_error = keyspace(&mut s, ws).error.clone();
+    let ns_error = keyspace(&mut s, ws).ns_error.clone();
     keyspace(&mut s, ws).open(key("a"), RequestId(20));
     s.apply(Event::EntryRead {
         req: RequestId(20),
@@ -160,7 +164,7 @@ fn namespaces_and_entry_errors_are_shown() {
 
     // Assert
     assert_eq!(ns_error.as_deref(), Some("no acl"));
-    assert_eq!(keyspace(&mut s, ws).error.as_deref(), Some("gone"));
+    assert_eq!(keyspace(&mut s, ws).entry_error.as_deref(), Some("gone"));
     assert!(keyspace(&mut s, ws).entry.is_none());
 }
 
@@ -226,4 +230,71 @@ fn opening_key_reads_entry_into_result_grid() {
     assert!(e.truncated);
     assert_eq!(e.columns.len(), 2);
     assert_eq!(e.rows.len(), 1);
+}
+
+#[test]
+fn ns_and_entry_errors_survive_scan_batches_and_load_more() {
+    // Arrange
+    let (mut s, ws, cmds) = online_redis();
+    let (req, ..) = scans(&cmds)[0].clone();
+    let ns_req = cmds
+        .iter()
+        .find_map(|c| match c {
+            Command::ListNamespaces { req, .. } => Some(*req),
+            _ => None,
+        })
+        .unwrap();
+    s.apply(Event::Namespaces {
+        req: ns_req,
+        result: Err("no acl".into()),
+    });
+    keyspace(&mut s, ws).open(key("a"), RequestId(20));
+    s.apply(Event::EntryRead {
+        req: RequestId(20),
+        result: Err("gone".into()),
+    });
+
+    // Act
+    s.apply(Event::KeysScanned {
+        req,
+        result: Ok(page(&["a"], Some("7"))),
+    });
+    keyspace(&mut s, ws).load_more(RequestId(30));
+
+    // Assert
+    let ks = keyspace(&mut s, ws);
+    assert_eq!(ks.ns_error.as_deref(), Some("no acl"));
+    assert_eq!(ks.entry_error.as_deref(), Some("gone"));
+}
+
+#[test]
+fn open_keeps_pending_scan_error_for_retry() {
+    // Arrange
+    let (mut s, ws, cmds) = online_redis();
+    let (req, ..) = scans(&cmds)[0].clone();
+    s.apply(Event::KeysScanned {
+        req,
+        result: Err("boom".into()),
+    });
+
+    // Act
+    keyspace(&mut s, ws).open(key("a"), RequestId(20));
+
+    // Assert
+    assert_eq!(keyspace(&mut s, ws).scan_error.as_deref(), Some("boom"));
+}
+
+#[test]
+fn filter_pattern_is_trimmed() {
+    // Arrange
+    let (mut s, ws, _) = online_redis();
+
+    // Act
+    let cmd = keyspace(&mut s, ws).set_filter("  user:*  ".into(), RequestId(40));
+
+    // Assert
+    assert!(matches!(
+        cmd,
+        Some(Command::ScanKeys { pattern: Some(p), .. }) if p == "user:*"
+    ));
 }

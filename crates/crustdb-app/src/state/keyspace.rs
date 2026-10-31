@@ -47,7 +47,9 @@ pub struct Keyspace {
     tree: Vec<KeyNode>,
     expanded: HashSet<Vec<u8>>,
     flat: Vec<FlatNode>,
-    pub error: Option<String>,
+    pub ns_error: Option<String>,
+    pub scan_error: Option<String>,
+    pub entry_error: Option<String>,
     entry_req: Option<RequestId>,
     pub entry: Option<EntryPane>,
 }
@@ -62,10 +64,16 @@ impl Keyspace {
             tree: vec![],
             expanded: HashSet::new(),
             flat: vec![],
-            error: None,
+            ns_error: None,
+            scan_error: None,
+            entry_error: None,
             entry_req: None,
             entry: None,
         }
+    }
+
+    pub fn ws(&self) -> WorkspaceId {
+        self.ws
     }
 
     /// Visible rows of the tree, in display order.
@@ -89,23 +97,24 @@ impl Keyspace {
     pub fn load_more(&mut self, req: RequestId) -> Option<Command> {
         let cmd = self.scan.next(self.ws, req);
         if cmd.is_some() {
-            self.error = None;
+            self.scan_error = None;
         }
         cmd
     }
 
     /// Restarts the scan with a glob pattern (empty clears it); older answers are dropped.
     pub fn set_filter(&mut self, text: String, req: RequestId) -> Option<Command> {
-        let pattern = (!text.trim().is_empty()).then_some(text);
+        let t = text.trim();
+        let pattern = (!t.is_empty()).then(|| t.to_owned());
         self.scan = KeyScan::new(pattern);
-        self.error = None;
+        self.scan_error = None;
         self.rebuild();
         self.scan.next(self.ws, req)
     }
 
     pub fn open(&mut self, key: EntryKey, req: RequestId) -> Command {
         self.entry_req = Some(req);
-        self.error = None;
+        self.entry_error = None;
         let kind = self
             .scan
             .entries
@@ -144,18 +153,18 @@ impl Keyspace {
                 self.ns_req = None;
                 match result {
                     Ok(n) => self.namespaces.clone_from(n),
-                    Err(m) => self.error = Some(m.clone()),
+                    Err(m) => self.ns_error = Some(m.clone()),
                 }
             }
             Event::KeysScanned { req, result } if self.scan.is_pending(*req) => match result {
                 Ok(page) => {
-                    self.error = None;
+                    self.scan_error = None;
                     self.scan.apply(*req, page.clone());
                     self.rebuild();
                 }
                 Err(m) => {
                     self.scan.fail(*req);
-                    self.error = Some(m.clone());
+                    self.scan_error = Some(m.clone());
                 }
             },
             Event::EntryRead { req, result } if self.entry_req == Some(*req) => {
@@ -164,7 +173,7 @@ impl Keyspace {
                     Ok(view) => self.fill_entry(view),
                     Err(m) => {
                         self.entry = None;
-                        self.error = Some(m.clone());
+                        self.entry_error = Some(m.clone());
                     }
                 }
             }
