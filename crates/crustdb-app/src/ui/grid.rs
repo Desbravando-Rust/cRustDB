@@ -236,7 +236,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::StopTab(id));
             }
             row_buttons(ui, tab, &mut out);
-            if !tab.pending.is_empty() {
+            if tab.has_pending() {
                 let save = egui::Button::new("Save");
                 if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
                     // The grid is drawn after the footer: an open editor would be cancelled
@@ -244,12 +244,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                     tab.commit_edit();
                     out.push(Intent::SavePending(id));
                 }
-            }
-            if tab.has_pending() {
                 if ui.button("Discard").clicked() {
                     out.push(Intent::DiscardPending(id));
                 }
-                ui.label(format!("{} pending", tab.pending.len()));
+                if tab.pending.is_empty() {
+                    ui.label("New row");
+                } else {
+                    ui.label(format!("{} pending", tab.pending.len()));
+                }
             }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);

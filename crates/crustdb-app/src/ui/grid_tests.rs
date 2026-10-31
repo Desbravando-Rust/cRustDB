@@ -247,3 +247,28 @@ fn discard_shows_for_empty_insert_row() {
     assert!(h.query_by_label("Discard").is_some());
     assert!(disabled(&h, "Add row"));
 }
+
+#[test]
+fn empty_insert_row_shows_save_and_new_row_label() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    t.add_row();
+    let mut out = vec![];
+    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    h.run();
+
+    // Act
+    h.get_by_label("Save").click();
+    h.run();
+    let new_row = h.query_by_label("New row").is_some();
+    let zero = h.query_by_label("0 pending").is_some();
+    drop(h);
+
+    // Assert
+    assert!(
+        out.iter()
+            .any(|i| matches!(i, Intent::SavePending(TabId(1))))
+    );
+    assert!(new_row && !zero);
+}

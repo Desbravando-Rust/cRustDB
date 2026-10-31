@@ -54,6 +54,10 @@ impl TableTab {
         if (self.pending.is_empty() && !self.inserting) || self.edit_req.is_some() {
             return None;
         }
+        if self.inserting && self.pending.is_empty() {
+            self.notice = Some("Fill at least one column".into());
+            return None;
+        }
         let cells = self.rows.get(self.pending_row?)?;
         let d = crate::export_fmt::dialect(self.driver);
         let built = if self.inserting {

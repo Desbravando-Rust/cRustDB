@@ -390,3 +390,18 @@ fn delete_refused_while_pending() {
     assert_eq!(t.notice.as_deref(), Some(NOTICE));
     assert!(t.edit_req.is_none());
 }
+
+#[test]
+fn save_empty_insert_row_explains_and_sends_nothing() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.add_row();
+
+    // Act
+    let cmd = t.save_pending(RequestId(1));
+
+    // Assert
+    assert!(cmd.is_none());
+    assert_eq!(t.notice.as_deref(), Some("Fill at least one column"));
+    assert!(t.edit_req.is_none());
+}
