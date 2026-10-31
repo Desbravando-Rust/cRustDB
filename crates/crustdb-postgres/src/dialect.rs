@@ -157,4 +157,39 @@ mod tests {
         );
         assert_eq!(b.params, vec![Param(Some("%50!%%".into()))]);
     }
+
+    #[test]
+    fn pg_keyset_mixed_order_composite_key() {
+        // Arrange
+        let mut id = col("id", "int4", TypeCategory::Integer);
+        id.is_primary_key = true;
+        let mut name = col("name", "text", TypeCategory::Text);
+        name.is_primary_key = true;
+        let q = crustdb_core::query::TableQuery {
+            object: obj(Some("public")),
+            columns: vec![id, name],
+            filters: vec![],
+            sorts: vec![
+                crustdb_core::query::Sort {
+                    column: "name".into(),
+                    descending: true,
+                },
+                crustdb_core::query::Sort {
+                    column: "id".into(),
+                    descending: false,
+                },
+            ],
+            limit: Some(8),
+            offset: 0,
+            after: Some(vec!["b".into(), "5".into()]),
+        };
+
+        // Act
+        let b = crustdb_core::dialect::build_table_query(&PgDialect, &q).unwrap();
+
+        // Assert
+        assert!(b.sql.contains(r#"(("public"."t"."name" < CAST($1 AS text)) OR ("public"."t"."name" = CAST($2 AS text) AND "public"."t"."id" > CAST($3 AS int4)))"#), "{}", b.sql);
+        assert!(!b.sql.contains("OFFSET"));
+        assert_eq!(b.params.len(), 3);
+    }
 }

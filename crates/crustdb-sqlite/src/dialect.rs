@@ -105,4 +105,50 @@ mod tests {
         // Act & Assert
         assert_eq!(SqliteDialect.qualified_name(&o), "\"main\".\"t\"");
     }
+
+    #[test]
+    fn sqlite_keyset_mixed_order_composite_key() {
+        // Arrange
+        let mut id = col("id", TypeCategory::Integer);
+        id.is_primary_key = true;
+        let mut name = col("name", TypeCategory::Text);
+        name.is_primary_key = true;
+        let q = crustdb_core::query::TableQuery {
+            object: ObjectRef {
+                database: "main".into(),
+                schema: None,
+                name: "t".into(),
+                kind: ObjectKind::Table,
+            },
+            columns: vec![id, name],
+            filters: vec![],
+            sorts: vec![
+                crustdb_core::query::Sort {
+                    column: "name".into(),
+                    descending: true,
+                },
+                crustdb_core::query::Sort {
+                    column: "id".into(),
+                    descending: false,
+                },
+            ],
+            limit: Some(8),
+            offset: 0,
+            after: Some(vec!["b".into(), "5".into()]),
+        };
+
+        // Act
+        let b = crustdb_core::dialect::build_table_query(&SqliteDialect, &q).unwrap();
+
+        // Assert
+        assert!(
+            b.sql.contains(
+                r#"(("main"."t"."name" < ?1) OR ("main"."t"."name" = ?2 AND "main"."t"."id" > ?3))"#
+            ),
+            "{}",
+            b.sql
+        );
+        assert!(!b.sql.contains("OFFSET"));
+        assert_eq!(b.params.len(), 3);
+    }
 }
