@@ -83,11 +83,21 @@ pub fn after(q: &TableQuery, row: &[Cell]) -> Option<Vec<String>> {
                 | TypeCategory::Timestamp
                 | TypeCategory::Uuid
         );
-        if !ordered || !(c.is_primary_key || c.nullable == Some(false)) {
+        // A PK counts as not null unless introspection says otherwise (SQLite rowid tables
+        // accept NULL in a non-INTEGER PK).
+        let not_null = c.nullable == Some(false) || (c.is_primary_key && c.nullable != Some(true));
+        // MySQL ENUM/SET are Text but sort by declaration index, not by the string.
+        let ty = c.type_name.to_ascii_lowercase();
+        if !ordered || !not_null || ty.starts_with("enum(") || ty.starts_with("set(") {
             return None;
         }
         match row.get(i)? {
-            cell @ Cell::Text { value, .. } if !is_opaque(cell) => cursor.push(value.to_string()),
+            cell @ Cell::Text { value, .. } if !is_opaque(cell) => {
+                if !exact_as_double(c.category, value) {
+                    return None;
+                }
+                cursor.push(value.to_string());
+            }
             _ => return None,
         }
     }
@@ -100,6 +110,23 @@ pub fn after(q: &TableQuery, row: &[Cell]) -> Option<Vec<String>> {
         }
     }
     any.then_some(cursor)
+}
+
+/// ponytail: MySQL binds the cursor as text, so an integer/decimal key compares as a double
+/// and skips or repeats rows beyond 2^53 / ~15 digits. Applied to every dialect (it only
+/// costs huge keys); upgrade path is a typed bind in `MysqlDialect::param`.
+fn exact_as_double(cat: TypeCategory, v: &str) -> bool {
+    match cat {
+        TypeCategory::Integer => v.parse::<i128>().is_ok_and(|n| n.unsigned_abs() <= 1 << 53),
+        TypeCategory::Decimal => {
+            v.chars()
+                .filter(char::is_ascii_digit)
+                .skip_while(|&d| d == '0')
+                .count()
+                <= 15
+        }
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -164,6 +191,46 @@ mod tests {
         // Act & Assert
         let got = after(&q(vec![sort("a", true), sort("id", false)]), &row());
         assert_eq!(got, Some(vec!["x".to_string(), "5".to_string()]));
+    }
+
+    fn cursor_for(id: &str, mutate: impl FnOnce(&mut TableQuery)) -> Option<Vec<String>> {
+        let mut query = q(vec![sort("id", false)]);
+        mutate(&mut query);
+        after(&query, &[t(id), t("x"), t("y"), t("1.5")])
+    }
+
+    #[test]
+    fn cursor_none_for_enum_and_set() {
+        // Act & Assert
+        for ty in ["enum('a','b')", "SET('a','b')"] {
+            let got = cursor_for("5", |q| {
+                q.columns[1].type_name = ty.into();
+                q.sorts = vec![sort("a", false), sort("id", false)];
+            });
+            assert!(got.is_none(), "{ty}");
+        }
+    }
+
+    #[test]
+    fn cursor_none_for_keys_beyond_double_precision() {
+        // Act & Assert
+        assert!(cursor_for("9007199254740992", |_| {}).is_some());
+        assert!(cursor_for("-9007199254740992", |_| {}).is_some());
+        assert!(cursor_for("9007199254740993", |_| {}).is_none());
+        let dec = |v: &str| {
+            cursor_for(v, |q| {
+                q.columns[0].category = TypeCategory::Decimal;
+            })
+        };
+        assert!(dec("-123456789012.345").is_some());
+        assert!(dec("1234567890123.4567").is_none());
+    }
+
+    #[test]
+    fn primary_key_nullability_follows_introspection() {
+        // Act & Assert
+        assert!(cursor_for("5", |q| q.columns[0].nullable = None).is_some());
+        assert!(cursor_for("5", |q| q.columns[0].nullable = Some(true)).is_none());
     }
 
     #[test]

@@ -20,6 +20,8 @@ Regras:
 * `keyset::after(q, row) -> Option<Vec<String>>` (puro, em `crustdb-core`) decide se a página seguinte pode usar keyset. Retorna `None`, e a aba continua com OFFSET, quando:
   * `sorts` não cobre todas as colunas de PK (view, tabela sem PK);
   * alguma coluna de `sorts` é anulável (`nullable != Some(false)`) e não é PK. `NULL` ordena em lugares diferentes por dialeto e `col > p` nunca casa `NULL`, então até uma âncora não nula perderia linhas;
+  * alguma coluna de `sorts` é `ENUM`/`SET` do MySQL (`type_name` começa com `enum(`/`set(`): ordenam pelo índice de declaração, não pelo texto;
+  * a introspecção marca coluna de PK como anulável (`nullable == Some(true)`, caso do SQLite com PK não INTEGER);
   * alguma coluna de `sorts` é `Float` (o texto exibido pode não ser o valor guardado), `Json`, `Binary` ou `Other`;
   * a célula da âncora é `Null` ou opaca (`edit::is_opaque`: binária, truncada ou no limite de `CELL_MEMORY_CAP`).
 * `TableTab::query` acrescenta as colunas de PK que faltam em `sorts` como desempate `ASC`. Isso torna a ordenação determinística também no OFFSET e não muda o cabeçalho da grade, que lê `TableTab::sorts`.
@@ -35,5 +37,5 @@ Regras:
 * `TableQuery` (API pública de `crustdb-core`) ganha um campo, e todo literal de `TableQuery` precisa de `after: None`.
 * A página anterior reflete a âncora antiga: se outra sessão inserir linhas antes dela, a página pode ter outro conteúdo que o de antes. Também acontece com OFFSET.
 * Ordenação por coluna anulável, `Float` ou opaca continua lenta em página profunda.
-* MySQL compara coluna inteira ou decimal com parâmetro texto como `double`. Chaves acima de 2^53 ou decimais com muitos dígitos podem repetir uma linha na borda da página. Os filtros e o `UPDATE` por PK já têm o mesmo limite.
+* O cursor vai como parâmetro texto. No MySQL, coluna inteira ou decimal comparada com texto vira `double`, e chaves acima de 2^53 ou decimais com mais de 15 dígitos pulariam ou repetiriam linhas na borda da página. `keyset::after` devolve `None` (OFFSET) nesses casos, em todos os dialetos; o custo só aparece em chaves enormes. Os filtros e o `UPDATE` por PK têm o mesmo limite, fora de escopo.
 * Chave única não nula como desempate (sem PK) fica de fora até alguém pedir.
