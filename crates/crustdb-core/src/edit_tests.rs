@@ -279,3 +279,127 @@ fn rejects_opaque_cell_in_any_target() {
     // Assert
     assert_eq!(e.unwrap_err(), QueryError::NotEditable("x".into()));
 }
+
+fn ins(
+    kind: ObjectKind,
+    cs: &[ColumnMeta],
+    v: &[(usize, Option<String>)],
+) -> Result<BuiltQuery, QueryError> {
+    build_insert(&TestDialect, &obj(kind), cs, v)
+}
+
+#[test]
+fn insert_binds_only_given_columns() {
+    // Act
+    let b = ins(
+        ObjectKind::Table,
+        &cols(),
+        &[(0, Some("1".into())), (2, Some("a".into()))],
+    )
+    .unwrap();
+
+    // Assert
+    assert_eq!(
+        b.sql,
+        r#"INSERT INTO "public"."t" ("id", "k") VALUES ($1, $2)"#
+    );
+    assert_eq!(
+        b.params,
+        vec![Param(Some("1".into())), Param(Some("a".into()))]
+    );
+}
+
+#[test]
+fn insert_none_binds_null() {
+    // Act
+    let b = ins(ObjectKind::Table, &cols(), &[(1, None)]).unwrap();
+
+    // Assert
+    assert_eq!(b.params, vec![Param(None)]);
+}
+
+#[test]
+fn insert_rejects_view_and_table_without_pk() {
+    // Arrange
+    let no_pk = vec![col("id", false)];
+
+    // Act & Assert
+    let v = ins(ObjectKind::View, &cols(), &[(1, None)]);
+    assert_eq!(v.unwrap_err(), QueryError::NoPrimaryKey);
+    let t = ins(ObjectKind::Table, &no_pk, &[(0, None)]);
+    assert_eq!(t.unwrap_err(), QueryError::NoPrimaryKey);
+}
+
+#[test]
+fn insert_rejects_empty_values() {
+    // Act & Assert
+    let e = ins(ObjectKind::Table, &cols(), &[]);
+    assert!(matches!(e.unwrap_err(), QueryError::UnknownColumn(_)));
+}
+
+#[test]
+fn insert_rejects_column_out_of_range() {
+    // Act & Assert
+    let e = ins(ObjectKind::Table, &cols(), &[(3, None)]);
+    assert!(matches!(e.unwrap_err(), QueryError::UnknownColumn(_)));
+}
+
+fn del(kind: ObjectKind, cs: &[ColumnMeta], rows: &[&[Cell]]) -> Result<BuiltQuery, QueryError> {
+    build_delete(&TestDialect, &obj(kind), cs, rows)
+}
+
+#[test]
+fn delete_keys_each_row_by_all_pk_columns() {
+    // Arrange
+    let r1 = row();
+    let r2 = vec![text("2"), text("x"), text("b")];
+
+    // Act
+    let b = del(ObjectKind::Table, &cols(), &[&r1, &r2]).unwrap();
+
+    // Assert
+    assert_eq!(
+        b.sql,
+        r#"DELETE FROM "public"."t" WHERE ("id" = $1 AND "k" = $2) OR ("id" = $3 AND "k" = $4)"#
+    );
+    assert_eq!(b.params.len(), 4);
+    assert_eq!(b.params[2], Param(Some("2".into())));
+}
+
+#[test]
+fn delete_rejects_null_or_opaque_pk() {
+    // Arrange
+    let mut r = row();
+    r[0] = Cell::Null;
+    let mut o = row();
+    o[2] = Cell::Text {
+        value: "x".into(),
+        truncated: true,
+    };
+
+    // Act & Assert
+    let e = del(ObjectKind::Table, &cols(), &[&r]).unwrap_err();
+    assert_eq!(e, QueryError::NotEditable("id".into()));
+    let e = del(ObjectKind::Table, &cols(), &[&o]).unwrap_err();
+    assert_eq!(e, QueryError::NotEditable("k".into()));
+}
+
+#[test]
+fn delete_rejects_empty_rows() {
+    // Act & Assert
+    let e = del(ObjectKind::Table, &cols(), &[]);
+    assert!(matches!(e.unwrap_err(), QueryError::UnknownColumn(_)));
+}
+
+#[test]
+fn delete_rejects_view_and_no_pk() {
+    // Arrange
+    let r = row();
+    let no_pk = vec![col("id", false), col("c", false), col("k", false)];
+
+    // Act & Assert
+    let v = del(ObjectKind::View, &cols(), &[&r]);
+    assert_eq!(v.unwrap_err(), QueryError::NoPrimaryKey);
+    let t = del(ObjectKind::Table, &no_pk, &[&r]);
+    assert_eq!(t.unwrap_err(), QueryError::NoPrimaryKey);
+}
