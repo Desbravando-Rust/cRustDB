@@ -9,7 +9,7 @@ impl AppState {
         let Some(t) = self.table_mut(tab) else {
             return;
         };
-        if t.pending_blocks() || !t.writable() {
+        if t.pending_blocks() || !t.writable() || t.delete_busy() {
             return;
         }
         if let Some((lo, hi)) = t.selection() {

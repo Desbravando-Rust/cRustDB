@@ -129,3 +129,28 @@ fn loading_between_request_and_confirm_explains_and_sends_nothing() {
         Some("Table is loading, delete cancelled")
     );
 }
+
+#[test]
+fn request_delete_rows_while_busy_opens_no_dialog_and_explains() {
+    for (loading, edit_req, text) in [
+        (
+            Some(RequestId(1)),
+            None,
+            "Table is loading, delete cancelled",
+        ),
+        (None, Some(RequestId(2)), "Saving changes, delete cancelled"),
+    ] {
+        // Arrange
+        let (mut s, tab) = setup();
+        let t = s.table_mut(tab).unwrap();
+        t.loading = loading;
+        t.edit_req = edit_req;
+
+        // Act
+        s.request_delete_rows(tab);
+
+        // Assert
+        assert!(s.dialogs.top().is_none());
+        assert_eq!(s.table_mut(tab).unwrap().notice.as_deref(), Some(text));
+    }
+}
