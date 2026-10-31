@@ -97,6 +97,11 @@ pub enum Command {
         ws: WorkspaceId,
         req: RequestId,
     },
+    /// Selects another logical database of a store workspace: the sessions reconnect on it.
+    SwitchNamespace {
+        ws: WorkspaceId,
+        ns: String,
+    },
     /// One `ROWS_BATCH` of keys from `cursor` (`None` starts over), answered by `Event::KeysScanned`.
     ScanKeys {
         ws: WorkspaceId,

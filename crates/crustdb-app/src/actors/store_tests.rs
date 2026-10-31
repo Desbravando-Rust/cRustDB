@@ -27,7 +27,7 @@ async fn redis_connection_without_store_driver_fails_cleanly() {
     ));
 }
 
-mod store {
+pub(in crate::actors) mod store {
     use std::sync::atomic::Ordering;
     use std::sync::{Arc, mpsc};
     use std::time::Duration;
@@ -46,10 +46,10 @@ mod store {
         Command, DriverRegistry, Emitter, Event, ROWS_BATCH, RequestId, ResolvedSecrets,
     };
 
-    struct H {
-        actors: Actors,
-        rx: mpsc::Receiver<Event>,
-        log: Arc<FakeStoreLog>,
+    pub(in crate::actors) struct H {
+        pub(in crate::actors) actors: Actors,
+        pub(in crate::actors) rx: mpsc::Receiver<Event>,
+        pub(in crate::actors) log: Arc<FakeStoreLog>,
     }
 
     fn entry(key: &str) -> KeyEntry {
@@ -76,7 +76,7 @@ mod store {
         }
     }
 
-    fn harness(fake: FakeStore) -> H {
+    pub(in crate::actors) fn harness(fake: FakeStore) -> H {
         let log = fake.log.clone();
         let (tx, rx) = mpsc::channel();
         let out = Emitter {
@@ -91,11 +91,11 @@ mod store {
         }
     }
 
-    fn send(h: &mut H, cmd: Command) {
+    pub(in crate::actors) fn send(h: &mut H, cmd: Command) {
         assert!(h.actors.dispatch(cmd).is_none());
     }
 
-    async fn connect(h: &mut H) -> Event {
+    pub(in crate::actors) async fn connect(h: &mut H) -> Event {
         let mut cfg = config(None);
         cfg.driver = DriverKind::Redis;
         send(
@@ -109,7 +109,7 @@ mod store {
         next(&h.rx).await
     }
 
-    fn scan(req: u64, cursor: Option<&str>) -> Command {
+    pub(in crate::actors) fn scan(req: u64, cursor: Option<&str>) -> Command {
         Command::ScanKeys {
             ws: WS,
             req: RequestId(req),
