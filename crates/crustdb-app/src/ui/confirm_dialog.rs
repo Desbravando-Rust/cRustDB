@@ -4,7 +4,7 @@ use eframe::egui;
 
 use super::Intent;
 use crate::runtime::{RequestId, TxOp};
-use crate::state::dialogs::MAX_PASSWORD_ATTEMPTS;
+use crate::state::dialogs::{MAX_PASSWORD_ATTEMPTS, PasswordInput};
 use crate::state::{Dialog, DialogStack};
 
 /// One line per flagged statement: position, reason and, when known, the row estimate.
@@ -25,8 +25,38 @@ pub fn flag_rows(ev: &Evaluation) -> Vec<String> {
         .collect()
 }
 
+const ARGV_PREVIEW_CAP: usize = 300;
+
+/// Arguments shown one by one, quoted, so spaces inside an argument stay visible; capped.
+pub fn argv_preview(argv: &[Vec<u8>]) -> String {
+    let line = argv
+        .iter()
+        .map(|a| format!("{:?}", String::from_utf8_lossy(a)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    match line.char_indices().nth(ARGV_PREVIEW_CAP) {
+        Some((end, _)) => format!("{}…", &line[..end]),
+        None => line,
+    }
+}
+
 fn password_id(exec: RequestId) -> egui::Id {
     egui::Id::unique(("safety_password", exec.0))
+}
+
+fn password_field(ui: &mut egui::Ui, id: egui::Id, input: &mut PasswordInput, attempts: u8) {
+    ui.label("Type the password (or the database name if none) to continue.");
+    ui.add(
+        egui::TextEdit::singleline(&mut *input.0)
+            .id(id)
+            .password(true),
+    );
+    if attempts > 0 {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            format!("Wrong password ({attempts}/{MAX_PASSWORD_ATTEMPTS})"),
+        );
+    }
 }
 
 pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
@@ -36,10 +66,11 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
     };
     let pw_id = match top {
         Dialog::Safety { exec, .. } => Some(password_id(*exec)),
+        Dialog::StoreSafety { req, .. } => Some(password_id(*req)),
         _ => None,
     };
     let title = match top {
-        Dialog::Safety { .. } => "Confirm execution",
+        Dialog::Safety { .. } | Dialog::StoreSafety { .. } => "Confirm execution",
         Dialog::CloseWithTx { .. } => "Open transaction",
         Dialog::DirtyFile { .. } => "Unsaved changes",
         Dialog::HostKey { .. } => "Unknown SSH host key",
@@ -61,20 +92,31 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
                 for row in flag_rows(evaluation) {
                     ui.label(row);
                 }
-                let password = evaluation.verdict == Verdict::Password;
-                if password {
-                    ui.label("Type the password (or the database name if none) to continue.");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut *input.0)
-                            .id(password_id(*exec))
-                            .password(true),
-                    );
-                    if *attempts > 0 {
-                        ui.colored_label(
-                            ui.visuals().error_fg_color,
-                            format!("Wrong password ({attempts}/{MAX_PASSWORD_ATTEMPTS})"),
-                        );
+                if evaluation.verdict == Verdict::Password {
+                    password_field(ui, password_id(*exec), input, *attempts);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Execute").clicked() {
+                        out.push(Intent::ConfirmSafety);
                     }
+                    if ui.button("Cancel").clicked() {
+                        out.push(Intent::CancelDialog);
+                    }
+                });
+            }
+            Dialog::StoreSafety {
+                req,
+                argv,
+                verdict,
+                reason,
+                input,
+                attempts,
+                ..
+            } => {
+                ui.monospace(argv_preview(argv));
+                ui.label(reason.as_str());
+                if *verdict == Verdict::Password {
+                    password_field(ui, password_id(*req), input, *attempts);
                 }
                 ui.horizontal(|ui| {
                     if ui.button("Execute").clicked() {
@@ -172,4 +214,24 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
         st.store(ctx, id);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn argv_preview_separates_quotes_and_caps() {
+        // Arrange
+        let argv = vec![b"SET".to_vec(), b"a b".to_vec()];
+        let long = vec![vec![b'x'; 1000]];
+
+        // Act
+        let short = argv_preview(&argv);
+        let capped = argv_preview(&long);
+
+        // Assert
+        assert_eq!(short, "\"SET\" \"a b\"");
+        assert!(capped.chars().count() <= ARGV_PREVIEW_CAP + 1);
+    }
 }

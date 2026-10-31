@@ -32,10 +32,12 @@ mod store {
     use std::sync::{Arc, mpsc};
     use std::time::Duration;
 
+    use crustdb_core::driver::SessionPurpose;
     use crustdb_core::model::{DriverKind, ObjectKind};
+    use crustdb_core::safety::Verdict;
     use crustdb_core::store::keyspace::EntryKey;
     use crustdb_core::store::value::ValueBody;
-    use crustdb_core::store::{EntryView, KeyEntry, ScanPage, ValueKind};
+    use crustdb_core::store::{EntryView, KeyEntry, Reply, ScanPage, ValueKind};
     use crustdb_testkit::fake_store::{FakeStore, FakeStoreLog};
 
     use crate::actors::Actors;
@@ -387,5 +389,95 @@ mod store {
         // Assert
         assert!(matches!(first, Event::Notice { .. }));
         assert!(matches!(second, Event::Children { req: RequestId(7), items } if items.is_empty()));
+    }
+
+    fn assess(req: u64, argv: &[Vec<u8>]) -> Command {
+        Command::AssessCommand {
+            ws: WS,
+            req: RequestId(req),
+            argv: argv.to_vec(),
+        }
+    }
+
+    fn run_cmd(req: u64, argv: &[Vec<u8>]) -> Command {
+        Command::RunCommand {
+            ws: WS,
+            req: RequestId(req),
+            argv: argv.to_vec(),
+        }
+    }
+
+    #[tokio::test]
+    async fn quoted_crlf_command_runs_as_single_argument() {
+        // Arrange
+        let mut h = harness(FakeStore::new(DriverKind::Redis));
+        connect(&mut h).await;
+        let argv = crustdb_redis::tokenize::tokenize("SET k \"v\r\nFLUSHALL\"").unwrap();
+
+        // Act
+        send(&mut h, assess(1, &argv));
+        let assessed = next(&h.rx).await;
+        send(&mut h, run_cmd(1, &argv));
+        let reply = next(&h.rx).await;
+
+        // Assert
+        assert!(matches!(
+            assessed,
+            Event::CommandAssessed {
+                result: Ok((Verdict::Run, _)),
+                ..
+            }
+        ));
+        assert!(matches!(
+            reply,
+            Event::CommandReply {
+                result: Ok(Reply::Int(3)),
+                ..
+            }
+        ));
+        assert_eq!(h.log.ops(), ["run:3"], "CRLF stayed inside one argument");
+        assert!(h.log.purposes().contains(&SessionPurpose::Editor));
+    }
+
+    #[tokio::test]
+    async fn cancel_drops_editor_session_and_reconnects_on_demand() {
+        // Arrange
+        let mut h = harness(FakeStore::new(DriverKind::Redis));
+        connect(&mut h).await;
+        let argv = vec![b"PING".to_vec()];
+        h.log.hang_run.store(true, Ordering::SeqCst);
+        send(&mut h, run_cmd(1, &argv));
+        while h.log.ops().is_empty() {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        // Act
+        send(&mut h, cancel(1));
+        let cancelled = next(&h.rx).await;
+
+        // Assert
+        assert!(
+            matches!(cancelled, Event::CommandReply { result: Err(e), .. } if e == "cancelled")
+        );
+        assert_eq!(
+            h.log.alive.load(Ordering::SeqCst),
+            1,
+            "only the data session survives"
+        );
+
+        // Act
+        h.log.hang_run.store(false, Ordering::SeqCst);
+        send(&mut h, run_cmd(2, &argv));
+        let again = next(&h.rx).await;
+
+        // Assert
+        assert!(matches!(again, Event::CommandReply { result: Ok(_), .. }));
+        let editors = h
+            .log
+            .purposes()
+            .iter()
+            .filter(|p| **p == SessionPurpose::Editor)
+            .count();
+        assert_eq!(editors, 2);
     }
 }

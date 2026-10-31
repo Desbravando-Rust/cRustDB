@@ -208,6 +208,8 @@ fn no_actor(cmd: &Command) -> Event {
         | ListNamespaces { .. }
         | ScanKeys { .. }
         | ReadEntry { .. }
+        | AssessCommand { .. }
+        | RunCommand { .. }
         | CancelStore { .. }
         | CancelExport { .. } => TabId(0),
     };

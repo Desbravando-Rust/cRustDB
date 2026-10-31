@@ -444,10 +444,7 @@ impl AppState {
                 host,
                 fingerprint,
             }),
-            Event::Namespaces { .. } | Event::KeysScanned { .. } | Event::EntryRead { .. } => {
-                self.apply_keyspace(&e);
-            }
-            _ => {}
+            _ => self.apply_keyspace(&e),
         }
     }
 

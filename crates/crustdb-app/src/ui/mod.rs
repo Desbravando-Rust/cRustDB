@@ -1,5 +1,6 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
 pub mod autocomplete;
+pub mod command_pane;
 pub mod confirm_dialog;
 pub mod connection_form;
 mod connection_form_redis;
@@ -117,6 +118,9 @@ pub enum Intent {
     },
     LoadColumns(ObjectRef),
     LoadMoreKeys,
+    /// Runs the command line of the active key-value workspace.
+    RunCommand,
+    CancelCommand,
     /// Glob pattern of the key scan; empty clears it.
     KeyFilter(String),
     ToggleKey(Vec<u8>),

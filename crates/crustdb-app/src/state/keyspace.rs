@@ -6,6 +6,7 @@ use crustdb_core::model::{ColumnMeta, Row};
 use crustdb_core::store::keyspace::{EntryKey, KeyNode, group};
 use crustdb_core::store::{EntryView, ValueKind};
 
+use super::command_pane::CommandPane;
 use super::key_scan::KeyScan;
 use super::{AppState, Status};
 use crate::runtime::{Command, Event, RequestId, WorkspaceId};
@@ -52,6 +53,7 @@ pub struct Keyspace {
     pub entry_error: Option<String>,
     entry_req: Option<RequestId>,
     pub entry: Option<EntryPane>,
+    pub command: CommandPane,
 }
 
 impl Keyspace {
@@ -69,6 +71,7 @@ impl Keyspace {
             entry_error: None,
             entry_req: None,
             entry: None,
+            command: CommandPane::default(),
         }
     }
 
@@ -148,6 +151,7 @@ impl Keyspace {
     }
 
     pub fn apply(&mut self, e: &Event) {
+        self.command.apply(e);
         match e {
             Event::Namespaces { req, result } if self.ns_req == Some(*req) => {
                 self.ns_req = None;
@@ -236,7 +240,7 @@ fn flatten(
 
 impl AppState {
     /// Request id for commands issued from `apply`, which has no runtime to ask.
-    fn internal_req(&mut self) -> RequestId {
+    pub(super) fn internal_req(&mut self) -> RequestId {
         self.next_exec += 1;
         RequestId(self.next_exec)
     }
@@ -255,6 +259,10 @@ impl AppState {
     }
 
     pub(super) fn apply_keyspace(&mut self, e: &Event) {
+        if let Event::CommandAssessed { req, result } = e {
+            self.command_assessed(*req, result);
+            return;
+        }
         for w in &mut self.workspaces {
             if matches!(w.status, Status::Online(_))
                 && let Some(ks) = w.keyspace.as_mut()

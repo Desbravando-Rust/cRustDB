@@ -119,6 +119,14 @@ impl CrustApp {
                 && matches!(w.status, crate::state::Status::Online(_))
                 && let Some(ks) = w.keyspace.as_mut()
             {
+                if w.config.driver.data_model().capabilities().command_editor {
+                    egui::Panel::bottom(("commands", ks.ws().0))
+                        .resizable(true)
+                        .default_size(200.0)
+                        .show(ui, |ui| {
+                            intents.extend(ui::command_pane::show(ui, &mut ks.command));
+                        });
+                }
                 intents.extend(ui::keyspace::value_panel(ui, ks));
                 return;
             }
