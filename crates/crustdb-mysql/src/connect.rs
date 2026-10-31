@@ -4,6 +4,7 @@ use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, IoError, Opts, OptsBuilder, SslOpts, TlsError};
 use secrecy::ExposeSecret;
 
+use crate::client_auth::client_identity;
 use crate::session::MysqlSession;
 
 pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
@@ -14,10 +15,10 @@ pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
 }
 
 /// `None` for `Disable`. No LOCAL INFILE handler is ever registered.
-fn ssl_opts(t: &ConnectTarget) -> Option<SslOpts> {
+fn ssl_opts(t: &ConnectTarget) -> Result<Option<SslOpts>, DriverError> {
     let mut ssl = SslOpts::default();
     match t.tls.mode {
-        TlsMode::Disable => return None,
+        TlsMode::Disable => return Ok(None),
         TlsMode::Require => ssl = ssl.with_danger_accept_invalid_certs(true),
         // ponytail: mysql_async 0.37.1 matches rustls' Display text "NotValidForName", which rustls
         // 0.23.46 changed, so this flag never fires: VerifyCa behaves as VerifyFull on MySQL (fail-closed).
@@ -33,23 +34,24 @@ fn ssl_opts(t: &ConnectTarget) -> Option<SslOpts> {
     if t.connect_addr.is_some() {
         ssl = ssl.with_danger_tls_hostname_override(Some(t.host.clone()));
     }
-    Some(ssl)
+    Ok(Some(ssl.with_client_identity(client_identity(&t.tls)?)))
 }
 
-fn opts(t: &ConnectTarget) -> Opts {
+fn opts(t: &ConnectTarget) -> Result<Opts, DriverError> {
     let (host, port) = match t.connect_addr {
         Some(a) => (a.ip().to_string(), a.port()),
         None => (t.host.clone(), t.port),
     };
-    OptsBuilder::default()
+    let ssl = ssl_opts(t)?;
+    Ok(OptsBuilder::default()
         .ip_or_hostname(host)
         .tcp_port(port)
         .user(Some(&t.user))
         .pass(t.password.as_ref().map(|p| p.expose_secret()))
         .db_name(t.database.as_deref())
         .prefer_socket(false)
-        .ssl_opts(ssl_opts(t))
-        .into()
+        .ssl_opts(ssl)
+        .into())
 }
 
 pub(crate) fn map_err(e: mysql_async::Error) -> DriverError {
@@ -117,7 +119,7 @@ pub(crate) async fn connect(
     PROVIDER.call_once(|| {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     });
-    let opts = opts(t);
+    let opts = opts(t)?;
     let work = async {
         let mut conn = Conn::new(opts.clone()).await.map_err(map_err)?;
         if purpose != SessionPurpose::Editor {
@@ -138,6 +140,7 @@ pub(crate) async fn connect(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -161,7 +164,7 @@ mod tests {
         };
 
         // Act & Assert
-        assert!(!opts(&t).prefer_socket());
+        assert!(!opts(&t).unwrap().prefer_socket());
     }
 
     #[test]
