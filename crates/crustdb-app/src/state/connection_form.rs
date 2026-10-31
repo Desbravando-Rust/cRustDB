@@ -126,6 +126,8 @@ impl ConnectionForm {
             password,
             database,
             tls_mode,
+            client_cert_path,
+            client_key_path,
             warnings,
         } = parse_connection_url(s.trim())?;
         self.set_driver(driver);
@@ -143,6 +145,10 @@ impl ConnectionForm {
         self.draft.database = database;
         if let Some(m) = tls_mode {
             self.draft.tls.mode = m;
+        }
+        if client_cert_path.is_some() || client_key_path.is_some() {
+            self.draft.tls.client_cert_path = client_cert_path;
+            self.draft.tls.client_key_path = client_key_path;
         }
         if let Some(p) = password {
             self.password = p;

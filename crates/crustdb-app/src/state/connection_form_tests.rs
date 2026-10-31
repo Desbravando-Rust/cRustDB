@@ -211,3 +211,23 @@ fn import_sqlite_url_names_from_file() {
     assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
     assert_eq!(f.draft.name, "a.db");
 }
+
+#[test]
+fn import_url_sets_client_cert_paths() {
+    // Arrange
+    let mut f = form();
+
+    // Act
+    f.import_url("postgres://h/db?sslcert=/c/client.crt&sslkey=/c/client.key")
+        .unwrap();
+
+    // Assert
+    assert_eq!(
+        f.draft.tls.client_cert_path.as_deref(),
+        Some(Path::new("/c/client.crt"))
+    );
+    assert_eq!(
+        f.draft.tls.client_key_path.as_deref(),
+        Some(Path::new("/c/client.key"))
+    );
+}
