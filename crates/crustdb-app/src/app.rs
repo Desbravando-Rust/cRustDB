@@ -8,7 +8,6 @@ use crate::net::ssh::SshSecrets;
 use crate::runtime::{Command, Event, ResolvedSecrets, Runtime};
 use crate::state::AppState;
 use crate::state::connection_form::ConnectionForm;
-use crate::state::dialogs::SessionAuth;
 use crate::state::status::StatusBoard;
 use crate::storage::config::{ConfigStore, ConnectionConfig, LoadedConfig};
 use crate::storage::secrets::{SecretKind, SecretStore, account};
@@ -129,17 +128,7 @@ impl CrustApp {
                 self.send(cmd);
             }
             Intent::ConfirmSafety => {
-                let workspaces = &self.state.workspaces;
-                let cmd = self.state.dialogs.submit_safety(
-                    |id| {
-                        let w = workspaces.iter().find(|w| w.id == id)?;
-                        Some(SessionAuth {
-                            password: w.session_password.as_ref(),
-                            database: w.config.database.as_deref().unwrap_or(""),
-                        })
-                    },
-                    std::time::Instant::now(),
-                );
+                let cmd = self.state.confirm_safety(std::time::Instant::now());
                 self.send(cmd);
             }
             Intent::CloseResolve(op) => {
@@ -346,6 +335,17 @@ impl CrustApp {
             }
             Intent::LoadMore(tab) => {
                 let cmd = self.state.query_mut(tab).and_then(|q| q.load_more());
+                self.send(cmd);
+            }
+            Intent::RunCommand => {
+                let cmd = self.state.active.and_then(|ws| self.state.run_command(ws));
+                self.send(cmd);
+            }
+            Intent::CancelCommand => {
+                let cmd = self
+                    .state
+                    .active
+                    .and_then(|ws| self.state.cancel_command(ws));
                 self.send(cmd);
             }
             i @ (Intent::LoadMoreKeys

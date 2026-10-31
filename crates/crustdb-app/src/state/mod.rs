@@ -1,6 +1,7 @@
 //! UI-independent application state; everything here is testable without a GUI.
 pub mod autocomplete;
 mod caps;
+pub mod command_pane;
 pub mod connection_form;
 pub mod diagram;
 pub mod dialogs;

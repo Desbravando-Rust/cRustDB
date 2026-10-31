@@ -4,7 +4,7 @@ use eframe::egui;
 
 use super::Intent;
 use crate::runtime::{RequestId, TxOp};
-use crate::state::dialogs::MAX_PASSWORD_ATTEMPTS;
+use crate::state::dialogs::{MAX_PASSWORD_ATTEMPTS, PasswordInput};
 use crate::state::{Dialog, DialogStack};
 
 /// One line per flagged statement: position, reason and, when known, the row estimate.
@@ -29,6 +29,21 @@ fn password_id(exec: RequestId) -> egui::Id {
     egui::Id::unique(("safety_password", exec.0))
 }
 
+fn password_field(ui: &mut egui::Ui, id: egui::Id, input: &mut PasswordInput, attempts: u8) {
+    ui.label("Type the password (or the database name if none) to continue.");
+    ui.add(
+        egui::TextEdit::singleline(&mut *input.0)
+            .id(id)
+            .password(true),
+    );
+    if attempts > 0 {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            format!("Wrong password ({attempts}/{MAX_PASSWORD_ATTEMPTS})"),
+        );
+    }
+}
+
 pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
     let mut out = vec![];
     let Some(top) = dialogs.top_mut() else {
@@ -36,10 +51,11 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
     };
     let pw_id = match top {
         Dialog::Safety { exec, .. } => Some(password_id(*exec)),
+        Dialog::StoreSafety { req, .. } => Some(password_id(*req)),
         _ => None,
     };
     let title = match top {
-        Dialog::Safety { .. } => "Confirm execution",
+        Dialog::Safety { .. } | Dialog::StoreSafety { .. } => "Confirm execution",
         Dialog::CloseWithTx { .. } => "Open transaction",
         Dialog::DirtyFile { .. } => "Unsaved changes",
         Dialog::HostKey { .. } => "Unknown SSH host key",
@@ -61,20 +77,29 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
                 for row in flag_rows(evaluation) {
                     ui.label(row);
                 }
-                let password = evaluation.verdict == Verdict::Password;
-                if password {
-                    ui.label("Type the password (or the database name if none) to continue.");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut *input.0)
-                            .id(password_id(*exec))
-                            .password(true),
-                    );
-                    if *attempts > 0 {
-                        ui.colored_label(
-                            ui.visuals().error_fg_color,
-                            format!("Wrong password ({attempts}/{MAX_PASSWORD_ATTEMPTS})"),
-                        );
+                if evaluation.verdict == Verdict::Password {
+                    password_field(ui, password_id(*exec), input, *attempts);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Execute").clicked() {
+                        out.push(Intent::ConfirmSafety);
                     }
+                    if ui.button("Cancel").clicked() {
+                        out.push(Intent::CancelDialog);
+                    }
+                });
+            }
+            Dialog::StoreSafety {
+                req,
+                verdict,
+                reason,
+                input,
+                attempts,
+                ..
+            } => {
+                ui.label(reason.as_str());
+                if *verdict == Verdict::Password {
+                    password_field(ui, password_id(*req), input, *attempts);
                 }
                 ui.horizontal(|ui| {
                     if ui.button("Execute").clicked() {

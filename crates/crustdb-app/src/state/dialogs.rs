@@ -55,6 +55,17 @@ pub enum Dialog {
         attempts: u8,
         shown_at: Instant,
     },
+    /// A key-value command that needs approval; `req` ties it to the command pane.
+    StoreSafety {
+        ws: WorkspaceId,
+        req: RequestId,
+        argv: Vec<Vec<u8>>,
+        verdict: Verdict,
+        reason: String,
+        input: PasswordInput,
+        attempts: u8,
+        shown_at: Instant,
+    },
     CloseWithTx {
         tab: TabId,
     },
@@ -101,6 +112,31 @@ pub fn verify_password(input: &str, expected: Option<&SecretString>, database: &
     acc == 0 && !b.is_empty()
 }
 
+enum Approval {
+    Approved,
+    Retry,
+    Exhausted,
+}
+
+/// One approval attempt: a wrong password wipes the input and counts; the last one gives up.
+fn approve(
+    needs_password: bool,
+    input: &mut PasswordInput,
+    attempts: &mut u8,
+    a: &SessionAuth<'_>,
+) -> Approval {
+    if !needs_password || verify_password(&input.0, a.password, a.database) {
+        return Approval::Approved;
+    }
+    input.wipe();
+    *attempts += 1;
+    if *attempts >= MAX_PASSWORD_ATTEMPTS {
+        Approval::Exhausted
+    } else {
+        Approval::Retry
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct DialogStack(Vec<Dialog>);
 
@@ -117,6 +153,7 @@ impl DialogStack {
     pub fn retain_ws(&mut self, ws: WorkspaceId, tabs: &[TabId]) {
         self.0.retain(|d| match d {
             Dialog::Safety { ws: w, .. }
+            | Dialog::StoreSafety { ws: w, .. }
             | Dialog::HostKey { ws: w, .. }
             | Dialog::Disconnect { ws: w, .. } => *w != ws,
             Dialog::CloseWithTx { tab } | Dialog::DirtyFile { tab } => !tabs.contains(tab),
@@ -170,6 +207,9 @@ impl DialogStack {
         auth: impl FnOnce(WorkspaceId) -> Option<SessionAuth<'a>>,
         now: Instant,
     ) -> Option<Command> {
+        if matches!(self.0.last(), Some(Dialog::StoreSafety { .. })) {
+            return self.submit_store_safety(auth, now);
+        }
         let Some(Dialog::Safety {
             ws,
             tab,
@@ -195,22 +235,66 @@ impl DialogStack {
                 .flags
                 .iter()
                 .any(|f| f.verdict == Verdict::Password);
-        let approved = !needs_password || verify_password(&input.0, a.password, a.database);
-        if approved {
-            let cmd = Command::Execute {
-                tab: *tab,
-                req: *exec,
-                evaluation: *req,
-            };
-            self.0.pop();
-            return Some(cmd);
+        match approve(needs_password, input, attempts, &a) {
+            Approval::Approved => {
+                let cmd = Command::Execute {
+                    tab: *tab,
+                    req: *exec,
+                    evaluation: *req,
+                };
+                self.0.pop();
+                Some(cmd)
+            }
+            Approval::Retry => None,
+            Approval::Exhausted => {
+                self.0.pop();
+                None
+            }
         }
-        input.wipe();
-        *attempts += 1;
-        if *attempts >= MAX_PASSWORD_ATTEMPTS {
-            self.0.pop();
+    }
+
+    /// Same rules as `submit_safety`, for a key-value command: approval yields its `RunCommand`.
+    fn submit_store_safety<'a>(
+        &mut self,
+        auth: impl FnOnce(WorkspaceId) -> Option<SessionAuth<'a>>,
+        now: Instant,
+    ) -> Option<Command> {
+        let Some(Dialog::StoreSafety {
+            ws,
+            req,
+            argv,
+            verdict,
+            input,
+            attempts,
+            shown_at,
+            ..
+        }) = self.0.last_mut()
+        else {
+            return None;
+        };
+        if now.saturating_duration_since(*shown_at) < APPROVAL_GRACE {
+            return None;
         }
-        None
+        let Some(a) = auth(*ws) else {
+            self.0.pop();
+            return None;
+        };
+        match approve(*verdict == Verdict::Password, input, attempts, &a) {
+            Approval::Approved => {
+                let cmd = Command::RunCommand {
+                    ws: *ws,
+                    req: *req,
+                    argv: std::mem::take(argv),
+                };
+                self.0.pop();
+                Some(cmd)
+            }
+            Approval::Retry => None,
+            Approval::Exhausted => {
+                self.0.pop();
+                None
+            }
+        }
     }
 
     /// Dismisses the top dialog. Only a host key prompt answers the runtime (a rejection), since
