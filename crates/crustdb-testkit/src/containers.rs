@@ -249,7 +249,7 @@ async fn start_my(tls: Option<&TestCerts>, network: Option<&str>, x509: bool) ->
     wait_exec(&c, &["sh", "-c", "mysqladmin --protocol=tcp -h127.0.0.1 ping --silent || mariadb-admin --protocol=tcp -h127.0.0.1 ping --silent"]).await;
     if x509 {
         // Over the local socket: root@localhost is not affected, only root@'%' (TCP).
-        wait_exec(&c, &["sh", "-c", "(mysql -uroot -pcrustdb || mariadb -uroot -pcrustdb) -e \"ALTER USER 'root'@'%' REQUIRE X509\""]).await;
+        wait_exec(&c, &["sh", "-c", "q=\"ALTER USER 'root'@'%' REQUIRE X509\"; mysql -uroot -pcrustdb -e \"$q\" || mariadb -uroot -pcrustdb -e \"$q\""]).await;
     }
     let (host, port) = endpoint(&c, 3306).await;
     MysqlContainer {
