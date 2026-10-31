@@ -127,21 +127,90 @@ fn run_verdict_goes_straight_to_run_command() {
 
 #[test]
 fn multi_and_subscribe_refusal_is_visible() {
+    for (line, reason) in [
+        ("SUBSCRIBE ch", "SUBSCRIBE is not supported in this client"),
+        ("MULTI", "MULTI is not supported in this client"),
+    ] {
+        // Arrange
+        let (mut s, ws) = online_redis();
+        let req = submit(&mut s, ws, line);
+
+        // Act
+        s.apply(Event::CommandAssessed {
+            req,
+            result: Err(reason.into()),
+        });
+
+        // Assert
+        assert!(s.dialogs.top().is_none());
+        assert!(s.take_commands().is_empty());
+        let error = pane(&mut s, ws).error.clone().unwrap();
+        assert!(error.contains(reason));
+    }
+}
+
+#[test]
+fn confirm_verdict_runs_after_approval_without_password() {
     // Arrange
     let (mut s, ws) = online_redis();
-    let req = submit(&mut s, ws, "SUBSCRIBE ch");
-
-    // Act
+    let req = submit(&mut s, ws, "DEL k");
     s.apply(Event::CommandAssessed {
         req,
-        result: Err("SUBSCRIBE is not supported in this client".into()),
+        result: Ok((Verdict::Confirm, "deletes a key".into())),
     });
 
+    // Act
+    let approved = s.confirm_safety(later());
+
     // Assert
+    assert!(matches!(approved, Some(Command::RunCommand { req: r, .. }) if r == req));
+    assert!(pane(&mut s, ws).is_running());
+}
+
+#[test]
+fn three_wrong_passwords_close_the_dialog_without_running() {
+    // Arrange
+    let (mut s, ws) = online_redis();
+    s.workspace_mut(ws).unwrap().session_password = Some(SecretString::from("s3cret"));
+    let req = submit(&mut s, ws, "FLUSHDB");
+    s.apply(Event::CommandAssessed {
+        req,
+        result: Ok((Verdict::Password, "wipe".into())),
+    });
+
+    // Act
+    let mut sent = vec![];
+    for _ in 0..3 {
+        if let Some(Dialog::StoreSafety { input, .. }) = s.dialogs.top_mut() {
+            *input = crate::state::dialogs::PasswordInput::new("wrong");
+        }
+        sent.push(s.confirm_safety(later()));
+    }
+
+    // Assert
+    assert!(sent.iter().all(Option::is_none));
     assert!(s.dialogs.top().is_none());
+    assert!(!pane(&mut s, ws).is_running());
+}
+
+#[test]
+fn run_is_refused_while_a_safety_dialog_is_open() {
+    // Arrange
+    let (mut s, ws) = online_redis();
+    let req = submit(&mut s, ws, "FLUSHDB");
+    s.apply(Event::CommandAssessed {
+        req,
+        result: Ok((Verdict::Password, "wipe".into())),
+    });
+    pane(&mut s, ws).text = "PING".into();
+
+    // Act
+    let second = s.run_command(ws);
+
+    // Assert
+    assert!(second.is_none());
     assert!(s.take_commands().is_empty());
-    let error = pane(&mut s, ws).error.clone().unwrap();
-    assert!(error.contains("SUBSCRIBE is not supported"));
+    assert!(matches!(s.dialogs.top(), Some(Dialog::StoreSafety { req: r, .. }) if *r == req));
 }
 
 #[test]

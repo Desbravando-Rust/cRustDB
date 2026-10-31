@@ -161,6 +161,13 @@ impl DialogStack {
         });
     }
 
+    /// A key-value command of `ws` is waiting for approval.
+    pub fn has_store_safety(&self, ws: WorkspaceId) -> bool {
+        self.0
+            .iter()
+            .any(|d| matches!(d, Dialog::StoreSafety { ws: w, .. } if *w == ws))
+    }
+
     pub fn top(&self) -> Option<&Dialog> {
         self.0.last()
     }

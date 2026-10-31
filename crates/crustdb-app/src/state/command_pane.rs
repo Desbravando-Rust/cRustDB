@@ -142,6 +142,9 @@ impl CommandPane {
 impl AppState {
     /// Entry point for `Intent::RunCommand` of a key-value workspace.
     pub fn run_command(&mut self, ws: WorkspaceId) -> Option<Command> {
+        if self.dialogs.has_store_safety(ws) {
+            return None;
+        }
         let req = self.internal_req();
         let w = self.workspace_mut(ws)?;
         if !w.capabilities().command_editor {
