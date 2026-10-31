@@ -35,6 +35,8 @@ pub(crate) struct StoreActor {
     read_limit: usize,
     /// `None` while idle after a cancel; the next operation reconnects.
     session: Option<Session>,
+    /// Opened on the first command; cancelling a command drops only this one (D8).
+    editor: Option<Session>,
     /// Kept so the SSH tunnel outlives the sessions that use it.
     tunnel: Option<Tunnel>,
     decision: Option<oneshot::Sender<bool>>,
@@ -60,6 +62,7 @@ impl StoreActor {
             target: None,
             read_limit: ROWS_BATCH,
             session: None,
+            editor: None,
             tunnel: None,
             decision: None,
             queue: VecDeque::new(),
@@ -80,7 +83,10 @@ impl StoreActor {
             };
             self.handle(m, &mut rx).await;
         }
-        if let Some(s) = self.session.take() {
+        for s in [self.session.take(), self.editor.take()]
+            .into_iter()
+            .flatten()
+        {
             s.close().await;
         }
     }
@@ -90,7 +96,8 @@ impl StoreActor {
             WsMsg::Cmd(
                 Command::ListNamespaces { req, .. }
                 | Command::ScanKeys { req, .. }
-                | Command::ReadEntry { req, .. },
+                | Command::ReadEntry { req, .. }
+                | Command::RunCommand { req, .. },
             ) => Some(*req),
             _ => None,
         };
@@ -101,7 +108,7 @@ impl StoreActor {
             }) => self.connect(config, secrets, rx).await,
             WsMsg::Cmd(Command::ListNamespaces { req, .. }) => {
                 let result = self
-                    .with_session(rx, |mut s| async move {
+                    .with_session(rx, SessionPurpose::Data, |mut s| async move {
                         let r = s.namespaces().await;
                         (s, r)
                     })
@@ -120,7 +127,7 @@ impl StoreActor {
                     count: ROWS_BATCH as u32,
                 };
                 let result = self
-                    .with_session(rx, |mut s| async move {
+                    .with_session(rx, SessionPurpose::Data, |mut s| async move {
                         let r = s.scan(&scan).await;
                         (s, r)
                     })
@@ -130,6 +137,19 @@ impl StoreActor {
             WsMsg::Cmd(Command::ReadEntry { req, key, .. }) => {
                 let result = self.read(rx, key).await;
                 self.out.emit(Event::EntryRead { req, result });
+            }
+            WsMsg::Cmd(Command::AssessCommand { req, argv, .. }) => {
+                let result = self.driver.assess(&argv).map_err(|refused| refused.reason);
+                self.out.emit(Event::CommandAssessed { req, result });
+            }
+            WsMsg::Cmd(Command::RunCommand { req, argv, .. }) => {
+                let result = self
+                    .with_session(rx, SessionPurpose::Editor, |mut s| async move {
+                        let r = s.run(&argv).await;
+                        (s, r)
+                    })
+                    .await;
+                self.out.emit(Event::CommandReply { req, result });
             }
             WsMsg::Cmd(Command::LoadChildren { req, .. }) => {
                 self.out.emit(Event::Notice {
@@ -163,6 +183,7 @@ impl StoreActor {
 
     async fn connect(&mut self, config: ConnectionConfig, secrets: ResolvedSecrets, rx: &mut Rx) {
         self.session = None;
+        self.editor = None;
         self.tunnel = None;
         self.target = None;
         self.read_limit = config.page_size as usize;
@@ -194,7 +215,7 @@ impl StoreActor {
 
     async fn read(&mut self, rx: &mut Rx, key: EntryKey) -> Result<EntryView, String> {
         let limit = self.read_limit;
-        self.with_session(rx, |mut s| async move {
+        self.with_session(rx, SessionPurpose::Data, |mut s| async move {
             let r = s.read(&key, limit).await;
             (s, r)
         })
@@ -206,23 +227,28 @@ impl StoreActor {
     /// with a connection-level error is not put back.
     // ponytail: operations are serial per workspace; a read waits behind an in-flight scan.
     // A second session would lift this.
-    async fn with_session<T, F, Fut>(&mut self, rx: &mut Rx, op: F) -> Result<T, String>
+    async fn with_session<T, F, Fut>(
+        &mut self,
+        rx: &mut Rx,
+        purpose: SessionPurpose,
+        op: F,
+    ) -> Result<T, String>
     where
         F: FnOnce(Session) -> Fut,
         Fut: Future<Output = (Session, Result<T, DriverError>)>,
     {
-        let session = match self.session.take() {
+        let session = match self.slot(purpose).take() {
             Some(s) => s,
-            None => self.reopen(rx).await?,
+            None => self.reopen(rx, purpose).await?,
         };
         match self.race(rx, op(session)).await {
             Some((s, Ok(v))) => {
-                self.session = Some(s);
+                *self.slot(purpose) = Some(s);
                 Ok(v)
             }
             Some((s, Err(e))) => {
                 if !matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
-                    self.session = Some(s);
+                    *self.slot(purpose) = Some(s);
                 }
                 Err(e.message)
             }
@@ -230,7 +256,15 @@ impl StoreActor {
         }
     }
 
-    async fn reopen(&mut self, rx: &mut Rx) -> Result<Session, String> {
+    /// `Editor` has its own session; everything else shares the data one.
+    fn slot(&mut self, purpose: SessionPurpose) -> &mut Option<Session> {
+        match purpose {
+            SessionPurpose::Editor => &mut self.editor,
+            _ => &mut self.session,
+        }
+    }
+
+    async fn reopen(&mut self, rx: &mut Rx, purpose: SessionPurpose) -> Result<Session, String> {
         let target = self
             .target
             .clone()
@@ -238,7 +272,7 @@ impl StoreActor {
         let driver = self.driver.clone();
         let connecting = async move {
             driver
-                .connect(&target, SessionPurpose::Data)
+                .connect(&target, purpose)
                 .await
                 .map_err(|e| e.message)
         };
@@ -279,7 +313,8 @@ impl StoreActor {
             WsMsg::Cmd(
                 Command::ListNamespaces { req: r, .. }
                 | Command::ScanKeys { req: r, .. }
-                | Command::ReadEntry { req: r, .. },
+                | Command::ReadEntry { req: r, .. }
+                | Command::RunCommand { req: r, .. },
             ) => *r == req,
             _ => false,
         };
@@ -301,6 +336,12 @@ impl StoreActor {
                 req,
                 result: Err("cancelled".into()),
             }),
+            Some(WsMsg::Cmd(Command::RunCommand { req, .. })) => {
+                self.out.emit(Event::CommandReply {
+                    req,
+                    result: Err("cancelled".into()),
+                })
+            }
             _ => {}
         }
     }

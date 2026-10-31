@@ -11,10 +11,10 @@ use crustdb_core::model::{
     ServerVersion,
 };
 use crustdb_core::query::TableQuery;
-use crustdb_core::safety::Evaluation;
+use crustdb_core::safety::{Evaluation, Verdict};
 pub use crustdb_core::sql::TxOp;
 use crustdb_core::store::keyspace::EntryKey;
-use crustdb_core::store::{EntryView, ScanPage};
+use crustdb_core::store::{EntryView, Reply, ScanPage};
 use secrecy::SecretString;
 
 use crate::net::ssh::SshSecrets;
@@ -109,6 +109,19 @@ pub enum Command {
         ws: WorkspaceId,
         req: RequestId,
         key: EntryKey,
+    },
+    /// Asks the driver how dangerous `argv` is, answered by `Event::CommandAssessed`.
+    AssessCommand {
+        ws: WorkspaceId,
+        req: RequestId,
+        argv: Vec<Vec<u8>>,
+    },
+    /// Runs `argv` on the editor session (one argument per element, never joined), answered
+    /// by `Event::CommandReply`. Only sent after the assessment was approved.
+    RunCommand {
+        ws: WorkspaceId,
+        req: RequestId,
+        argv: Vec<Vec<u8>>,
     },
     /// Drops the store session while request `req` is in flight, or discards it while still
     /// queued; either way it answers "cancelled". Any other request is left alone.
@@ -230,6 +243,15 @@ pub enum Event {
     EntryRead {
         req: RequestId,
         result: Result<EntryView, String>,
+    },
+    /// `Err` is a refusal: the command must not run.
+    CommandAssessed {
+        req: RequestId,
+        result: Result<(Verdict, String), String>,
+    },
+    CommandReply {
+        req: RequestId,
+        result: Result<Reply, String>,
     },
     Page {
         req: RequestId,
