@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use crustdb_core::model::{ObjectKind, ObjectRef, TypeCategory};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::runtime::TabId;
@@ -164,4 +164,86 @@ fn data_view_notice_has_no_duplicate_retry() {
     // Assert
     assert!(h.query_by_label("Retry").is_none());
     assert!(h.query_by_label("Refresh").is_some());
+}
+
+fn disabled(h: &Harness<'_>, label: &str) -> bool {
+    h.get_by_label(label).accesskit_node().is_disabled()
+}
+
+#[test]
+fn add_and_delete_disabled_for_view_or_no_pk() {
+    // Arrange
+    let mut view = tab();
+    view.object.kind = ObjectKind::View;
+    let mut no_pk = tab();
+    no_pk.columns[0].is_primary_key = false;
+    for mut t in [view, no_pk] {
+        t.selected_row = Some(0);
+        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(disabled(&h, "Add row"));
+        assert!(disabled(&h, "Delete rows"));
+    }
+}
+
+#[test]
+fn add_row_button_emits_intent() {
+    // Arrange
+    let mut t = tab();
+    let mut out = vec![];
+    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    h.run();
+
+    // Act
+    h.get_by_label("Add row").click();
+    h.run();
+    drop(h);
+
+    // Assert
+    assert!(out.iter().any(|i| matches!(i, Intent::AddRow(TabId(1)))));
+}
+
+#[test]
+fn delete_button_emits_intent_with_selection() {
+    // Arrange
+    let mut t = tab();
+    let mut out = vec![];
+    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    h.run();
+    assert!(disabled(&h, "Delete rows"));
+    drop(h);
+    t.selected_row = Some(0);
+    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    h.run();
+
+    // Act
+    h.get_by_label("Delete rows").click();
+    h.run();
+    drop(h);
+
+    // Assert
+    assert!(
+        out.iter()
+            .any(|i| matches!(i, Intent::DeleteRows(TabId(1))))
+    );
+}
+
+#[test]
+fn discard_shows_for_empty_insert_row() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    t.add_row();
+    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("Discard").is_some());
+    assert!(disabled(&h, "Add row"));
 }

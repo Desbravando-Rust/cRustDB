@@ -1,5 +1,5 @@
 use crustdb_core::format::display_cell;
-use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, Row};
+use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, ObjectKind, Row};
 use crustdb_core::query::Sort;
 use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
@@ -169,6 +169,43 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
     }
 }
 
+/// Why "Add row"/"Delete rows" cannot act on the tab right now.
+fn write_block(tab: &TableTab) -> Option<&'static str> {
+    if tab.object.kind != ObjectKind::Table {
+        Some("Views are read-only")
+    } else if !tab.columns.iter().any(|c| c.is_primary_key) {
+        Some("Table has no primary key")
+    } else if tab.has_pending() {
+        Some("Save or discard pending changes")
+    } else if tab.is_loading() || tab.edit_req.is_some() {
+        Some("Wait for the current operation")
+    } else {
+        None
+    }
+}
+
+fn row_buttons(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
+    let block = write_block(tab);
+    let delete_block = block.or(tab
+        .selected_row
+        .is_none()
+        .then_some("Select rows to delete"));
+    let mut button = |label: &str, block: Option<&str>| {
+        let r = ui.add_enabled(block.is_none(), egui::Button::new(label));
+        match block {
+            Some(why) => r.on_disabled_hover_text(why),
+            None => r,
+        }
+        .clicked()
+    };
+    if button("Add row", block) {
+        out.push(Intent::AddRow(tab.id));
+    }
+    if button("Delete rows", delete_block) {
+        out.push(Intent::DeleteRows(tab.id));
+    }
+}
+
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     let mut out = vec![];
     let id = tab.id;
@@ -198,6 +235,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
+            row_buttons(ui, tab, &mut out);
             if !tab.pending.is_empty() {
                 let save = egui::Button::new("Save");
                 if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
@@ -206,6 +244,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                     tab.commit_edit();
                     out.push(Intent::SavePending(id));
                 }
+            }
+            if tab.has_pending() {
                 if ui.button("Discard").clicked() {
                     out.push(Intent::DiscardPending(id));
                 }
