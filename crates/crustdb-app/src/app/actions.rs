@@ -21,6 +21,24 @@ impl CrustApp {
         }
     }
 
+    pub(super) fn handle_rows(&mut self, intent: Intent) {
+        match intent {
+            Intent::AddRow(tab) => {
+                if let Some(t) = self.state.table_mut(tab) {
+                    t.add_row();
+                }
+            }
+            Intent::DeleteRows(tab) => self.state.request_delete_rows(tab),
+            Intent::ConfirmDeleteRows => {
+                if let Some(req) = self.runtime.as_ref().map(|rt| rt.next_request_id()) {
+                    let cmd = self.state.confirm_delete_rows(req);
+                    self.send(cmd);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn handle_keyspace(&mut self, intent: Intent) {
         let Some(req) = self.runtime.as_ref().map(|rt| rt.next_request_id()) else {
             return;

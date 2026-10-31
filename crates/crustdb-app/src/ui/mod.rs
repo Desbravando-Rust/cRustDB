@@ -74,6 +74,9 @@ pub enum Intent {
     /// Sends the staged row changes as one `UPDATE`.
     SavePending(TabId),
     DiscardPending(TabId),
+    AddRow(TabId),
+    DeleteRows(TabId),
+    ConfirmDeleteRows,
     SetNull {
         tab: TabId,
         row: usize,

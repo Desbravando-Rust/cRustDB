@@ -129,16 +129,19 @@ impl TableTab {
         self.select_anchor = None;
     }
 
+    /// Selected rows as an inclusive `(first, last)` range, cursor to anchor.
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        let cursor = self.selected_row?;
+        let anchor = self.select_anchor.unwrap_or(cursor);
+        Some((anchor.min(cursor), anchor.max(cursor)))
+    }
+
     /// One `DELETE` for the selected rows (cursor to anchor); refused while changes are pending.
     pub fn delete_selected(&mut self, req: RequestId) -> Option<Command> {
         if self.pending_blocks() || self.loading.is_some() || self.edit_req.is_some() {
             return None;
         }
-        let cursor = self.selected_row?;
-        let (lo, hi) = match self.select_anchor {
-            Some(a) => (a.min(cursor), a.max(cursor)),
-            None => (cursor, cursor),
-        };
+        let (lo, hi) = self.selection()?;
         let rows: Vec<&[Cell]> = self.rows.get(lo..=hi)?.iter().map(|r| &r[..]).collect();
         let d = crate::export_fmt::dialect(self.driver);
         match build_delete(d, &self.object, &self.columns, &rows) {
@@ -157,7 +160,7 @@ impl TableTab {
         }
     }
 
-    fn writable(&mut self) -> bool {
+    pub(crate) fn writable(&mut self) -> bool {
         let ok =
             self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
         if !ok {

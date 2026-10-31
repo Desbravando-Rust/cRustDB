@@ -81,6 +81,11 @@ pub enum Dialog {
         id: ConnectionId,
         name: String,
     },
+    /// Delete the selected rows of a table tab (ADR 0010).
+    DeleteRows {
+        tab: TabId,
+        count: usize,
+    },
     /// Disconnect with an open transaction and/or pending row edits.
     Disconnect {
         ws: WorkspaceId,
@@ -156,7 +161,9 @@ impl DialogStack {
             | Dialog::StoreSafety { ws: w, .. }
             | Dialog::HostKey { ws: w, .. }
             | Dialog::Disconnect { ws: w, .. } => *w != ws,
-            Dialog::CloseWithTx { tab } | Dialog::DirtyFile { tab } => !tabs.contains(tab),
+            Dialog::CloseWithTx { tab }
+            | Dialog::DirtyFile { tab }
+            | Dialog::DeleteRows { tab, .. } => !tabs.contains(tab),
             Dialog::DeleteConnection { .. } => true,
         });
     }

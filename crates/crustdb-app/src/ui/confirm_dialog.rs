@@ -75,6 +75,7 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
         Dialog::DirtyFile { .. } => "Unsaved changes",
         Dialog::HostKey { .. } => "Unknown SSH host key",
         Dialog::DeleteConnection { .. } => "Delete connection",
+        Dialog::DeleteRows { .. } => "Delete rows",
         Dialog::Disconnect { .. } => "Disconnect",
     };
     egui::Window::new(title)
@@ -188,6 +189,17 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
                     }
                     if ui.button("Rollback and disconnect").clicked() {
                         out.push(Intent::DisconnectResolve(TxOp::Rollback));
+                    }
+                    if ui.button("Cancel").clicked() {
+                        out.push(Intent::CancelDialog);
+                    }
+                });
+            }
+            Dialog::DeleteRows { count, .. } => {
+                ui.label(format!("Delete {count} row(s)? This cannot be undone."));
+                ui.horizontal(|ui| {
+                    if ui.button("Delete").clicked() {
+                        out.push(Intent::ConfirmDeleteRows);
                     }
                     if ui.button("Cancel").clicked() {
                         out.push(Intent::CancelDialog);

@@ -20,6 +20,7 @@ mod tree_home;
 pub mod workspace;
 mod workspace_close;
 mod workspace_fk;
+mod workspace_rows;
 
 pub use dialogs::{Dialog, DialogStack};
 pub use workspace::{AppState, Status, Tab, WorkspaceState};
