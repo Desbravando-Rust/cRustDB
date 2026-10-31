@@ -367,3 +367,49 @@ fn keyspace_100k_keys_frame_under_16ms() {
     let (mean, _) = summary("keyspace 100k keys", &frames);
     assert!(mean <= 16.0, "{mean:.2} ms");
 }
+
+/// No budget met yet (16 ms target, ~82 ms measured): `rebuild` regroups every loaded key.
+/// Records the number; see the YAGNI issue about an incremental rebuild.
+#[test]
+#[ignore = "perf"]
+fn keyspace_apply_batch_with_100k_keys_time() {
+    use crustdb_app::runtime::{Event, RequestId};
+    use crustdb_app::state::keyspace::Keyspace;
+    use crustdb_core::store::keyspace::EntryKey;
+    use crustdb_core::store::{KeyEntry, ScanPage, ValueKind};
+
+    // Arrange
+    // Budgets assume a --release build (see module docs).
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let batch = |range: std::ops::Range<usize>, next: Option<&str>| ScanPage {
+        entries: range
+            .map(|i| KeyEntry {
+                key: EntryKey(format!("user:{}:k{i:07}", i % 1000).into_bytes()),
+                kind: ValueKind::Text,
+                ttl: None,
+            })
+            .collect(),
+        next: next.map(String::from),
+    };
+    let mut ks = Keyspace::new(WorkspaceId(1));
+    ks.start(RequestId(1), RequestId(2));
+    ks.apply(&Event::KeysScanned {
+        req: RequestId(2),
+        result: Ok(batch(0..100_000, Some("1"))),
+    });
+    ks.load_more(RequestId(3));
+    let ev = Event::KeysScanned {
+        req: RequestId(3),
+        result: Ok(batch(100_000..100_500, None)),
+    };
+
+    // Act
+    let t = Instant::now();
+    ks.apply(&ev);
+    let took = ms(t.elapsed());
+
+    // Assert
+    println!("keyspace apply batch @100k keys: {took:.2} ms");
+}
