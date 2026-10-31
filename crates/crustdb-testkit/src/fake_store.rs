@@ -24,6 +24,10 @@ pub struct FakeStoreLog {
     pub alive: AtomicUsize,
     /// `scan` never answers (until the session is dropped).
     pub hang_scan: AtomicBool,
+    /// `run` never answers (until the session is dropped).
+    pub hang_run: AtomicBool,
+    /// Purpose of every connect, in order.
+    pub purposes: Mutex<Vec<SessionPurpose>>,
 }
 
 impl FakeStoreLog {
@@ -35,6 +39,10 @@ impl FakeStoreLog {
 
     pub fn ops(&self) -> Vec<String> {
         self.ops.lock().map(|o| o.clone()).unwrap_or_default()
+    }
+
+    pub fn purposes(&self) -> Vec<SessionPurpose> {
+        self.purposes.lock().map(|p| p.clone()).unwrap_or_default()
     }
 }
 
@@ -67,15 +75,26 @@ impl StoreDriver for FakeStore {
         self.kind
     }
 
-    fn assess(&self, _argv: &[Vec<u8>]) -> Result<(Verdict, String), Refused> {
-        Ok((Verdict::Run, String::new()))
+    /// FLUSHDB/FLUSHALL need the password, MULTI/SUBSCRIBE are refused, the rest runs.
+    fn assess(&self, argv: &[Vec<u8>]) -> Result<(Verdict, String), Refused> {
+        let name = argv.first().map(|a| a.to_ascii_uppercase());
+        match name.as_deref() {
+            Some(b"FLUSHDB" | b"FLUSHALL") => Ok((Verdict::Password, "can wipe data".into())),
+            Some(b"MULTI" | b"SUBSCRIBE") => Err(Refused {
+                reason: "not supported in this client".into(),
+            }),
+            _ => Ok((Verdict::Run, String::new())),
+        }
     }
 
     async fn connect(
         &self,
         _t: &ConnectTarget,
-        _p: SessionPurpose,
+        p: SessionPurpose,
     ) -> Result<Box<dyn StoreSession>, DriverError> {
+        if let Ok(mut v) = self.log.purposes.lock() {
+            v.push(p);
+        }
         self.log.connects.fetch_add(1, Ordering::SeqCst);
         self.log.alive.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(FakeStoreSession {
@@ -151,8 +170,13 @@ impl StoreSession for FakeStoreSession {
             .ok_or_else(|| query_error("no such key"))
     }
 
-    async fn run(&mut self, _argv: &[Vec<u8>]) -> Result<Reply, DriverError> {
-        Ok(Reply::Nil)
+    /// Logs `run:<argc>` and answers the argument count.
+    async fn run(&mut self, argv: &[Vec<u8>]) -> Result<Reply, DriverError> {
+        self.store.log.op(format!("run:{}", argv.len()));
+        if self.store.log.hang_run.load(Ordering::SeqCst) {
+            std::future::pending::<()>().await;
+        }
+        Ok(Reply::Int(argv.len() as i64))
     }
 
     async fn close(self: Box<Self>) {}

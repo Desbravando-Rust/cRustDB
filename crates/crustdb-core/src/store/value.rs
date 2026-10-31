@@ -1,3 +1,4 @@
+use super::Reply;
 use crate::model::{Cell, ColumnMeta, Row, TypeCategory};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +16,57 @@ pub enum ValueBody {
     Set(Vec<Vec<u8>>),
     SortedSet(Vec<(Vec<u8>, f64)>),
     Stream(Vec<StreamEntry>),
+}
+
+impl Reply {
+    /// Grid view of a command reply: arrays one row per element, maps `key`/`value`, scalars one row.
+    pub fn to_rows(&self) -> (Vec<ColumnMeta>, Vec<Row>) {
+        let value = || col("value", TypeCategory::Text);
+        match self {
+            Reply::Array(items) => (
+                vec![value()],
+                items.iter().map(|r| Row::from([reply_cell(r)])).collect(),
+            ),
+            Reply::Map(pairs) => (
+                vec![col("key", TypeCategory::Text), value()],
+                pairs
+                    .iter()
+                    .map(|(k, v)| Row::from([reply_cell(k), reply_cell(v)]))
+                    .collect(),
+            ),
+            one => (vec![value()], vec![Row::from([reply_cell(one)])]),
+        }
+    }
+}
+
+fn reply_cell(r: &Reply) -> Cell {
+    match r {
+        Reply::Nil => Cell::Null,
+        Reply::Bulk(b) => Cell::text_capped(&String::from_utf8_lossy(b)),
+        other => text(reply_text(other)),
+    }
+}
+
+fn reply_text(r: &Reply) -> String {
+    match r {
+        Reply::Nil => "(nil)".into(),
+        Reply::Int(n) => n.to_string(),
+        Reply::Double(d) => d.to_string(),
+        Reply::Bool(b) => b.to_string(),
+        Reply::Bulk(b) => String::from_utf8_lossy(b).into_owned(),
+        Reply::Status(s) => s.clone(),
+        Reply::Array(a) => format!(
+            "[{}]",
+            a.iter().map(reply_text).collect::<Vec<_>>().join(", ")
+        ),
+        Reply::Map(m) => format!(
+            "{{{}}}",
+            m.iter()
+                .map(|(k, v)| format!("{}: {}", reply_text(k), reply_text(v)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
 }
 
 fn col(name: &str, category: TypeCategory) -> ColumnMeta {
@@ -192,5 +244,40 @@ mod tests {
         assert_eq!(cols[1].type_name, "text");
         assert_eq!(rows[1][0], t("1"));
         assert_eq!(rows[1][1], t("y"));
+    }
+
+    #[test]
+    fn array_reply_maps_to_one_row_per_element() {
+        // Arrange
+        let reply = Reply::Array(vec![Reply::Bulk(b"a".to_vec()), Reply::Int(2), Reply::Nil]);
+
+        // Act
+        let (cols, rows) = reply.to_rows();
+
+        // Assert
+        assert_eq!(names(&cols), ["value"]);
+        assert_eq!(
+            rows,
+            vec![
+                Row::from([t("a")]),
+                Row::from([t("2")]),
+                Row::from([Cell::Null])
+            ]
+        );
+    }
+
+    #[test]
+    fn map_and_scalar_replies_map_to_rows() {
+        // Arrange
+        let map = Reply::Map(vec![(Reply::Bulk(b"k".to_vec()), Reply::Int(1))]);
+
+        // Act
+        let (cols, rows) = map.to_rows();
+        let (_, one) = Reply::Status("OK".into()).to_rows();
+
+        // Assert
+        assert_eq!(names(&cols), ["key", "value"]);
+        assert_eq!(rows, vec![Row::from([t("k"), t("1")])]);
+        assert_eq!(one, vec![Row::from([t("OK")])]);
     }
 }
