@@ -50,6 +50,7 @@ async fn walk(
     o: &ObjectRef,
     sorts: &[Sort],
     keyset: bool,
+    expected: bool,
 ) -> Vec<String> {
     let columns: Vec<_> = DRIVER
         .introspector()
@@ -82,16 +83,18 @@ async fn walk(
         }
         q.offset += SIZE;
         if keyset {
-            // ENUM orders yield None here: that page then uses OFFSET.
-            q.after = after(&q, rows.last().unwrap());
+            let next = after(&q, rows.last().unwrap());
+            assert_eq!(next.is_some(), expected, "cursor for {sorts:?}");
+            q.after = next;
         }
     }
 }
 
-async fn check(s: &mut Box<dyn Session>, sorts: Vec<Sort>) {
+/// `keyset_expected`: whether `after()` must yield a cursor (false = OFFSET fallback).
+async fn check(s: &mut Box<dyn Session>, sorts: Vec<Sort>, keyset_expected: bool) {
     let o = obj();
-    let by_offset = walk(s, &o, &sorts, false).await;
-    let by_keyset = walk(s, &o, &sorts, true).await;
+    let by_offset = walk(s, &o, &sorts, false, false).await;
+    let by_keyset = walk(s, &o, &sorts, true, keyset_expected).await;
     assert_eq!(by_offset.len(), 50);
     assert_eq!(by_keyset, by_offset);
 }
@@ -130,18 +133,20 @@ async fn keyset_pages_match_offset_pages() {
     }
 
     // Act & Assert
-    check(&mut s, vec![sort("id", false), sort("tag", false)]).await;
-    check(&mut s, vec![sort("id", true), sort("tag", false)]).await;
-    check(&mut s, vec![sort("id", true), sort("tag", true)]).await;
+    check(&mut s, vec![sort("id", false), sort("tag", false)], true).await;
+    check(&mut s, vec![sort("id", true), sort("tag", false)], true).await;
+    check(&mut s, vec![sort("id", true), sort("tag", true)], true).await;
     // ENUM sorts by declaration index: must fall back to OFFSET.
     check(
         &mut s,
         vec![sort("e", false), sort("id", false), sort("tag", false)],
+        false,
     )
     .await;
     check(
         &mut s,
         vec![sort("v", false), sort("id", false), sort("tag", false)],
+        true,
     )
     .await;
 }
