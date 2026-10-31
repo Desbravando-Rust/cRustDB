@@ -24,6 +24,10 @@ impl KeyScan {
         }
     }
 
+    pub fn pattern(&self) -> Option<&str> {
+        self.pattern.as_deref()
+    }
+
     pub fn is_pending(&self, req: RequestId) -> bool {
         self.pending == Some(req)
     }

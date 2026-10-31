@@ -129,7 +129,10 @@ impl Keyspace {
             ws: self.ws,
             ns: ns.to_owned(),
         };
-        let scan = self.set_filter(String::new(), req);
+        self.scan = KeyScan::new(self.scan.pattern().map(str::to_owned));
+        self.scan_error = None;
+        self.rebuild();
+        let scan = self.scan.next(self.ws, req);
         std::iter::once(switch).chain(scan).collect()
     }
 
@@ -270,9 +273,7 @@ impl AppState {
             return vec![];
         }
         match self.workspace_mut(ws).and_then(|w| w.keyspace.as_mut()) {
-            Some(ks) if ks.current != ns && !ks.command.is_running() => {
-                ks.select_namespace(ns, req)
-            }
+            Some(ks) if ks.current != ns && !ks.command.is_busy() => ks.select_namespace(ns, req),
             _ => vec![],
         }
     }
