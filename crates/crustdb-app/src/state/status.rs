@@ -179,9 +179,18 @@ impl StatusBoard {
 
     /// Execute goes to the active workspace's model (same caveat as `on_event`).
     pub fn on_command(&mut self, c: &Command, state: &AppState, now: Instant) {
+        if let Command::Disconnect { ws } = c {
+            self.forget(*ws);
+            return;
+        }
         if let Some(ws) = state.active {
             self.models.entry(ws).or_default().on_command(c, now);
         }
+    }
+
+    /// Drops a workspace's model so closed workspaces do not leak.
+    pub fn forget(&mut self, ws: WorkspaceId) {
+        self.models.remove(&ws);
     }
 
     /// Samples `/proc` at most once per `SAMPLE_EVERY`; returns whether it did.
@@ -296,5 +305,36 @@ mod tests {
         // Assert
         assert_eq!(q.first_row, Duration::from_millis(40));
         assert_eq!(q.total, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn disconnect_forgets_the_workspace_model() {
+        // Arrange
+        let (mut b, t0) = (StatusBoard::default(), Instant::now());
+        let ws = WorkspaceId(1);
+        b.models.insert(ws, StatusModel::default());
+
+        // Act
+        b.on_command(
+            &Command::Disconnect { ws },
+            &super::super::workspace::tests::state(&[]),
+            t0,
+        );
+
+        // Assert
+        assert!(!b.models.contains_key(&ws));
+    }
+
+    #[test]
+    fn forget_removes_model() {
+        // Arrange
+        let mut b = StatusBoard::default();
+        b.models.insert(WorkspaceId(1), StatusModel::default());
+
+        // Act
+        b.forget(WorkspaceId(1));
+
+        // Assert
+        assert!(b.models.is_empty());
     }
 }
