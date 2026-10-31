@@ -7,7 +7,8 @@ use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_testkit::fake_driver::FakeScript;
 
 use super::tests::{
-    H, TAB, connect, connects, fetch, harness, next, open_table, page, query_for_export, rows,
+    H, TAB, connect, connects, fetch, harness, next, open_table, page, query, query_for_export,
+    rows,
 };
 use crate::runtime::{Command, Event, RequestId};
 
@@ -148,4 +149,23 @@ async fn query_error_keeps_writer() {
     failed_update(&mut h, 2).await;
     failed_update(&mut h, 3).await;
     assert_eq!(editors(&h), 1);
+}
+
+#[tokio::test]
+async fn fetch_page_sends_tab_limit_verbatim() {
+    // Arrange
+    let mut h = harness(FakeScript {
+        rows: rows(3),
+        ..FakeScript::default()
+    });
+    connect(&mut h, None).await;
+    open_table(&mut h).await;
+
+    // Act
+    fetch(&mut h, 1, query(3, vec![]));
+    page(&mut h).await;
+
+    // Assert
+    let sql = super::editor::tests::starts(&h).pop().unwrap();
+    assert!(sql.contains("LIMIT 3 "), "{sql}");
 }

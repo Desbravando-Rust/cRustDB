@@ -92,7 +92,7 @@ pub(super) fn query_for_export() -> TableQuery {
     query(300, vec![])
 }
 
-fn query(limit: u64, filters: Vec<Filter>) -> TableQuery {
+pub(super) fn query(limit: u64, filters: Vec<Filter>) -> TableQuery {
     TableQuery {
         object: object(),
         columns: vec![col("id")],
@@ -224,7 +224,7 @@ async fn pg_second_database_opens_second_metadata_session() {
 }
 
 #[tokio::test]
-async fn page_returns_has_more_only_when_limit_plus_one() {
+async fn page_has_more_when_rows_reach_limit_including_lookahead() {
     // Arrange
     let mut h = harness(FakeScript {
         rows: rows(3),
@@ -236,7 +236,7 @@ async fn page_returns_has_more_only_when_limit_plus_one() {
     // Act & Assert
     fetch(&mut h, 1, query(2, vec![]));
     assert_eq!(page(&mut h).await, (RequestId(1), 2, true, None));
-    fetch(&mut h, 2, query(3, vec![]));
+    fetch(&mut h, 2, query(4, vec![]));
     assert_eq!(page(&mut h).await, (RequestId(2), 3, false, None));
     assert!(connects(&h).iter().any(|(p, _)| *p == SessionPurpose::Data));
 }
