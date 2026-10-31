@@ -21,7 +21,7 @@ fn secret_edit(ui: &mut egui::Ui, v: &mut SecretString) {
     }
 }
 
-fn path_edit(ui: &mut egui::Ui, p: &mut Option<PathBuf>) {
+pub(super) fn path_edit(ui: &mut egui::Ui, p: &mut Option<PathBuf>) {
     let mut s = p
         .as_ref()
         .map(|p| p.to_string_lossy().into_owned())
@@ -118,6 +118,7 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     ui.end_row();
     error_for(ui, f, "ca_path");
     ui.end_row();
+    super::connection_form_mtls::fields(ui, f);
 }
 
 pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<Intent> {

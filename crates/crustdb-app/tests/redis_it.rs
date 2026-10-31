@@ -32,6 +32,8 @@ async fn redis_connects_and_lists_namespaces() {
             tls: TlsConfig {
                 mode: TlsMode::Disable,
                 ca_path: None,
+                client_cert_path: None,
+                client_key_path: None,
             },
             ssh: None,
             page_size: 300,

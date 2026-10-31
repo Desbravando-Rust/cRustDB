@@ -25,6 +25,8 @@ async fn connect(db: &MysqlContainer) -> Box<dyn Session> {
         tls: TlsConfig {
             mode: TlsMode::Disable,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         },
         connect_timeout: Duration::from_secs(10),
     };

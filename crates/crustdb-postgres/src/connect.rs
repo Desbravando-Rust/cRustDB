@@ -13,6 +13,7 @@ use tokio_postgres::config::SslMode;
 use tokio_postgres::{Config, NoTls, error::SqlState};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
+use crate::client_auth::client_auth;
 use crate::session::PgSession;
 
 pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
@@ -119,7 +120,7 @@ fn tls_connector(t: &ConnectTarget) -> Result<Option<MakeRustlsConnect>, DriverE
         .build()
         .map_err(|e| err(ErrorKind::Tls, e.to_string()))
     };
-    let cfg = match t.tls.mode {
+    let wants_auth = match t.tls.mode {
         TlsMode::VerifyFull => builder.with_webpki_verifier(webpki()?),
         TlsMode::VerifyCa => builder
             .dangerous()
@@ -133,8 +134,26 @@ fn tls_connector(t: &ConnectTarget) -> Result<Option<MakeRustlsConnect>, DriverE
                 provider,
                 inner: None,
             })),
-    }
-    .with_no_client_auth();
+    };
+    let cfg = match client_auth(&t.tls)? {
+        Some((chain, key)) => wants_auth.with_client_auth_cert(chain, key).map_err(|e| {
+            let (c, k) = (&t.tls.client_cert_path, &t.tls.client_key_path);
+            let show = |p: &Option<std::path::PathBuf>| {
+                p.as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            };
+            err(
+                ErrorKind::Tls,
+                format!(
+                    "invalid client certificate {} / key {}: {e}",
+                    show(c),
+                    show(k)
+                ),
+            )
+        })?,
+        None => wants_auth.with_no_client_auth(),
+    };
     Ok(Some(MakeRustlsConnect::new(cfg)))
 }
 

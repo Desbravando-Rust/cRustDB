@@ -62,6 +62,8 @@ fn start() -> Started {
             tls: TlsConfig {
                 mode: TlsMode::Disable,
                 ca_path: None,
+                client_cert_path: None,
+                client_key_path: None,
             },
             ssh: None,
             page_size: 300,

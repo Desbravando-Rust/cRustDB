@@ -130,6 +130,8 @@ fn field_labels_show_help_on_hover() {
         // Act
         // Only the labelled combo matches "TLS mode" (no separate label node),
         // so hover the label cell by position instead of the node.
+        h.get_all_by_label(label).last().unwrap().scroll_to_me();
+        h.run();
         let r = h.get_all_by_label(label).last().unwrap().rect();
         h.hover_at(egui::pos2(12.0, r.center().y));
         h.run();

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use percent_encoding::percent_decode_str;
 use secrecy::SecretString;
 
@@ -30,6 +32,8 @@ pub struct ParsedUrl {
     pub password: Option<SecretString>,
     pub database: Option<String>,
     pub tls_mode: Option<TlsMode>,
+    pub client_cert_path: Option<PathBuf>,
+    pub client_key_path: Option<PathBuf>,
     pub warnings: Vec<UrlWarning>,
 }
 
@@ -84,6 +88,14 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         };
     }
 
+    let query_path = |names: [&str; 2]| {
+        url.query_pairs()
+            .find(|(k, v)| names.contains(&k.as_ref()) && !v.is_empty())
+            .map(|(_, v)| PathBuf::from(v.into_owned()))
+    };
+    let client_cert_path = query_path(["sslcert", "ssl-cert"]);
+    let client_key_path = query_path(["sslkey", "ssl-key"]);
+
     let mut parsed = ParsedUrl {
         driver,
         host,
@@ -92,6 +104,8 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
         password,
         database,
         tls_mode,
+        client_cert_path,
+        client_key_path,
         warnings,
     };
     if driver == DriverKind::Redis {
@@ -142,6 +156,8 @@ fn sqlite(url: &::url::Url) -> Result<ParsedUrl, UrlError> {
         password: None,
         database: Some(path.into_owned()).filter(|d| !d.is_empty()),
         tls_mode: None,
+        client_cert_path: None,
+        client_key_path: None,
         warnings: Vec::new(),
     })
 }
@@ -167,6 +183,47 @@ mod tests {
         assert_eq!(p.database.as_deref(), Some("db"));
         assert_eq!(p.tls_mode, Some(TlsMode::VerifyFull));
         assert!(p.warnings.is_empty());
+    }
+
+    #[test]
+    fn parses_postgres_sslcert_sslkey() {
+        // Act
+        let p = parse_connection_url("postgres://h/db?sslcert=/c/client.crt&sslkey=/c/client.key")
+            .unwrap();
+
+        // Assert
+        assert_eq!(p.client_cert_path, Some(PathBuf::from("/c/client.crt")));
+        assert_eq!(p.client_key_path, Some(PathBuf::from("/c/client.key")));
+    }
+
+    #[test]
+    fn parses_mysql_ssl_cert_ssl_key() {
+        // Act
+        let p = parse_connection_url("mysql://h/db?ssl-cert=/c/client.crt&ssl-key=/c/client.key")
+            .unwrap();
+
+        // Assert
+        assert_eq!(p.client_cert_path, Some(PathBuf::from("/c/client.crt")));
+        assert_eq!(p.client_key_path, Some(PathBuf::from("/c/client.key")));
+    }
+
+    #[test]
+    fn empty_cert_and_key_are_ignored() {
+        // Act
+        let p = parse_connection_url("postgres://h/db?sslcert=&sslkey=").unwrap();
+
+        // Assert
+        assert_eq!((p.client_cert_path, p.client_key_path), (None, None));
+    }
+
+    #[test]
+    fn percent_decoded_cert_path() {
+        // Act
+        let p = parse_connection_url("postgres://h/db?sslcert=/my%20certs/c.crt").unwrap();
+
+        // Assert
+        assert_eq!(p.client_cert_path, Some(PathBuf::from("/my certs/c.crt")));
+        assert_eq!(p.client_key_path, None);
     }
 
     #[test]

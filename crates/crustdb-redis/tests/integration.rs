@@ -25,6 +25,8 @@ fn target(c: &RedisContainer, user: &str, password: &str, db: Option<&str>) -> C
         tls: TlsConfig {
             mode: TlsMode::Disable,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         },
         connect_timeout: Duration::from_secs(10),
     }
@@ -364,6 +366,8 @@ async fn tls_verify_full_uses_host_over_connect_addr() {
     t.tls = TlsConfig {
         mode: TlsMode::VerifyFull,
         ca_path: Some(certs.dir.path().join("ca.pem")),
+        client_cert_path: None,
+        client_key_path: None,
     };
 
     // Act: dials the tunnel address but validates the certificate against `host`.

@@ -141,6 +141,8 @@ mod tests {
         TlsConfig {
             mode,
             ca_path: None,
+            client_cert_path: None,
+            client_key_path: None,
         }
     }
 
@@ -162,6 +164,8 @@ mod tests {
         let with_ca = |mode| TlsConfig {
             mode,
             ca_path: Some(empty.clone()),
+            client_cert_path: None,
+            client_key_path: None,
         };
 
         // Act
