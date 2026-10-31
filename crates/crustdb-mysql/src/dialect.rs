@@ -116,6 +116,52 @@ mod tests {
         assert_eq!(MysqlDialect.qualified_name(&o("")), "`t`");
     }
 
+    #[test]
+    fn mysql_keyset_mixed_order_composite_key() {
+        // Arrange
+        let mut id = col("id", "int", TypeCategory::Integer);
+        id.is_primary_key = true;
+        let mut name = col("name", "varchar(10)", TypeCategory::Text);
+        name.is_primary_key = true;
+        let q = crustdb_core::query::TableQuery {
+            object: ObjectRef {
+                database: "db".into(),
+                schema: None,
+                name: "t".into(),
+                kind: ObjectKind::Table,
+            },
+            columns: vec![id, name],
+            filters: vec![],
+            sorts: vec![
+                crustdb_core::query::Sort {
+                    column: "name".into(),
+                    descending: true,
+                },
+                crustdb_core::query::Sort {
+                    column: "id".into(),
+                    descending: false,
+                },
+            ],
+            limit: Some(8),
+            offset: 0,
+            after: Some(vec!["b".into(), "5".into()]),
+        };
+
+        // Act
+        let b = crustdb_core::dialect::build_table_query(&MysqlDialect, &q).unwrap();
+
+        // Assert
+        assert!(
+            b.sql.contains(
+                r#"((`db`.`t`.`name` < ?) OR (`db`.`t`.`name` = ? AND `db`.`t`.`id` > ?))"#
+            ),
+            "{}",
+            b.sql
+        );
+        assert!(!b.sql.contains("OFFSET"));
+        assert_eq!(b.params.len(), 3);
+    }
+
     fn tbl() -> ObjectRef {
         ObjectRef {
             database: "db".into(),

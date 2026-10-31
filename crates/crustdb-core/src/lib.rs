@@ -3,6 +3,7 @@ pub mod driver;
 pub mod edit;
 pub mod error;
 pub mod format;
+pub mod keyset;
 pub mod model;
 pub mod query;
 pub mod safety;

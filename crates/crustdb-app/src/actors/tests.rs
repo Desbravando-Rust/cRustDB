@@ -100,6 +100,7 @@ fn query(limit: u64, filters: Vec<Filter>) -> TableQuery {
         sorts: vec![],
         limit: Some(limit),
         offset: 0,
+        after: None,
     }
 }
 

@@ -19,7 +19,9 @@ pub(crate) fn category(decl: Option<&str>) -> TypeCategory {
     } else if has(&["REAL", "FLOA", "DOUB"]) {
         TypeCategory::Float
     } else {
-        TypeCategory::Decimal
+        // NUMERIC affinity (NUMERIC, DECIMAL, DATETIME...) stores REAL, so there is no exact
+        // decimal: Float keeps keyset pagination away from it (ADR 0011).
+        TypeCategory::Float
     }
 }
 
@@ -52,8 +54,8 @@ mod tests {
             (Some(""), Other),
             (None, Other),
             (Some("DOUBLE PRECISION"), Float),
-            (Some("NUMERIC(10,2)"), Decimal),
-            (Some("DATETIME"), Decimal),
+            (Some("NUMERIC(10,2)"), Float),
+            (Some("DATETIME"), Float),
         ];
 
         // Act & Assert

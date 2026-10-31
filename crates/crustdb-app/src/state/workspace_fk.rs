@@ -47,7 +47,7 @@ impl AppState {
         t.drafts = drafts;
         // Without structure the first page is fetched on arrival, already filtered.
         if !created && t.structure.is_some() {
-            t.page = 0;
+            t.reset_paging();
             cmds = vec![t.fetch(req)];
         }
         cmds

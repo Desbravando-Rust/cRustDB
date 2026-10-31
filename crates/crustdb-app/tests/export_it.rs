@@ -121,6 +121,7 @@ async fn export_table(
             sorts: vec![],
             limit: Some(300),
             offset: 0,
+            after: None,
         },
         path: path.clone(),
     });
