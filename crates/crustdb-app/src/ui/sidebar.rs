@@ -305,4 +305,38 @@ mod tests {
         // Assert
         h.get_by_label("Workspace");
     }
+
+    #[test]
+    fn sidebar_filter_sits_in_gray_frame() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].status = Status::Online(ServerVersion {
+            product: Product::Postgres,
+            major: 16,
+            minor: 0,
+            patch: 0,
+            raw: "16.0".into(),
+        });
+        s.active = Some(ws);
+        let mut done = false;
+        let mut h = Harness::builder().build_ui(|ui| {
+            if ready(ui, &mut done) {
+                show(ui, &s);
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        let input = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+        let framed = h.output().shapes.iter().any(|s| match &s.shape {
+            egui::Shape::Rect(r) => {
+                r.fill == egui::Color32::from_gray(40) && r.rect.contains_rect(input)
+            }
+            _ => false,
+        });
+        assert!(framed);
+    }
 }
