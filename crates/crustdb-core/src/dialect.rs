@@ -132,6 +132,10 @@ pub fn build_table_query(d: &dyn Dialect, q: &TableQuery) -> Result<BuiltQuery, 
         };
         conds.push(cond);
     }
+    let base = d.qualified_name(&q.object);
+    if q.after.is_some() {
+        conds.push(crate::keyset::predicate(d, q, &base, &mut params)?);
+    }
     if !conds.is_empty() {
         sql.push_str(&format!(" WHERE {}", conds.join(" AND ")));
     }
@@ -140,7 +144,6 @@ pub fn build_table_query(d: &dyn Dialect, q: &TableQuery) -> Result<BuiltQuery, 
     // Json: base `json` has no ordering operator, so order by its text (an expression, which
     // also resolves to the input column).
     // ponytail: xml/geometric types (category Other) remain unsortable.
-    let base = d.qualified_name(&q.object);
     let key = |c: &ColumnMeta| {
         if c.category == TypeCategory::Json {
             d.as_text(c)
@@ -168,7 +171,10 @@ pub fn build_table_query(d: &dyn Dialect, q: &TableQuery) -> Result<BuiltQuery, 
         sql.push_str(&format!(" ORDER BY {}", order.join(", ")));
     }
     if let Some(n) = q.limit {
-        sql.push_str(&format!(" LIMIT {n} OFFSET {}", q.offset));
+        sql.push_str(&format!(" LIMIT {n}"));
+        if q.after.is_none() {
+            sql.push_str(&format!(" OFFSET {}", q.offset));
+        }
     }
     Ok(BuiltQuery { sql, params })
 }
@@ -235,6 +241,7 @@ mod tests {
             sorts,
             limit: Some(301),
             offset: 0,
+            after: None,
         }
     }
 
@@ -374,5 +381,91 @@ mod tests {
 
         // Act & Assert
         assert!(build(&q).sql.starts_with(r#"SELECT * FROM "public"."t""#));
+    }
+
+    fn keyset(sorts: Vec<Sort>, after: &[&str]) -> TableQuery {
+        let mut q = tq(vec![], sorts);
+        q.after = Some(after.iter().map(|s| s.to_string()).collect());
+        q
+    }
+
+    #[test]
+    fn next_page_uses_tuple_comparison_and_no_offset() {
+        // Act
+        let b = build(&keyset(
+            vec![sort("a", false), sort("id", false)],
+            &["x", "5"],
+        ));
+
+        // Assert
+        assert!(
+            b.sql
+                .contains(r#"WHERE ("public"."t"."a", "public"."t"."id") > ($1, $2) ORDER BY"#)
+        );
+        assert!(b.sql.ends_with("LIMIT 301"));
+        assert_eq!(
+            b.params,
+            vec![Param(Some("x".into())), Param(Some("5".into()))]
+        );
+    }
+
+    #[test]
+    fn all_desc_flips_comparison() {
+        // Act
+        let b = build(&keyset(
+            vec![sort("a", true), sort("id", true)],
+            &["x", "5"],
+        ));
+
+        // Assert
+        assert!(
+            b.sql
+                .contains(r#"("public"."t"."a", "public"."t"."id") < ($1, $2)"#)
+        );
+    }
+
+    #[test]
+    fn mixed_directions_expand_into_ors() {
+        // Act
+        let b = build(&keyset(
+            vec![sort("a", true), sort("id", false)],
+            &["x", "5"],
+        ));
+
+        // Assert
+        assert!(b.sql.contains(
+            r#"WHERE (("public"."t"."a" < $1) OR ("public"."t"."a" = $2 AND "public"."t"."id" > $3))"#
+        ));
+        assert_eq!(b.params.len(), 3);
+    }
+
+    #[test]
+    fn keyset_numbering_continues_after_filters() {
+        // Arrange
+        let mut q = keyset(vec![sort("id", false)], &["5"]);
+        q.filters = vec![filter("a", Operator::Ne, &["x"])];
+
+        // Act
+        let b = build(&q);
+
+        // Assert
+        assert!(
+            b.sql
+                .contains(r#"WHERE "a" <> $1 AND ("public"."t"."id") > ($2)"#)
+        );
+        assert_eq!(
+            b.params,
+            vec![Param(Some("x".into())), Param(Some("5".into()))]
+        );
+    }
+
+    #[test]
+    fn cursor_length_must_match_sorts() {
+        // Act & Assert
+        let q = keyset(vec![sort("id", false)], &["5", "6"]);
+        assert_eq!(
+            build_table_query(&TestDialect, &q).unwrap_err(),
+            QueryError::CursorLen { want: 1, got: 2 }
+        );
     }
 }

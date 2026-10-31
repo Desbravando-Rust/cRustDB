@@ -279,6 +279,7 @@ async fn page(
         sorts,
         limit: Some(size + 1),
         offset: page_no * size,
+        after: None,
     };
     let b = build_table_query(&PgDialect, &q).unwrap();
     s.start_params(&b.sql, &b.params).await.unwrap();

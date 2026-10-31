@@ -159,6 +159,7 @@ impl TableTab {
             sorts,
             limit: Some(u64::from(self.page_size) + 1),
             offset: self.page * u64::from(self.page_size),
+            after: None,
         }
     }
 

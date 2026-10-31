@@ -64,6 +64,9 @@ pub struct TableQuery {
     /// `None` = no LIMIT/OFFSET (export).
     pub limit: Option<u64>,
     pub offset: u64,
+    /// Keyset cursor: values of the `sorts` columns of the last row of the previous page.
+    /// `Some` replaces `OFFSET` (ADR 0011).
+    pub after: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -78,6 +81,8 @@ pub enum QueryError {
     NoPrimaryKey,
     #[error("column {0} is not editable")]
     NotEditable(String),
+    #[error("keyset cursor has {got} values for {want} sort columns")]
+    CursorLen { want: usize, got: usize },
 }
 
 use Operator::*;

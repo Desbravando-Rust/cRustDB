@@ -170,6 +170,7 @@ async fn quote_ident_handles_double_quote() {
         sorts: vec![],
         limit: Some(10),
         offset: 0,
+        after: None,
     };
     let b = build_table_query(&d, &q).unwrap();
     s.start_params(&b.sql, &b.params).await.unwrap();

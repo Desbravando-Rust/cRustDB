@@ -202,6 +202,7 @@ async fn run(job: TableJob, rx: &mut UnboundedReceiver<Command>) -> Result<u64, 
     let q = TableQuery {
         limit: None,
         offset: 0,
+        after: None,
         ..job.query.clone()
     };
     let res = {

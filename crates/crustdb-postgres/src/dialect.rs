@@ -144,6 +144,7 @@ mod tests {
             sorts: vec![],
             limit: Some(10),
             offset: 0,
+            after: None,
         };
 
         // Act
