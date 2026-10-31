@@ -280,4 +280,25 @@ mod tests {
         assert_eq!(rows, vec![Row::from([t("k"), t("1")])]);
         assert_eq!(one, vec![Row::from([t("OK")])]);
     }
+
+    #[test]
+    fn nested_reply_text_is_capped() {
+        // Arrange
+        let big = Reply::Array(vec![Reply::Bulk(vec![
+            b'x';
+            crate::model::CELL_MEMORY_CAP * 2
+        ])]);
+
+        // Act
+        let (_, rows) = Reply::Array(vec![big]).to_rows();
+
+        // Assert
+        assert!(matches!(
+            &rows[0][0],
+            Cell::Text {
+                truncated: true,
+                ..
+            }
+        ));
+    }
 }
