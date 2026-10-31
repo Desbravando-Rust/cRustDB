@@ -131,43 +131,37 @@ fn loading_between_request_and_confirm_explains_and_sends_nothing() {
 }
 
 #[test]
-fn request_delete_rows_while_busy_opens_no_dialog_and_explains() {
-    for (loading, edit_req, text) in [
-        (
-            Some(RequestId(1)),
-            None,
-            "Table is loading, delete cancelled",
-        ),
-        (None, Some(RequestId(2)), "Saving changes, delete cancelled"),
-    ] {
-        // Arrange
-        let (mut s, tab) = setup();
-        let t = s.table_mut(tab).unwrap();
-        t.loading = loading;
-        t.edit_req = edit_req;
+fn request_delete_rows_while_busy_opens_dialog_with_delete_disabled() {
+    // Arrange
+    let (mut s, tab) = setup();
+    s.table_mut(tab).unwrap().loading = Some(RequestId(1));
 
-        // Act
-        s.request_delete_rows(tab);
+    // Act
+    s.request_delete_rows(tab);
 
-        // Assert
-        assert!(s.dialogs.top().is_none());
-        assert_eq!(s.table_mut(tab).unwrap().notice.as_deref(), Some(text));
-    }
+    // Assert
+    assert!(s.dialogs.top().is_some());
+    assert!(s.delete_rows_busy());
 }
 
 #[test]
 fn delete_rows_busy_follows_table_state() {
     // Arrange
     let (mut s, tab) = setup();
-    assert!(!s.delete_rows_busy());
+    let none = s.delete_rows_busy();
     s.request_delete_rows(tab);
 
     // Act
     let idle = s.delete_rows_busy();
+    s.table_mut(tab).unwrap().loading = Some(RequestId(1));
+    let loading = s.delete_rows_busy();
+    s.table_mut(tab).unwrap().loading = None;
     s.table_mut(tab).unwrap().edit_req = Some(RequestId(3));
     let saving = s.delete_rows_busy();
 
     // Assert
+    assert!(!none);
     assert!(!idle);
+    assert!(loading);
     assert!(saving);
 }
