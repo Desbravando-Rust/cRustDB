@@ -392,6 +392,25 @@ fn delete_refused_while_pending() {
 }
 
 #[test]
+fn delete_refused_while_save_in_flight_explains() {
+    // Arrange
+    let mut t = editable_tab(ObjectKind::Table, true);
+    t.selected_row = Some(0);
+    t.edit_req = Some(RequestId(1));
+
+    // Act
+    let cmd = t.delete_selected(RequestId(5));
+
+    // Assert
+    assert!(cmd.is_none());
+    assert_eq!(
+        t.notice.as_deref(),
+        Some("Saving changes, delete cancelled")
+    );
+    assert_eq!(t.edit_req, Some(RequestId(1)));
+}
+
+#[test]
 fn save_empty_insert_row_explains_and_sends_nothing() {
     // Arrange
     let mut t = editable_tab(ObjectKind::Table, true);

@@ -59,7 +59,7 @@ fn password_field(ui: &mut egui::Ui, id: egui::Id, input: &mut PasswordInput, at
     }
 }
 
-pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
+pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack, delete_busy: bool) -> Vec<Intent> {
     let mut out = vec![];
     let Some(top) = dialogs.top_mut() else {
         return out;
@@ -198,7 +198,10 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
             Dialog::DeleteRows { count, .. } => {
                 ui.label(format!("Delete {count} row(s)? This cannot be undone."));
                 ui.horizontal(|ui| {
-                    if ui.button("Delete").clicked() {
+                    let delete = ui
+                        .add_enabled(!delete_busy, egui::Button::new("Delete"))
+                        .on_disabled_hover_text("Table is busy");
+                    if delete.clicked() {
                         out.push(Intent::ConfirmDeleteRows);
                     }
                     if ui.button("Cancel").clicked() {
@@ -230,6 +233,9 @@ pub fn show(ctx: &egui::Context, dialogs: &mut DialogStack) -> Vec<Intent> {
 
 #[cfg(test)]
 mod tests {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
     use super::*;
 
     #[test]
@@ -245,5 +251,32 @@ mod tests {
         // Assert
         assert_eq!(short, "\"SET\" \"a b\"");
         assert!(capped.chars().count() <= ARGV_PREVIEW_CAP + 1);
+    }
+
+    fn delete_rows_clicks(busy: bool) -> Vec<Intent> {
+        let mut out = vec![];
+        let mut dialogs = DialogStack::default();
+        dialogs.push(Dialog::DeleteRows {
+            tab: crate::runtime::TabId(1),
+            range: (0, 0),
+            count: 1,
+        });
+        let mut h = Harness::new_ui(|ui| out.extend(show(ui.ctx(), &mut dialogs, busy)));
+        h.run();
+        h.get_by_label("Delete").click();
+        h.run();
+        drop(h);
+        out
+    }
+
+    #[test]
+    fn delete_rows_button_disabled_while_busy() {
+        // Act
+        let busy = delete_rows_clicks(true);
+        let idle = delete_rows_clicks(false);
+
+        // Assert
+        assert!(!busy.iter().any(|i| matches!(i, Intent::ConfirmDeleteRows)));
+        assert!(idle.iter().any(|i| matches!(i, Intent::ConfirmDeleteRows)));
     }
 }
