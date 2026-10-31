@@ -156,26 +156,38 @@ mod tests {
         assert!(t.visible().any(|n| n.label == "orders"));
     }
 
+    fn assert_flat_folders(driver: DriverKind) {
+        // Arrange
+        let mut t = tree(driver);
+        t.filter("ord");
+
+        // Act
+        let cmds = t.load_for_filter();
+
+        // Assert
+        let kinds: Vec<_> = cmds
+            .iter()
+            .map(|c| match c {
+                Command::LoadChildren {
+                    kind: Some(k),
+                    database,
+                    schema: None,
+                    ..
+                } if database == "app" => *k,
+                other => panic!("unexpected command for {driver:?}: {other:?}"),
+            })
+            .collect();
+        assert_eq!(kinds, folder_kinds(driver));
+    }
+
     #[test]
-    fn filter_skips_schema_level_for_mysql_and_sqlite() {
-        for driver in [DriverKind::Mysql, DriverKind::Sqlite] {
-            // Arrange
-            let mut t = tree(driver);
-            t.filter("ord");
+    fn filter_loads_folders_for_mysql() {
+        assert_flat_folders(DriverKind::Mysql);
+    }
 
-            // Act
-            let cmds = t.load_for_filter();
-
-            // Assert
-            assert_eq!(cmds.len(), folder_kinds(driver).len());
-            for c in &cmds {
-                assert!(matches!(
-                    c,
-                    Command::LoadChildren { kind: Some(k), database, schema: None, .. }
-                        if *k != ObjectKind::Schema && database == "app"
-                ));
-            }
-        }
+    #[test]
+    fn filter_loads_folders_for_sqlite() {
+        assert_flat_folders(DriverKind::Sqlite);
     }
 
     #[test]
@@ -185,6 +197,10 @@ mod tests {
         t.filter("x");
         let cmds = t.load_for_filter();
         apply(&mut t, &cmds[0], vec![]);
+        assert!(matches!(
+            t.entries.get(&NodePath::Database("app".into())).map(|e| &e.load),
+            Some(Load::Done(v)) if v.is_empty()
+        ));
 
         // Act
         let again = t.load_for_filter();
