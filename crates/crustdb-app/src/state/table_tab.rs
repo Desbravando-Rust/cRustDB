@@ -58,6 +58,8 @@ pub struct TableTab {
     /// Staged `(column, value)` changes of `pending_row`, sent as one `UPDATE` on Save (ADR 0004).
     pub pending: Vec<(usize, Option<String>)>,
     pub pending_row: Option<usize>,
+    /// `pending_row` is a provisional last row that Save sends as an `INSERT` (ADR 0010).
+    pub inserting: bool,
 }
 
 impl TableTab {
@@ -92,6 +94,7 @@ impl TableTab {
             edit_req: None,
             pending: vec![],
             pending_row: None,
+            inserting: false,
         }
     }
 

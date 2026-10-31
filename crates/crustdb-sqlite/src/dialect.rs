@@ -49,6 +49,8 @@ impl Dialect for SqliteDialect {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crustdb_core::edit::{build_delete, build_insert};
+    use crustdb_core::model::Cell;
     use crustdb_core::model::ObjectKind;
 
     fn col(name: &str, category: TypeCategory) -> ColumnMeta {
@@ -104,5 +106,48 @@ mod tests {
 
         // Act & Assert
         assert_eq!(SqliteDialect.qualified_name(&o), "\"main\".\"t\"");
+    }
+
+    fn tbl() -> ObjectRef {
+        ObjectRef {
+            database: "db".into(),
+            schema: None,
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    fn pk_col() -> ColumnMeta {
+        ColumnMeta {
+            is_primary_key: true,
+            ..col("id", TypeCategory::Integer)
+        }
+    }
+
+    #[test]
+    fn sqlite_insert_sql() {
+        // Arrange
+        let cols = [pk_col(), col("n", TypeCategory::Text)];
+
+        // Act
+        let b = build_insert(&SqliteDialect, &tbl(), &cols, &[(1, Some("x".into()))]).unwrap();
+
+        // Assert
+        assert_eq!(b.sql, r#"INSERT INTO "db"."t" ("n") VALUES (?1)"#);
+    }
+
+    #[test]
+    fn sqlite_delete_sql() {
+        // Arrange
+        let row = [Cell::Text {
+            value: "1".into(),
+            truncated: false,
+        }];
+
+        // Act
+        let b = build_delete(&SqliteDialect, &tbl(), &[pk_col()], &[&row]).unwrap();
+
+        // Assert
+        assert_eq!(b.sql, r#"DELETE FROM "db"."t" WHERE ("id" = ?1)"#);
     }
 }

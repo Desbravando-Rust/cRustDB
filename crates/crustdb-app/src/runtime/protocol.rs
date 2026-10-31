@@ -144,7 +144,8 @@ pub enum Command {
         req: RequestId,
         query: TableQuery,
     },
-    /// One-cell `UPDATE` from `edit::build_update`, run on the tab's own `Editor` session.
+    /// Tab write statement (`UPDATE`, `INSERT` or `DELETE` from `edit::build_*`), run on the tab's
+    /// own `Editor` session.
     UpdateCell {
         tab: TabId,
         req: RequestId,
@@ -265,7 +266,7 @@ pub enum Event {
         has_more: bool,
         estimate: Option<u64>,
     },
-    /// Outcome of the `UpdateCell` with this id: `None` changed a row (reload the page),
+    /// Outcome of the `UpdateCell` write statement with this id: `None` changed a row (reload the page),
     /// `Some` is why it did not. Unlike `Notice`, it leaves pending page/structure loads alone.
     CellUpdated {
         req: RequestId,

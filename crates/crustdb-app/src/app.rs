@@ -277,6 +277,9 @@ impl CrustApp {
                     rt.send(c);
                 }
             }
+            Intent::AddRow(_) | Intent::DeleteRows(_) | Intent::ConfirmDeleteRows => {
+                self.handle_rows(intent);
+            }
             Intent::DiscardPending(tab) => {
                 if let Some(t) = self.state.table_mut(tab) {
                     t.discard_pending();

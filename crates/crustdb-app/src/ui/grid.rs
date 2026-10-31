@@ -1,5 +1,5 @@
 use crustdb_core::format::display_cell;
-use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, Row};
+use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, ObjectKind, Row};
 use crustdb_core::query::Sort;
 use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
@@ -169,6 +169,43 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
     }
 }
 
+/// Why "Add row"/"Delete rows" cannot act on the tab right now.
+fn write_block(tab: &TableTab) -> Option<&'static str> {
+    if tab.object.kind != ObjectKind::Table {
+        Some("Views are read-only")
+    } else if !tab.columns.iter().any(|c| c.is_primary_key) {
+        Some("Table has no primary key")
+    } else if tab.has_pending() {
+        Some("Save or discard pending changes")
+    } else if tab.is_loading() || tab.edit_req.is_some() {
+        Some("Wait for the current operation")
+    } else {
+        None
+    }
+}
+
+fn row_buttons(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
+    let block = write_block(tab);
+    let delete_block = block.or(tab
+        .selected_row
+        .is_none()
+        .then_some("Select rows to delete"));
+    let mut button = |label: &str, block: Option<&str>| {
+        let r = ui.add_enabled(block.is_none(), egui::Button::new(label));
+        match block {
+            Some(why) => r.on_disabled_hover_text(why),
+            None => r,
+        }
+        .clicked()
+    };
+    if button("Add row", block) {
+        out.push(Intent::AddRow(tab.id));
+    }
+    if button("Delete rows", delete_block) {
+        out.push(Intent::DeleteRows(tab.id));
+    }
+}
+
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     let mut out = vec![];
     let id = tab.id;
@@ -198,7 +235,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
-            if !tab.pending.is_empty() {
+            row_buttons(ui, tab, &mut out);
+            if tab.has_pending() {
                 let save = egui::Button::new("Save");
                 if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
                     // The grid is drawn after the footer: an open editor would be cancelled
@@ -209,7 +247,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 if ui.button("Discard").clicked() {
                     out.push(Intent::DiscardPending(id));
                 }
-                ui.label(format!("{} pending", tab.pending.len()));
+                if tab.pending.is_empty() {
+                    ui.label("New row");
+                } else {
+                    ui.label(format!("{} pending", tab.pending.len()));
+                }
             }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);
@@ -327,172 +369,5 @@ pub fn show_tab(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crustdb_core::model::{ObjectKind, ObjectRef, TypeCategory};
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::Queryable;
-
-    use super::*;
-    use crate::runtime::TabId;
-
-    fn tab() -> TableTab {
-        let object = ObjectRef {
-            database: "d".into(),
-            schema: None,
-            name: "t".into(),
-            kind: ObjectKind::Table,
-        };
-        let mut t = TableTab::new(TabId(1), object, 300);
-        t.columns = ["id", "v"]
-            .iter()
-            .map(|n| ColumnMeta {
-                name: (*n).into(),
-                type_name: "text".into(),
-                category: TypeCategory::Text,
-                nullable: None,
-                is_primary_key: *n == "id",
-            })
-            .collect();
-        t.rows = vec![vec![Cell::text_capped("1"), Cell::text_capped("old")].into()];
-        t.editing = Some((0, 1, "old".into()));
-        t
-    }
-
-    fn run_keys(t: &mut TableTab, text: &str, key: egui::Key) -> Vec<Intent> {
-        let mut out = vec![];
-        let mut h = Harness::new_ui(|ui| out.extend(show(ui, t)));
-        h.run();
-        h.event(egui::Event::Text(text.into()));
-        h.run();
-        h.key_press(key);
-        h.run();
-        drop(h);
-        out
-    }
-
-    #[test]
-    fn enter_in_cell_editor_commits_typed_text() {
-        // Arrange
-        let mut t = tab();
-
-        // Act
-        let out = run_keys(&mut t, "x", egui::Key::Enter);
-
-        // Assert
-        assert!(
-            out.iter()
-                .any(|i| matches!(i, Intent::CommitEdit(TabId(1))))
-        );
-        assert!(t.editing.unwrap().2.contains('x'));
-    }
-
-    #[test]
-    fn escape_in_cell_editor_cancels() {
-        // Arrange
-        let mut t = tab();
-
-        // Act
-        let out = run_keys(&mut t, "x", egui::Key::Escape);
-
-        // Assert
-        assert!(out.is_empty());
-        assert!(t.editing.is_none());
-    }
-
-    fn staged() -> TableTab {
-        let mut t = tab();
-        t.editing = None;
-        t.pending = vec![(1, Some("new".into()))];
-        t.pending_row = Some(0);
-        t
-    }
-
-    #[test]
-    fn save_and_discard_buttons_emit_intents_when_pending() {
-        // Arrange
-        let mut t = staged();
-        let mut out = vec![];
-        let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
-        h.run();
-
-        // Act
-        h.get_by_label("Save").click();
-        h.run();
-        h.get_by_label("Discard").click();
-        h.run();
-        drop(h);
-
-        // Assert
-        assert!(
-            out.iter()
-                .any(|i| matches!(i, Intent::SavePending(TabId(1))))
-        );
-        assert!(out.iter().any(|i| matches!(i, Intent::DiscardPending(_))));
-    }
-
-    #[test]
-    fn save_commits_open_cell_editor_first() {
-        // Arrange
-        let mut t = staged();
-        t.editing = Some((0, 1, "typed".into()));
-        let mut out = vec![];
-        let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
-        h.run();
-
-        // Act
-        h.get_by_label("Save").click();
-        h.run();
-        drop(h);
-
-        // Assert
-        assert!(
-            out.iter()
-                .any(|i| matches!(i, Intent::SavePending(TabId(1))))
-        );
-        assert!(t.editing.is_none());
-        assert_eq!(t.pending, vec![(1, Some("typed".into()))]);
-    }
-
-    #[test]
-    fn no_save_button_without_pending() {
-        // Arrange
-        let mut t = tab();
-        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
-
-        // Act
-        h.run();
-
-        // Assert
-        assert!(h.query_by_label("Save").is_none());
-    }
-
-    #[test]
-    fn pending_cell_shows_staged_value() {
-        // Arrange
-        let mut t = staged();
-        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
-
-        // Act
-        h.run();
-
-        // Assert
-        assert!(h.query_by_label("new").is_some());
-        assert!(h.query_by_label("old").is_none());
-    }
-
-    #[test]
-    fn data_view_notice_has_no_duplicate_retry() {
-        // Arrange
-        let mut t = tab();
-        t.notice = Some("boom".into());
-        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
-
-        // Act
-        h.run();
-
-        // Assert
-        assert!(h.query_by_label("Retry").is_none());
-        assert!(h.query_by_label("Refresh").is_some());
-    }
-}
+#[path = "grid_tests.rs"]
+mod tests;

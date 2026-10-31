@@ -47,6 +47,8 @@ mod tests {
     use super::*;
     use crustdb_core::dialect::build_table_query;
     use crustdb_core::driver::Param;
+    use crustdb_core::edit::{build_delete, build_insert};
+    use crustdb_core::model::Cell;
     use crustdb_core::model::ObjectKind;
     use crustdb_core::query::{Filter, Operator, TableQuery};
 
@@ -155,5 +157,54 @@ mod tests {
             r#"SELECT left("e"::text, 1048576) AS "e" FROM "public"."t" WHERE "e"::text ILIKE CAST($1 AS text) ESCAPE '!' LIMIT 10 OFFSET 0"#
         );
         assert_eq!(b.params, vec![Param(Some("%50!%%".into()))]);
+    }
+
+    fn tbl() -> ObjectRef {
+        ObjectRef {
+            database: "db".into(),
+            schema: Some("public".into()),
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    fn pk_col() -> ColumnMeta {
+        ColumnMeta {
+            is_primary_key: true,
+            ..col("id", "int4", TypeCategory::Integer)
+        }
+    }
+
+    #[test]
+    fn postgres_insert_sql() {
+        // Arrange
+        let cols = [pk_col(), col("n", "text", TypeCategory::Text)];
+
+        // Act
+        let b = build_insert(&PgDialect, &tbl(), &cols, &[(1, Some("x".into()))]).unwrap();
+
+        // Assert
+        assert_eq!(
+            b.sql,
+            r#"INSERT INTO "public"."t" ("n") VALUES (CAST($1 AS text))"#
+        );
+    }
+
+    #[test]
+    fn postgres_delete_sql() {
+        // Arrange
+        let row = [Cell::Text {
+            value: "1".into(),
+            truncated: false,
+        }];
+
+        // Act
+        let b = build_delete(&PgDialect, &tbl(), &[pk_col()], &[&row]).unwrap();
+
+        // Assert
+        assert_eq!(
+            b.sql,
+            r#"DELETE FROM "public"."t" WHERE ("id" = CAST($1 AS int4))"#
+        );
     }
 }

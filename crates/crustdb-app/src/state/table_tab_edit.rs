@@ -1,5 +1,5 @@
 //! Inline grid edits staged per row and saved as one `UPDATE` (ADR 0004).
-use crustdb_core::edit::{build_update, is_opaque};
+use crustdb_core::edit::{build_delete, build_insert, build_update, is_opaque};
 use crustdb_core::model::{Cell, ObjectKind};
 
 use super::TableTab;
@@ -51,12 +51,21 @@ impl TableTab {
 
     /// Sends every staged change of the row as one `UpdateCell`; rejections land in `notice`.
     pub fn save_pending(&mut self, req: RequestId) -> Option<Command> {
-        if self.pending.is_empty() || self.edit_req.is_some() {
+        if (self.pending.is_empty() && !self.inserting) || self.edit_req.is_some() {
+            return None;
+        }
+        if self.inserting && self.pending.is_empty() {
+            self.notice = Some("Fill at least one column".into());
             return None;
         }
         let cells = self.rows.get(self.pending_row?)?;
         let d = crate::export_fmt::dialect(self.driver);
-        match build_update(d, &self.object, &self.columns, cells, &self.pending) {
+        let built = if self.inserting {
+            build_insert(d, &self.object, &self.columns, &self.pending)
+        } else {
+            build_update(d, &self.object, &self.columns, cells, &self.pending)
+        };
+        match built {
             Ok(update) => {
                 self.edit_req = Some(req);
                 Some(Command::UpdateCell {
@@ -73,6 +82,12 @@ impl TableTab {
     }
 
     pub fn discard_pending(&mut self) {
+        if self.inserting {
+            self.rows.pop();
+            self.inserting = false;
+            self.selected_row = None;
+            self.select_anchor = None;
+        }
         self.pending.clear();
         self.pending_row = None;
         if self.notice.as_deref() == Some(PENDING_NOTICE) {
@@ -96,9 +111,74 @@ impl TableTab {
         }
     }
 
+    /// Staged changes or a provisional insert row.
+    pub fn has_pending(&self) -> bool {
+        self.inserting || !self.pending.is_empty()
+    }
+
+    /// Appends a provisional all-NULL row that becomes the pending row (ADR 0010). Refused for
+    /// views, tables without a key and while anything is pending or in flight.
+    pub fn add_row(&mut self) {
+        if !self.writable() || self.loading.is_some() || self.edit_req.is_some() {
+            return;
+        }
+        if self.pending_blocks() {
+            return;
+        }
+        self.rows.push(vec![Cell::Null; self.columns.len()].into());
+        let last = self.rows.len() - 1;
+        self.inserting = true;
+        self.pending_row = Some(last);
+        self.selected_row = Some(last);
+        self.select_anchor = None;
+    }
+
+    /// Selected rows as an inclusive `(first, last)` range, cursor to anchor.
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        let cursor = self.selected_row?;
+        let anchor = self.select_anchor.unwrap_or(cursor);
+        Some((anchor.min(cursor), anchor.max(cursor)))
+    }
+
+    /// One `DELETE` for the selected rows (cursor to anchor); refused while changes are pending.
+    pub fn delete_selected(&mut self, req: RequestId) -> Option<Command> {
+        if self.pending_blocks() || self.loading.is_some() || self.edit_req.is_some() {
+            return None;
+        }
+        let (lo, hi) = self.selection()?;
+        let rows: Vec<&[Cell]> = self.rows.get(lo..=hi)?.iter().map(|r| &r[..]).collect();
+        let d = crate::export_fmt::dialect(self.driver);
+        match build_delete(d, &self.object, &self.columns, &rows) {
+            Ok(update) => {
+                self.edit_req = Some(req);
+                Some(Command::UpdateCell {
+                    tab: self.id,
+                    req,
+                    update,
+                })
+            }
+            Err(e) => {
+                self.notice = Some(e.to_string());
+                None
+            }
+        }
+    }
+
+    pub(crate) fn writable(&mut self) -> bool {
+        let ok =
+            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
+        if !ok {
+            self.notice = Some(match self.object.kind {
+                ObjectKind::Table => "Table has no primary key".into(),
+                _ => "Views are read-only".into(),
+            });
+        }
+        ok
+    }
+
     /// Paging, sorting, filtering and reloading would drop staged changes: refuse with a notice.
     pub(crate) fn pending_blocks(&mut self) -> bool {
-        let blocked = !self.pending.is_empty();
+        let blocked = self.has_pending();
         if blocked {
             self.notice = Some(PENDING_NOTICE.into());
         }
@@ -125,7 +205,9 @@ impl TableTab {
         let Some(cells) = self.rows.get(row) else {
             return;
         };
+        let insert_row = self.inserting && self.pending_row == Some(row);
         let unchanged = match (cells.get(col), &value) {
+            _ if insert_row => false,
             (Some(Cell::Null), None) => true,
             (Some(Cell::Text { value: old, .. }), Some(new)) => **old == **new,
             _ => false,
@@ -133,7 +215,9 @@ impl TableTab {
         let d = crate::export_fmt::dialect(self.driver);
         // ponytail: builds a throwaway one-column UPDATE just to reuse its validation.
         let check = build_update(d, &self.object, &self.columns, cells, &[(col, None)]);
-        if let Err(e) = check {
+        if let Err(e) = check
+            && !insert_row
+        {
             self.notice = Some(e.to_string());
             return;
         }
@@ -144,7 +228,7 @@ impl TableTab {
         if !unchanged {
             self.pending.push((col, value));
         }
-        self.pending_row = (!self.pending.is_empty()).then_some(row);
+        self.pending_row = (insert_row || !self.pending.is_empty()).then_some(row);
     }
 }
 
