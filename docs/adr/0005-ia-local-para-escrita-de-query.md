@@ -37,7 +37,7 @@ O caso 4 exige latência abaixo de ~200 ms por tecla e cancelamento agressivo. E
 6. **Não fazer.** Manter só o autocomplete determinístico.
 
 ### Modelos avaliados (para recomendar ao usuário, não para distribuir)
-Licenças, tags e tamanhos foram conferidos de memória e devem ser reconferidos nas páginas oficiais dos modelos antes da implementação. Os tamanhos são de pesos quantizados em Q4 (aproximados).
+Licenças e tags foram conferidas em 2026-10-31 nas APIs do Hugging Face (`https://huggingface.co/api/models/<org>/<modelo>`: Qwen/Qwen2.5-Coder-{1.5B,3B,7B}-Instruct (o 3B devolve `license: other`, `license_name: qwen-research`; o "não comercial" vem do LICENSE em `https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct/blob/main/LICENSE`, lido em 2026-10-31), defog/sqlcoder-7b-2, meta-llama/Llama-3.2-3B-Instruct, microsoft/Phi-4-mini-instruct) e na biblioteca Ollama (`https://ollama.com/library/qwen2.5-coder/tags`, tag `qwen2.5-coder:7b`). Os tamanhos (não reconferidos) são de pesos quantizados em Q4 (aproximados).
 
 | Modelo | Params | Disco/RAM (Q4) | Licença | Observação |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ Motivos:
 * **Opção 6 descartada** porque o custo da opção 1 é baixo e isolado (ver "Esforço").
 
 ### Desenho mínimo
-* **`crustdb-core` (puro, testável sem IO):** módulo `ai` com `build_prompt(dialect, schema_ctx, request) -> String` e `extract_sql(response) -> Option<String>` (pega o primeiro bloco ```` ```sql ```` ou o texto inteiro). `schema_ctx` parte do `ObjectTree` e do `ColumnCache` (`crates/crustdb-app/src/state/autocomplete.rs`), que guardam só nomes de tabela e de coluna (`Vec<String>`), carregados sob demanda. Tipos, PK e FK exigem buscar via `Introspector` sob demanda, o que acrescenta round trips e um passo de montagem no app. O contexto é limitado às tabelas citadas pelo usuário ou às N primeiras, para caber em ~2–4k tokens. Sem tipos novos na API de `Driver`/`Session`.
+* **`crustdb-core` (puro, testável sem IO):** módulo `ai` com `build_prompt(dialect, schema_ctx, request) -> String` e `extract_sql(response) -> Option<String>` (pega o primeiro bloco ```` ```sql ```` ou o texto inteiro). `schema_ctx` parte do `ObjectTree` (`crates/crustdb-app/src/state/tree.rs`), que guarda os nós de objeto (`ObjectRef`), e do `ColumnCache` (`crates/crustdb-app/src/state/autocomplete.rs`), que guarda `Vec<(ObjectRef, Vec<String>)>`, ou seja, só nomes de coluna, carregados sob demanda. Tipos, PK e FK exigem buscar via `Introspector` sob demanda, o que acrescenta round trips e um passo de montagem no app. O contexto é limitado às tabelas citadas pelo usuário ou às N primeiras, para caber em ~2–4k tokens. Sem tipos novos na API de `Driver`/`Session`.
 * **`crustdb-app`:** actor `actors/ai` que recebe `Generate { tab, prompt }` por `tokio::sync::mpsc` e devolve `Chunk`/`Done`/`Error` para o estado da aba. Usa streaming SSE para mostrar progresso e um botão Stop. Stop sinaliza uma flag de cancelamento (`AtomicBool` ou `CancellationToken`) checada entre chunks SSE: o loop sai e fecha a resposta. Drop do `JoinHandle` não serve, pois não interrompe a leitura bloqueante do `ureq`. O timeout do `ureq` (configurável) é o limite superior de espera. Cancelamento imediato de verdade exigiria cliente async; reavaliar no PoC.
 * **Cliente HTTP:** reaproveitar uma dependência que já está no grafo. O `ureq` já entra via `sentry`, e o `tokio` com `net` já está no app. Rodar `ureq` em `spawn_blocking` evita uma dependência nova pesada (`reqwest`/`hyper`). Decidir com `cargo tree` na implementação.
 * **UI:** campo de prompt (Ctrl+K) acima do editor da aba. A resposta é inserida como seleção no buffer e o usuário revisa antes de executar. Nenhum caminho executa direto.
@@ -102,7 +102,7 @@ Conclusões:
 * O tamanho do contexto de schema domina o tempo em CPU. Por isso o `schema_ctx` é limitado e filtrado.
 * A primeira chamada inclui carregar o modelo (~2–10 s, conforme disco e tamanho). O Ollama mantém o modelo carregado por um tempo configurável (`keep_alive`).
 
-**Metodologia do PoC:** 20 perguntas fixas sobre o schema do `crustdb-testkit` (PG e MySQL). Para cada modelo da tabela, registrar `prompt_eval_duration`, `eval_count`/`eval_duration` (campos da resposta do Ollama) e a taxa de SQL que (a) passa no parser do `sqlparser` do dialeto e (b) devolve o resultado esperado. Resultados registrados na issue do PoC (`docs/benchs.md` é matriz de features e não serve para isso).
+**Metodologia do PoC:** 20 perguntas fixas sobre os schemas dos fixtures `crates/crustdb-postgres/tests/fixtures/pg_fixture.sql` e `crates/crustdb-mysql/tests/fixtures/mysql_fixture.sql` (carregados nos containers do `crustdb-testkit`). Para cada modelo da tabela, registrar `prompt_eval_duration`, `eval_count`/`eval_duration` (campos da resposta do Ollama) e a taxa de SQL que (a) passa no parser do `sqlparser` do dialeto e (b) devolve o resultado esperado. Resultados registrados na issue do PoC (`docs/benchs.md` é matriz de features e não serve para isso).
 
 ### Consequências Positivas
 * Funcionalidade de IA sem dependência nativa nova, sem mudança no build, no empacotamento ou no `cargo deny`.
