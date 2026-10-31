@@ -48,9 +48,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     }
                 }
             });
-        ws_combo
-            .response
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Workspace"));
+        ws_combo.response.widget_info(|| {
+            let mut i =
+                egui::WidgetInfo::labeled(egui::Role::ComboBox, ui.is_enabled(), "Workspace");
+            i.current_text_value = Some(active.config.name.clone());
+            i
+        });
         if let Some(n) = label {
             super::labels::chip(ui, n, &state.config.labels);
         }

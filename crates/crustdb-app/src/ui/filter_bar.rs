@@ -4,8 +4,12 @@ use super::Intent;
 use crate::state::TableTab;
 use crate::state::filter_draft::label;
 
-fn named(r: &egui::Response, name: &'static str) {
-    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, name));
+fn named(r: &egui::Response, name: &'static str, selected: &str) {
+    r.widget_info(|| {
+        let mut i = egui::WidgetInfo::labeled(egui::Role::ComboBox, r.enabled(), name);
+        i.current_text_value = Some(selected.into());
+        i
+    });
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
@@ -26,7 +30,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                         }
                     }
                 });
-            named(&col.response, "Filter column");
+            named(&col.response, "Filter column", &d.column);
             if let Some(n) = picked {
                 d.set_column(&tab.columns, tab.driver, &n);
             }
@@ -37,7 +41,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                         ui.selectable_value(&mut d.op, *op, label(*op));
                     }
                 });
-            named(&op.response, "Filter operator");
+            named(&op.response, "Filter operator", label(d.op));
             let r = ui.text_edit_singleline(&mut d.input);
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Intent::ApplyFilters(tab.id));
@@ -89,7 +93,7 @@ mod tests {
         let mut tab = TableTab::new(TabId(1), object, 100);
         tab.add_draft();
         let mut h = Harness::builder()
-            .with_accessibility_check(false) // value text input is still unnamed (follow-up issue)
+            .with_accessibility_check(false) // value text input is unnamed (#186)
             .build_ui(|ui| {
                 show(ui, &mut tab);
             });
