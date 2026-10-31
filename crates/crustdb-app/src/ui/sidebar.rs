@@ -83,6 +83,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     if edit.inner.changed() {
         out.push(Intent::Filter(q));
     }
+    if let Some(e) = active.tree.root_error() {
+        ui.colored_label(ui.visuals().error_fg_color, format!("Failed to load: {e}"));
+        if ui.button("Retry").clicked() {
+            out.push(Intent::RefreshRoot);
+        }
+    }
     egui::ScrollArea::both().show(ui, |ui| {
         for n in active.tree.visible() {
             ui.horizontal(|ui| {
@@ -93,10 +99,15 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         let sel = active.tree.selected.as_ref() == Some(path);
                         let label = if n.loading {
                             format!("{arrow} {} …", n.label)
+                        } else if n.error.is_some() {
+                            format!("{arrow} {} (failed)", n.label)
                         } else {
                             format!("{arrow} {}", n.label)
                         };
-                        let r = ui.selectable_label(sel, label);
+                        let mut r = ui.selectable_label(sel, label);
+                        if let Some(e) = &n.error {
+                            r = r.on_hover_text(e);
+                        }
                         if r.clicked() {
                             out.push(Intent::SelectNode(path.clone()));
                             out.push(Intent::ToggleNode(path.clone()));

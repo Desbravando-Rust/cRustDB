@@ -325,6 +325,11 @@ impl AppState {
                     w.tree.apply_children(req, items.clone());
                 }
             }
+            Event::ChildrenFailed { req, error } => {
+                for w in &mut self.workspaces {
+                    w.tree.fail_children(req, error.clone());
+                }
+            }
             Event::Page {
                 req,
                 header,

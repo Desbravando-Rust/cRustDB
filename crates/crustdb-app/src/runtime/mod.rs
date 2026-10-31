@@ -200,9 +200,14 @@ fn no_actor(cmd: &Command) -> Event {
                 error: "workspace actor not available".into(),
             };
         }
+        LoadChildren { req, .. } => {
+            return Event::ChildrenFailed {
+                req: *req,
+                error: "workspace is not connected".into(),
+            };
+        }
         Disconnect { .. }
         | HostKeyDecision { .. }
-        | LoadChildren { .. }
         | LoadColumns { .. }
         | LoadDiagram { .. }
         | ListNamespaces { .. }
@@ -360,6 +365,32 @@ mod tests {
         // Act & Assert
         let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(matches!(ev, Event::Notice { tab: TabId(2), text } if text.contains("savepoint")));
+        rt.shutdown();
+    }
+
+    #[test]
+    fn load_children_without_actor_fails_the_request() {
+        // Arrange
+        let (rt, rx) = Runtime::start(Arc::new(|| {}), registry());
+        rt.send(Command::LoadChildren {
+            ws: WorkspaceId(9),
+            req: RequestId(3),
+            database: String::new(),
+            schema: None,
+            kind: None,
+        });
+
+        // Act
+        let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        // Assert
+        assert!(matches!(
+            ev,
+            Event::ChildrenFailed {
+                req: RequestId(3),
+                ..
+            }
+        ));
         rt.shutdown();
     }
 

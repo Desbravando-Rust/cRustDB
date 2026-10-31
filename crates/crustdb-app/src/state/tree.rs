@@ -31,6 +31,8 @@ pub struct VisibleNode {
     pub object: Option<ObjectRef>,
     pub expanded: bool,
     pub loading: bool,
+    /// Why the last load of this node failed.
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,7 @@ pub(super) enum Load {
     Idle,
     Pending(RequestId),
     Done(Vec<ObjectRef>),
+    Failed(String),
 }
 
 #[derive(Debug, Default)]
@@ -192,7 +195,7 @@ impl ObjectTree {
     pub fn expand(&mut self, node: NodePath) -> Option<Command> {
         let e = self.entries.entry(node.clone()).or_default();
         e.expanded = true;
-        if matches!(e.load, Load::Idle) {
+        if matches!(e.load, Load::Idle | Load::Failed(_)) {
             self.request(&node)
         } else {
             None
@@ -219,14 +222,29 @@ impl ObjectTree {
     }
 
     pub fn apply_children(&mut self, req: RequestId, items: Vec<ObjectRef>) {
+        self.resolve(req, Load::Done(items));
+    }
+
+    pub fn fail_children(&mut self, req: RequestId, msg: String) {
+        self.resolve(req, Load::Failed(msg));
+    }
+
+    fn resolve(&mut self, req: RequestId, to: Load) {
         if matches!(self.root, Load::Pending(r) if r == req) {
-            self.root = Load::Done(items);
+            self.root = to;
         } else if let Some(e) = self
             .entries
             .values_mut()
             .find(|e| matches!(e.load, Load::Pending(r) if r == req))
         {
-            e.load = Load::Done(items);
+            e.load = to;
+        }
+    }
+
+    pub fn root_error(&self) -> Option<&str> {
+        match &self.root {
+            Load::Failed(m) => Some(m),
+            _ => None,
         }
     }
 
@@ -274,6 +292,7 @@ impl ObjectTree {
                                 object: Some(o.clone()),
                                 expanded: false,
                                 loading: false,
+                                error: None,
                             });
                         }
                     }
@@ -296,6 +315,13 @@ impl ObjectTree {
                     ..
                 })
             ),
+            error: match entry {
+                Some(Entry {
+                    load: Load::Failed(m),
+                    ..
+                }) => Some(m.clone()),
+                _ => None,
+            },
         }];
         out.extend(children);
         out
@@ -343,183 +369,5 @@ fn is_below(node: &NodePath, key: &NodePath) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use super::*;
-
-    fn obj(db: &str, schema: Option<&str>, name: &str, kind: ObjectKind) -> ObjectRef {
-        ObjectRef {
-            database: db.into(),
-            schema: schema.map(Into::into),
-            name: name.into(),
-            kind,
-        }
-    }
-
-    fn req_of(cmd: Option<Command>) -> RequestId {
-        match cmd {
-            Some(Command::LoadChildren { req, .. }) => req,
-            other => panic!("expected LoadChildren, got {other:?}"),
-        }
-    }
-
-    fn tree(driver: DriverKind) -> ObjectTree {
-        let mut t = ObjectTree::new(WorkspaceId(1), driver);
-        let r = req_of(t.load_roots());
-        t.apply_children(r, vec![obj("app", None, "app", ObjectKind::Database)]);
-        t
-    }
-
-    fn folder(schema: Option<&str>, kind: ObjectKind) -> NodePath {
-        NodePath::Folder {
-            database: "app".into(),
-            schema: schema.map(Into::into),
-            kind,
-        }
-    }
-
-    fn labels(t: &ObjectTree) -> Vec<(usize, String)> {
-        t.visible().map(|n| (n.depth, n.label)).collect()
-    }
-
-    #[test]
-    fn pg_tree_has_schema_level_mysql_does_not() {
-        // Arrange
-        let mut pg = tree(DriverKind::Postgres);
-
-        // Act & Assert
-        let r = req_of(pg.expand(NodePath::Database("app".into())));
-        pg.apply_children(r, vec![obj("app", None, "public", ObjectKind::Schema)]);
-        assert_eq!(labels(&pg), [(0, "app".into()), (1, "public".into())]);
-        assert!(
-            pg.expand(NodePath::Schema("app".into(), "public".into()))
-                .is_none()
-        );
-        let v = labels(&pg);
-        assert_eq!(v[2], (2, "Tables".into()));
-
-        let mut my = tree(DriverKind::Mysql);
-        assert!(my.expand(NodePath::Database("app".into())).is_none());
-        assert_eq!(labels(&my)[1], (1, "Tables".into()));
-    }
-
-    #[test]
-    fn two_trees_never_share_request_ids() {
-        // Arrange
-        let mut a = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
-        let mut b = ObjectTree::new(WorkspaceId(2), DriverKind::Mysql);
-
-        // Act & Assert
-        let ra = req_of(a.load_roots());
-        let rb = req_of(b.load_roots());
-        assert_ne!(ra, rb);
-        b.apply_children(ra, vec![obj("x", None, "x", ObjectKind::Database)]);
-        assert!(b.visible().next().is_none(), "foreign reply ignored");
-    }
-
-    #[test]
-    fn empty_children_resolves_pending_and_root_refreshes() {
-        // Arrange
-        let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
-
-        // Act & Assert
-        let r = req_of(t.load_roots());
-        t.apply_children(r, vec![]);
-        assert!(t.load_roots().is_none(), "empty reply resolved the root");
-        let r2 = req_of(t.refresh_root());
-        assert_ne!(r, r2);
-        t.apply_children(r2, vec![obj("app", None, "app", ObjectKind::Database)]);
-        assert_eq!(t.visible().count(), 1);
-        t.reset();
-        assert!(t.load_roots().is_some(), "reconnect starts over");
-    }
-
-    #[test]
-    fn filter_keeps_original_text() {
-        // Arrange
-        let mut t = ObjectTree::new(WorkspaceId(1), DriverKind::Mysql);
-
-        // Act
-        t.filter("ORD");
-
-        // Assert
-        assert_eq!(t.filter_text(), "ORD");
-    }
-
-    #[test]
-    fn folders_match_spec_per_driver() {
-        use ObjectKind::*;
-
-        // Act & Assert
-        assert_eq!(
-            folder_kinds(DriverKind::Postgres),
-            [
-                Table,
-                View,
-                MaterializedView,
-                Function,
-                Procedure,
-                Trigger,
-                Sequence,
-                Type
-            ]
-        );
-        assert_eq!(
-            folder_kinds(DriverKind::Mysql),
-            [Table, View, Function, Procedure, Trigger]
-        );
-    }
-
-    #[test]
-    fn expand_loads_once_and_caches() {
-        // Arrange
-        let mut t = tree(DriverKind::Mysql);
-        t.expand(NodePath::Database("app".into()));
-        let f = folder(None, ObjectKind::Table);
-
-        // Act & Assert
-        let r = req_of(t.expand(f.clone()));
-        assert!(t.expand(f.clone()).is_none(), "pending");
-        t.apply_children(r, vec![obj("app", None, "users", ObjectKind::Table)]);
-        assert!(t.toggle(f.clone()).is_none(), "collapse");
-        assert!(t.toggle(f.clone()).is_none(), "re-expand uses the cache");
-        assert!(t.visible().any(|n| n.label == "users"));
-        let r2 = req_of(t.refresh(f));
-        assert_ne!(r, r2);
-    }
-
-    #[test]
-    fn filter_matches_loaded_nodes_case_insensitive() {
-        // Arrange
-        let mut t = tree(DriverKind::Mysql);
-        t.expand(NodePath::Database("app".into()));
-        let r = req_of(t.expand(folder(None, ObjectKind::Table)));
-        t.apply_children(
-            r,
-            vec![
-                obj("app", None, "users", ObjectKind::Table),
-                obj("app", None, "Orders", ObjectKind::Table),
-            ],
-        );
-
-        // Act & Assert
-        t.filter("ORD");
-        let names: Vec<_> = t.visible().map(|n| n.label).collect();
-        assert_eq!(names, ["app", "Tables", "Orders"]);
-        t.filter("");
-        assert_eq!(t.visible().filter(|n| n.object.is_some()).count(), 2);
-    }
-
-    #[test]
-    fn double_click_table_opens_data_tab_function_opens_ddl() {
-        use ObjectKind::*;
-
-        // Act & Assert
-        for k in [Table, View, MaterializedView] {
-            assert_eq!(open_action(k), OpenAction::Data);
-        }
-        for k in [Function, Procedure, Trigger, Sequence, Type] {
-            assert_eq!(open_action(k), OpenAction::Ddl);
-        }
-    }
-}
+#[path = "tree_tests.rs"]
+mod tests;

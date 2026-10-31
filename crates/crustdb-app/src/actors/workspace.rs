@@ -311,10 +311,12 @@ impl WorkspaceActor {
                 }
                 self.out.emit(Event::Notice {
                     tab: NO_TAB,
-                    text: e.message,
+                    text: e.message.clone(),
                 });
-                // The sidebar leaves its pending state on any answer.
-                self.out.emit(Event::Children { req, items: vec![] });
+                self.out.emit(Event::ChildrenFailed {
+                    req,
+                    error: e.message,
+                });
             }
         }
     }

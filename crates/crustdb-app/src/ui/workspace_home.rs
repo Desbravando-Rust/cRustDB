@@ -15,6 +15,16 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         return out;
     }
     ui.weak("Tables - double-click to open");
+    if let Some(msg) = w.tree.tables_error(db) {
+        ui.colored_label(
+            ui.visuals().error_fg_color,
+            format!("Failed to load tables: {msg}"),
+        );
+        if ui.button("Retry").clicked() {
+            out.push(Intent::RefreshNode(w.tree.home_tables_node(db)));
+        }
+        return out;
+    }
     let Some(tables) = w.tree.loaded_tables(db) else {
         ui.label("Loading…");
         return out;
@@ -185,6 +195,32 @@ mod tests {
         // Assert
         h.get_by_label("Loading…");
         assert!(h.query_by_label("No tables").is_none());
+    }
+
+    #[test]
+    fn workspace_home_failed_load_shows_error_and_retry() {
+        // Arrange
+        let (mut w, req) = pending();
+        w.tree.fail_children(req, "boom".into());
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if ready(ui, &mut done) {
+                got.extend(show(ui, &w));
+            }
+        });
+        h.run();
+
+        // Act
+        h.get_by_label("Retry").click();
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label_contains("boom").is_some());
+        assert!(h.query_by_label("Loading…").is_none());
+        assert!(h.query_by_label("No tables").is_none());
+        drop(h);
+        assert!(got.contains(&Intent::RefreshNode(w.tree.home_tables_node("d"))));
     }
 
     #[test]

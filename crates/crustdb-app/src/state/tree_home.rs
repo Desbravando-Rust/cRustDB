@@ -36,6 +36,20 @@ impl ObjectTree {
         nodes.into_iter().filter_map(|n| self.expand(n)).collect()
     }
 
+    /// Node whose load fills the home table list (refresh it to retry a failure).
+    pub fn home_tables_node(&self, db: &str) -> NodePath {
+        let (db, schema) = self.tables_home(db);
+        Self::tables_folder(db, schema)
+    }
+
+    /// Error of the last tables load of the configured database, if it failed.
+    pub fn tables_error(&self, db: &str) -> Option<&str> {
+        match &self.entries.get(&self.home_tables_node(db))?.load {
+            Load::Failed(m) => Some(m),
+            _ => None,
+        }
+    }
+
     /// Loaded tables of the configured database (same addressing as `expand_tables_of`).
     /// `None` until the load finishes; callers must request it (`expand_tables_of`) after a connect
     /// or refresh, otherwise it stays `None`.

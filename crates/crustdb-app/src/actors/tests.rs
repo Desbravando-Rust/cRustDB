@@ -457,7 +457,7 @@ async fn workspace_actor_panic_resets_connection_state() {
 }
 
 #[tokio::test]
-async fn load_children_failure_still_answers_with_empty_children() {
+async fn load_children_failure_answers_with_children_failed() {
     // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
@@ -476,10 +476,14 @@ async fn load_children_failure_still_answers_with_empty_children() {
     // Assert
     let ev = drain(&h.rx);
     assert!(ev.iter().any(|e| matches!(e, Event::Notice { .. })));
-    assert!(
-        ev.iter()
-            .any(|e| matches!(e, Event::Children { req: RequestId(5), items } if items.is_empty()))
-    );
+    assert!(ev.iter().any(|e| matches!(
+        e,
+        Event::ChildrenFailed {
+            req: RequestId(5),
+            ..
+        }
+    )));
+    assert!(!ev.iter().any(|e| matches!(e, Event::Children { .. })));
 }
 
 #[tokio::test]
