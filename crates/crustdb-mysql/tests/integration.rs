@@ -382,3 +382,56 @@ async fn update_cell_via_build_update_affects_one_row() {
     assert_eq!(f.rows[0][0], Cell::text_capped("z"));
     s.close().await;
 }
+
+#[tokio::test]
+#[ignore = "docker"]
+async fn insert_and_delete_via_build_affect_one_row() {
+    use crustdb_core::edit::{build_delete, build_insert};
+    use crustdb_core::model::{Cell, ColumnMeta, ObjectKind, ObjectRef, TypeCategory};
+
+    // Arrange
+    let db = start_mysql(None, None).await;
+    let mut s = MysqlDriver
+        .connect(&target(&db, TlsMode::Disable, None), SessionPurpose::Editor)
+        .await
+        .unwrap();
+    for sql in [
+        "CREATE DATABASE e",
+        "CREATE TABLE e.t(id INT PRIMARY KEY, v VARCHAR(8))",
+    ] {
+        s.start(sql, ExecMode::Other).await.unwrap();
+        s.finish().await.unwrap();
+    }
+    let col = |name: &str, type_name: &str, category, pk| ColumnMeta {
+        name: name.into(),
+        type_name: type_name.into(),
+        category,
+        nullable: None,
+        is_primary_key: pk,
+    };
+    let cols = vec![
+        col("id", "int", TypeCategory::Integer, true),
+        col("v", "varchar", TypeCategory::Text, false),
+    ];
+    let object = ObjectRef {
+        database: "e".into(),
+        schema: None,
+        name: "t".into(),
+        kind: ObjectKind::Table,
+    };
+    let dialect = MysqlDriver.dialect();
+    let row = vec![Cell::text_capped("1"), Cell::Null];
+    let ghost = vec![Cell::text_capped("99"), Cell::Null];
+
+    // Act & Assert
+    let b = build_insert(dialect, &object, &cols, &[(0, Some("1".into())), (1, None)]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+    let b = build_delete(dialect, &object, &cols, &[&ghost]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(0));
+    let b = build_delete(dialect, &object, &cols, &[&row]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+    s.close().await;
+}
