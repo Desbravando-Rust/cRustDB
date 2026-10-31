@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::sync::Arc;
 
 use crustdb_app::app::CrustApp;
-use crustdb_app::runtime::DriverRegistry;
+use crustdb_app::runtime::drivers;
 use crustdb_app::storage::config::{ConfigStore, LoadedConfig};
 use crustdb_app::storage::{paths, secrets};
 use tracing_subscriber::prelude::*;
@@ -65,10 +65,7 @@ fn main() -> anyhow::Result<()> {
             warning: Some(format!("could not load connections: {e}")),
         }
     });
-    let drivers = DriverRegistry::default()
-        .with(Arc::new(crustdb_postgres::PostgresDriver))
-        .with(Arc::new(crustdb_mysql::MysqlDriver))
-        .with(Arc::new(crustdb_sqlite::SqliteDriver));
+    let drivers = drivers();
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title(APP_NAME)

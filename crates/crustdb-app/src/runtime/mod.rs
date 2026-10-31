@@ -55,6 +55,15 @@ impl DriverRegistry {
     }
 }
 
+/// The drivers the app ships with.
+pub fn drivers() -> DriverRegistry {
+    DriverRegistry::default()
+        .with(Arc::new(crustdb_postgres::PostgresDriver))
+        .with(Arc::new(crustdb_mysql::MysqlDriver))
+        .with(Arc::new(crustdb_sqlite::SqliteDriver))
+        .with_store(Arc::new(crustdb_redis::RedisDriver))
+}
+
 /// Sends events to the UI and wakes it up.
 #[derive(Clone)]
 pub(crate) struct Emitter {
@@ -219,6 +228,29 @@ mod tests {
     use crustdb_testkit::fake_driver::{FakeDriver, FakeScript};
 
     use super::*;
+
+    #[test]
+    fn default_registry_serves_redis_as_store() {
+        // Arrange
+        let reg = drivers();
+
+        // Act
+        let backend = reg.get(DriverKind::Redis);
+
+        // Assert
+        assert!(matches!(backend, Some(Backend::Store(_))));
+    }
+
+    #[test]
+    fn default_registry_serves_sql_kinds_as_sql() {
+        // Arrange
+        let reg = drivers();
+
+        // Act & Assert
+        for kind in [DriverKind::Postgres, DriverKind::Mysql, DriverKind::Sqlite] {
+            assert!(matches!(reg.get(kind), Some(Backend::Sql(_))), "{kind:?}");
+        }
+    }
 
     fn registry() -> DriverRegistry {
         DriverRegistry::default().with(FakeDriver::new(FakeScript::default()))
