@@ -3,6 +3,8 @@ use crustdb_core::model::{
 };
 use crustdb_core::query::{Filter, Sort, TableQuery};
 
+use crustdb_core::keyset;
+
 use super::filter_draft::FilterDraft;
 use crate::runtime::{Command, RequestId, TabId};
 
@@ -28,6 +30,9 @@ pub struct TableTab {
     pub columns: Vec<ColumnMeta>,
     pub rows: Vec<Row>,
     pub page: u64,
+    /// Keyset cursor of each visited page (`anchors[p]` selects page `p`; ADR 0011).
+    /// Missing or `None` means `OFFSET`.
+    anchors: Vec<Option<Vec<String>>>,
     pub page_size: u32,
     pub has_more: bool,
     pub estimate: Option<u64>,
@@ -68,6 +73,7 @@ impl TableTab {
             columns: vec![],
             rows: vec![],
             page: 0,
+            anchors: vec![],
             page_size,
             has_more: false,
             estimate: None,
@@ -139,19 +145,17 @@ impl TableTab {
     }
 
     pub fn query(&self) -> TableQuery {
-        // Stable pagination: without an explicit sort, order by the primary key.
-        let sorts = if self.sorts.is_empty() {
-            self.columns
-                .iter()
-                .filter(|c| c.is_primary_key)
-                .map(|c| Sort {
+        // Stable pagination: explicit sorts, then the primary-key columns they miss as ASC
+        // tie-break (all of them when there is no explicit sort).
+        let mut sorts = self.sorts.clone();
+        for c in self.columns.iter().filter(|c| c.is_primary_key) {
+            if !sorts.iter().any(|s| s.column == c.name) {
+                sorts.push(Sort {
                     column: c.name.clone(),
                     descending: false,
-                })
-                .collect()
-        } else {
-            self.sorts.clone()
-        };
+                });
+            }
+        }
         TableQuery {
             object: self.object.clone(),
             columns: self.columns.clone(),
@@ -159,8 +163,14 @@ impl TableTab {
             sorts,
             limit: Some(u64::from(self.page_size) + 1),
             offset: self.page * u64::from(self.page_size),
-            after: None,
+            after: self.anchors.get(self.page as usize).cloned().flatten(),
         }
+    }
+
+    /// Back to page 0 with no cursors (sort or filter changed).
+    pub(crate) fn reset_paging(&mut self) {
+        self.page = 0;
+        self.anchors.clear();
     }
 
     pub fn apply_filters(&mut self, req: RequestId) -> Option<Command> {
@@ -176,7 +186,7 @@ impl TableTab {
             Ok(f) => {
                 self.filters = f;
                 self.filter_error = None;
-                self.page = 0;
+                self.reset_paging();
                 Some(self.fetch(req))
             }
             Err(e) => {
@@ -234,7 +244,7 @@ impl TableTab {
         self.drafts.clear();
         self.filters.clear();
         self.filter_error = None;
-        self.page = 0;
+        self.reset_paging();
         Some(self.fetch(req))
     }
 
@@ -252,6 +262,12 @@ impl TableTab {
     pub fn apply_page(&mut self, mut rows: Vec<Row>) {
         self.has_more = rows.len() > self.page_size as usize;
         rows.truncate(self.page_size as usize);
+        // Cursor for the next page, from the server's last row (ADR 0011).
+        self.anchors.resize(self.page as usize + 1, None);
+        if self.has_more {
+            let next = rows.last().and_then(|r| keyset::after(&self.query(), r));
+            self.anchors.push(next);
+        }
         self.rows = rows;
         self.editing = None;
         // Staged changes point at row indexes of the old page.
@@ -268,7 +284,7 @@ impl TableTab {
             return false;
         }
         toggle_sort(&mut self.sorts, column, shift);
-        self.page = 0;
+        self.reset_paging();
         true
     }
 
@@ -344,3 +360,7 @@ pub(crate) fn toggle_sort(sorts: &mut Vec<Sort>, column: &str, shift: bool) {
 #[cfg(test)]
 #[path = "table_tab_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "table_tab_keyset_tests.rs"]
+mod keyset_tests;
