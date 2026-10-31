@@ -97,6 +97,77 @@ mod tests {
         assert!(w.tree.loaded_tables("d").is_none());
     }
 
+    fn tables_folder() -> crate::state::tree::NodePath {
+        crate::state::tree::NodePath::Folder {
+            database: "d".into(),
+            schema: Some("public".into()),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    #[test]
+    fn refresh_unrelated_node_keeps_tables_collapsed() {
+        // Arrange
+        let (mut w, _) = pending();
+        let obj = |schema: Option<&str>, name: &str, kind| ObjectRef {
+            database: "d".into(),
+            schema: schema.map(Into::into),
+            name: name.into(),
+            kind,
+        };
+        let Some(Command::LoadChildren { req, .. }) = w.tree.refresh_root() else {
+            panic!("no roots load");
+        };
+        w.tree
+            .apply_children(req, vec![obj(None, "d", ObjectKind::Database)]);
+        let cmds = w.expand_home();
+        let reqs: Vec<_> = cmds
+            .iter()
+            .filter_map(|c| match c {
+                Command::LoadChildren { req, .. } => Some(*req),
+                _ => None,
+            })
+            .collect();
+        w.tree
+            .apply_children(reqs[0], vec![obj(None, "public", ObjectKind::Schema)]);
+        w.tree.apply_children(reqs[1], vec![]);
+        w.tree.toggle(tables_folder());
+        let views = crate::state::tree::NodePath::Folder {
+            database: "d".into(),
+            schema: Some("public".into()),
+            kind: ObjectKind::View,
+        };
+        w.tree.refresh(views);
+
+        // Act
+        let cmds = w.expand_home();
+
+        // Assert
+        assert!(cmds.is_empty());
+        let row = w.tree.visible().find(|n| n.label == "Tables");
+        assert!(row.is_some_and(|n| !n.expanded));
+    }
+
+    #[test]
+    fn refresh_database_then_expand_home_requests_tables_folder() {
+        // Arrange
+        let (mut w, _) = pending();
+        w.tree
+            .refresh(crate::state::tree::NodePath::Database("d".into()));
+
+        // Act
+        let cmds = w.expand_home();
+
+        // Assert
+        assert!(matches!(
+            cmds.last(),
+            Some(Command::LoadChildren {
+                kind: Some(ObjectKind::Table),
+                ..
+            })
+        ));
+    }
+
     #[test]
     fn workspace_home_while_loading_shows_loading() {
         // Arrange

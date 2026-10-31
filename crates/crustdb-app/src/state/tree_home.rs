@@ -31,6 +31,8 @@ impl ObjectTree {
             nodes.push(NodePath::Schema(db.into(), s.clone()));
         }
         nodes.push(Self::tables_folder(db, schema));
+        // Only nodes never seen: an unrelated refresh must not re-expand what the user collapsed.
+        nodes.retain(|n| !self.entries.contains_key(n));
         nodes.into_iter().filter_map(|n| self.expand(n)).collect()
     }
 
