@@ -286,3 +286,45 @@ async fn update_cell_via_build_update_affects_one_row() {
         vec![vec!["z".to_string()], vec!["y".to_string()]]
     );
 }
+
+#[tokio::test]
+async fn insert_and_delete_via_build_affect_one_row() {
+    use crustdb_core::edit::{build_delete, build_insert};
+    use crustdb_core::model::{ColumnMeta, ObjectKind, ObjectRef};
+
+    // Arrange
+    let f = NamedTempFile::new().unwrap();
+    let mut s = open(f.path(), SessionPurpose::Editor).await;
+    affected(&mut s, "CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)").await;
+    let col = |name: &str, type_name: &str, category, pk| ColumnMeta {
+        name: name.into(),
+        type_name: type_name.into(),
+        category,
+        nullable: None,
+        is_primary_key: pk,
+    };
+    let cols = vec![
+        col("id", "INTEGER", TypeCategory::Integer, true),
+        col("v", "TEXT", TypeCategory::Text, false),
+    ];
+    let object = ObjectRef {
+        database: "main".into(),
+        schema: None,
+        name: "t".into(),
+        kind: ObjectKind::Table,
+    };
+    let dialect = SqliteDriver.dialect();
+    let row = vec![Cell::text_capped("1"), Cell::Null];
+    let ghost = vec![Cell::text_capped("99"), Cell::Null];
+
+    // Act & Assert
+    let b = build_insert(dialect, &object, &cols, &[(0, Some("1".into())), (1, None)]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+    let b = build_delete(dialect, &object, &cols, &[&ghost]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(0));
+    let b = build_delete(dialect, &object, &cols, &[&row]).unwrap();
+    s.start_params(&b.sql, &b.params).await.unwrap();
+    assert_eq!(s.finish().await.unwrap().affected_rows, Some(1));
+}

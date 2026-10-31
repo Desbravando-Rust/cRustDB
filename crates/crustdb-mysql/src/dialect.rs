@@ -50,6 +50,8 @@ impl Dialect for MysqlDialect {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crustdb_core::edit::{build_delete, build_insert};
+    use crustdb_core::model::Cell;
     use crustdb_core::model::ObjectKind;
 
     fn col(name: &str, type_name: &str, category: TypeCategory) -> ColumnMeta {
@@ -158,5 +160,48 @@ mod tests {
         );
         assert!(!b.sql.contains("OFFSET"));
         assert_eq!(b.params.len(), 3);
+    }
+
+    fn tbl() -> ObjectRef {
+        ObjectRef {
+            database: "db".into(),
+            schema: None,
+            name: "t".into(),
+            kind: ObjectKind::Table,
+        }
+    }
+
+    fn pk_col() -> ColumnMeta {
+        ColumnMeta {
+            is_primary_key: true,
+            ..col("id", "int", TypeCategory::Integer)
+        }
+    }
+
+    #[test]
+    fn mysql_insert_sql() {
+        // Arrange
+        let cols = [pk_col(), col("n", "text", TypeCategory::Text)];
+
+        // Act
+        let b = build_insert(&MysqlDialect, &tbl(), &cols, &[(1, Some("x".into()))]).unwrap();
+
+        // Assert
+        assert_eq!(b.sql, r#"INSERT INTO `db`.`t` (`n`) VALUES (?)"#);
+    }
+
+    #[test]
+    fn mysql_delete_sql() {
+        // Arrange
+        let row = [Cell::Text {
+            value: "1".into(),
+            truncated: false,
+        }];
+
+        // Act
+        let b = build_delete(&MysqlDialect, &tbl(), &[pk_col()], &[&row]).unwrap();
+
+        // Assert
+        assert_eq!(b.sql, r#"DELETE FROM `db`.`t` WHERE (`id` = ?)"#);
     }
 }
