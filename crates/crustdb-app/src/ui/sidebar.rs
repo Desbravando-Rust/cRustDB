@@ -64,6 +64,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             out.push(Intent::Disconnect(active.id));
         }
     });
+    if let Some(ks) = &active.keyspace {
+        out.extend(super::keyspace::sidebar(ui, ks));
+        return out;
+    }
     let mut q = active.tree.filter_text().to_owned();
     let edit = egui::Frame::new()
         .fill(egui::Color32::from_gray(40))

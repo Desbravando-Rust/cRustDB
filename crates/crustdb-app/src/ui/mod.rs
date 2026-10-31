@@ -11,6 +11,7 @@ pub mod grid;
 pub mod grid_copy;
 pub mod history_panel;
 pub mod home;
+pub mod keyspace;
 pub mod labels;
 pub mod picker;
 pub mod results;
@@ -115,6 +116,11 @@ pub enum Intent {
         sql: String,
     },
     LoadColumns(ObjectRef),
+    LoadMoreKeys,
+    /// Glob pattern of the key scan; empty clears it.
+    KeyFilter(String),
+    ToggleKey(Vec<u8>),
+    OpenKey(crustdb_core::store::keyspace::EntryKey),
     /// ER diagram of a schema (PG) or database (MySQL, `schema: None`).
     OpenDiagram {
         database: String,

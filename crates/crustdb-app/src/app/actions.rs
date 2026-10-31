@@ -21,6 +21,26 @@ impl CrustApp {
         }
     }
 
+    pub(super) fn handle_keyspace(&mut self, intent: Intent) {
+        let Some(req) = self.runtime.as_ref().map(|rt| rt.next_request_id()) else {
+            return;
+        };
+        let Some(ks) = self.active_ws().and_then(|w| w.keyspace.as_mut()) else {
+            return;
+        };
+        let cmd = match intent {
+            Intent::LoadMoreKeys => ks.load_more(req),
+            Intent::KeyFilter(text) => ks.set_filter(text, req),
+            Intent::OpenKey(key) => Some(ks.open(key, req)),
+            Intent::ToggleKey(path) => {
+                ks.toggle(&path);
+                None
+            }
+            _ => None,
+        };
+        self.send(cmd);
+    }
+
     pub(super) fn active_ws(&mut self) -> Option<&mut crate::state::WorkspaceState> {
         let id = self.state.active?;
         self.state.workspace_mut(id)

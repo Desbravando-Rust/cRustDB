@@ -348,6 +348,10 @@ impl CrustApp {
                 let cmd = self.state.query_mut(tab).and_then(|q| q.load_more());
                 self.send(cmd);
             }
+            i @ (Intent::LoadMoreKeys
+            | Intent::KeyFilter(_)
+            | Intent::ToggleKey(_)
+            | Intent::OpenKey(_)) => self.handle_keyspace(i),
             other => self.handle_files(other),
         }
     }
