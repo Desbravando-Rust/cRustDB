@@ -142,7 +142,11 @@ impl TableTab {
 
     /// One `DELETE` for the selected rows (cursor to anchor); refused while changes are pending.
     pub fn delete_selected(&mut self, req: RequestId) -> Option<Command> {
-        if self.pending_blocks() || self.loading.is_some() || self.edit_req.is_some() {
+        if self.loading.is_some() {
+            self.notice = Some("Table is loading, delete cancelled".into());
+            return None;
+        }
+        if self.pending_blocks() || self.edit_req.is_some() {
             return None;
         }
         let (lo, hi) = self.selection()?;

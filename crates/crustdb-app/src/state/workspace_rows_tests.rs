@@ -109,3 +109,23 @@ fn selection_changed_between_request_and_confirm_sends_nothing() {
         Some("Selection changed, delete cancelled")
     );
 }
+
+#[test]
+fn loading_between_request_and_confirm_explains_and_sends_nothing() {
+    // Arrange
+    let (mut s, tab) = setup();
+    s.request_delete_rows(tab);
+    s.table_mut(tab).unwrap().loading = Some(RequestId(1));
+
+    // Act
+    let cmd = s.confirm_delete_rows(RequestId(9));
+
+    // Assert
+    assert!(cmd.is_none());
+    let t = s.table_mut(tab).unwrap();
+    assert!(t.edit_req.is_none());
+    assert_eq!(
+        t.notice.as_deref(),
+        Some("Table is loading, delete cancelled")
+    );
+}
