@@ -69,6 +69,10 @@ impl RedisSession {
         &mut self,
         keys: &[Vec<u8>],
     ) -> Result<Vec<Result<(String, i64), DriverError>>, DriverError> {
+        // An empty pipeline is rejected client-side ("empty command").
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
         let mut pipe = redis::pipe();
         pipe.ignore_errors();
         for k in keys {
