@@ -142,11 +142,7 @@ impl TableTab {
 
     /// One `DELETE` for the selected rows (cursor to anchor); refused while changes are pending.
     pub fn delete_selected(&mut self, req: RequestId) -> Option<Command> {
-        if self.loading.is_some() {
-            self.notice = Some("Table is loading, delete cancelled".into());
-            return None;
-        }
-        if self.pending_blocks() || self.edit_req.is_some() {
+        if self.delete_busy() || self.pending_blocks() {
             return None;
         }
         let (lo, hi) = self.selection()?;
@@ -166,6 +162,19 @@ impl TableTab {
                 None
             }
         }
+    }
+
+    /// A reload or save is in flight: explain why a delete is refused.
+    pub(crate) fn delete_busy(&mut self) -> bool {
+        let why = if self.loading.is_some() {
+            "Table is loading, delete cancelled"
+        } else if self.edit_req.is_some() {
+            "Saving changes, delete cancelled"
+        } else {
+            return false;
+        };
+        self.notice = Some(why.into());
+        true
     }
 
     pub(crate) fn writable(&mut self) -> bool {

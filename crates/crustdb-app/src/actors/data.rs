@@ -281,7 +281,7 @@ async fn read_page(
     let done = s.finish().await;
     let rows = body?;
     done?;
-    let has_more = rows.len() >= want;
+    let has_more = want > 0 && rows.len() >= want;
     let estimate = if filtered {
         None
     } else {

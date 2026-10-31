@@ -21,6 +21,15 @@ impl AppState {
         }
     }
 
+    /// The open DeleteRows dialog's table is loading or saving: its Delete button is disabled.
+    pub fn delete_rows_busy(&mut self) -> bool {
+        let Some(&Dialog::DeleteRows { tab, .. }) = self.dialogs.top() else {
+            return false;
+        };
+        self.table_mut(tab)
+            .is_some_and(|t| t.loading.is_some() || t.edit_req.is_some())
+    }
+
     /// Pops the dialog and sends the `DELETE` for the rows the dialog counted; if the selection
     /// moved meanwhile (the dialog is not modal), nothing is sent.
     pub fn confirm_delete_rows(&mut self, req: RequestId) -> Option<Command> {

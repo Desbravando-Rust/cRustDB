@@ -242,6 +242,24 @@ async fn page_has_more_when_rows_reach_limit_including_lookahead() {
 }
 
 #[tokio::test]
+async fn page_has_no_more_for_zero_limit() {
+    // Arrange
+    let mut h = harness(FakeScript {
+        rows: rows(3),
+        ..FakeScript::default()
+    });
+    connect(&mut h, None).await;
+    open_table(&mut h).await;
+
+    // Act
+    fetch(&mut h, 1, query(0, vec![]));
+    let (_, n, has_more, _) = page(&mut h).await;
+
+    // Assert
+    assert_eq!((n, has_more), (0, false));
+}
+
+#[tokio::test]
 async fn page_attaches_estimate_only_without_filters() {
     // Arrange
     let mut h = harness(FakeScript {
