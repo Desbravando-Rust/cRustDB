@@ -31,7 +31,23 @@ impl ObjectTree {
             nodes.push(NodePath::Schema(db.into(), s.clone()));
         }
         nodes.push(Self::tables_folder(db, schema));
+        // Only nodes never seen: an unrelated refresh must not re-expand what the user collapsed.
+        nodes.retain(|n| !self.entries.contains_key(n));
         nodes.into_iter().filter_map(|n| self.expand(n)).collect()
+    }
+
+    /// Node whose load fills the home table list (refresh it to retry a failure).
+    pub fn home_tables_node(&self, db: &str) -> NodePath {
+        let (db, schema) = self.tables_home(db);
+        Self::tables_folder(db, schema)
+    }
+
+    /// Error of the last tables load of the configured database, if it failed.
+    pub fn tables_error(&self, db: &str) -> Option<&str> {
+        match &self.entries.get(&self.home_tables_node(db))?.load {
+            Load::Failed(m) => Some(m),
+            _ => None,
+        }
     }
 
     /// Loaded tables of the configured database (same addressing as `expand_tables_of`).

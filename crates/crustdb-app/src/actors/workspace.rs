@@ -309,12 +309,11 @@ impl WorkspaceActor {
                 if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
                     self.mark_down(key);
                 }
-                self.out.emit(Event::Notice {
-                    tab: NO_TAB,
-                    text: e.message,
+                tracing::warn!("children load failed: {}", e.message);
+                self.out.emit(Event::ChildrenFailed {
+                    req,
+                    error: e.message,
                 });
-                // The sidebar leaves its pending state on any answer.
-                self.out.emit(Event::Children { req, items: vec![] });
             }
         }
     }

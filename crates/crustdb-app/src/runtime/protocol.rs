@@ -233,6 +233,10 @@ pub enum Event {
         req: RequestId,
         items: Vec<ObjectRef>,
     },
+    ChildrenFailed {
+        req: RequestId,
+        error: String,
+    },
     /// `None` when the lookup failed.
     Diagram {
         req: RequestId,

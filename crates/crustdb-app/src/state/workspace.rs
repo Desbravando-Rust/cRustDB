@@ -325,6 +325,11 @@ impl AppState {
                     w.tree.apply_children(req, items.clone());
                 }
             }
+            Event::ChildrenFailed { req, error } => {
+                for w in &mut self.workspaces {
+                    w.tree.fail_children(req, error.clone());
+                }
+            }
             Event::Page {
                 req,
                 header,
@@ -418,6 +423,8 @@ impl AppState {
                 }
             }
             Event::ActorCrashed { tab } => {
+                // The restarted actor is Idle and never emits TxChanged: stop waiting for it.
+                self.disconnecting.retain(|_, tabs| !tabs.contains(&tab));
                 if let Some(t) = self.table_mut(tab) {
                     t.fail("connection actor crashed".into());
                 } else if let Some(q) = self.query_mut(tab) {

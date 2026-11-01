@@ -138,3 +138,29 @@ fn connected_with_database_queues_tables_load_and_without_queues_nothing() {
             if database == "d" && schema.as_deref() == Some("public")
     )));
 }
+
+#[test]
+fn children_failed_event_surfaces_tables_error() {
+    // Arrange
+    let mut s = state(&[]);
+    let mut c = super::tests::conn("a");
+    c.database = Some("d".into());
+    let ws = s.open_workspace(c);
+    let cmds = s.workspace_mut(ws).unwrap().tree.expand_tables_of("d");
+    let Some(Command::LoadChildren { req, .. }) = cmds.last() else {
+        panic!("no load command");
+    };
+    let req = *req;
+
+    // Act
+    s.apply(Event::ChildrenFailed {
+        req,
+        error: "boom".into(),
+    });
+
+    // Assert
+    assert_eq!(
+        s.workspace_mut(ws).unwrap().tree.tables_error("d"),
+        Some("boom")
+    );
+}
