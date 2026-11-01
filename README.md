@@ -37,9 +37,9 @@
 - **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade. Client certificates (mTLS) for PostgreSQL and MySQL.
 - **SSH tunnel** via `russh`: password, key file (+ passphrase) or agent, strict `known_hosts`.
 - **Secrets** in the system keyring (Secret Service). Without one, **cRustDB** asks every time and never writes passwords to disk.
-- **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily. When the connection sets a database (PostgreSQL, MySQL), only that database is listed; if the server has no such database, the tree shows an error.
+- **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily. When the connection sets a database (PostgreSQL, MySQL), only that database is listed; if the server has no such database, the tree shows an error. DDL run in a query tab (once committed) refreshes the tree, the home table list and open table tabs on its own. The app version is shown at the bottom of the sidebar.
 - **Table tab**: virtualized grid, keyset pagination (falls back to `LIMIT/OFFSET` when the sort key does not allow it), multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
-- **Data editing**: edit cells inline, insert and delete rows in tables with a primary key; edits to a row are saved as one `UPDATE`, deletes ask for confirmation.
+- **Data editing**: edit cells inline, insert and delete rows in tables with a primary key; edits to a row are saved as one `UPDATE`, deletes ask for confirmation. Tables without a primary key are read-only and the grid says so.
 - **Foreign keys**: Ctrl+click a foreign key cell to open the referenced table filtered to the matching row.
 - **ER diagram**: read-only diagram of a schema or database, opened from the sidebar context menu.
 - **SQL editor**: highlighting, autocomplete, find and replace (Ctrl+F), format (Ctrl+Shift+F), run statement under cursor / selection / all, cancel, "Load more" from a server-side cursor, history, open/save `.sql` files.
