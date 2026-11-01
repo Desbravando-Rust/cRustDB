@@ -64,6 +64,7 @@ impl CrustApp {
         // Same panel id on both screens: the width carries over on connect.
         let online = self.state.active_online().is_some();
         let r = egui::Panel::left("sidebar").show(ui, |ui| {
+            ui::sidebar::footer(ui);
             if online {
                 intents.extend(ui::sidebar::show(ui, &self.state));
             } else {

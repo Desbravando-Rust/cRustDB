@@ -44,6 +44,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
                 );
             }
         });
+        ui.add_space(12.0);
         ui.strong("Indexes");
         grid(ui, "structure_indexes", 3, |ui| {
             row(ui, true, ["Name", "Columns", "Attributes"]);
@@ -64,6 +65,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
                 );
             }
         });
+        ui.add_space(12.0);
         ui.strong("Foreign keys");
         grid(ui, "structure_fks", 5, |ui| {
             row(
