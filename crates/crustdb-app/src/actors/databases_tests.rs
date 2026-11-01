@@ -98,5 +98,5 @@ async fn mysql_database_match_ignores_case() {
     let n = names(h, DriverKind::Mysql, Some("FAKE")).await;
 
     // Assert
-    assert_eq!(n, ["fake"]);
+    assert_eq!(n, ["FAKE"]);
 }

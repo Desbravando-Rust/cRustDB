@@ -379,8 +379,9 @@ fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>
             .then(|| v.iter().find(|n| n.eq_ignore_ascii_case(home)))
             .flatten()
     });
-    if let Some(n) = found {
-        return Ok(vec![n.clone()]);
+    if found.is_some() {
+        // Keep the configured spelling: the tree keys on `config.database`.
+        return Ok(vec![home.to_string()]);
     }
     // ponytail: PG template databases connect but `databases()` filters
     // `NOT datistemplate`, so they are reported missing; upgrade by letting the
