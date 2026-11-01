@@ -139,6 +139,15 @@ Integration tests run against PostgreSQL, MySQL, MariaDB and Redis in Docker via
 | `$XDG_CONFIG_HOME/crustdb/known_hosts` | Accepted SSH host keys (OpenSSH format) |
 | `$XDG_DATA_HOME/crustdb/history/<id>.jsonl` | Query history per connection, last 10,000 entries (0600) |
 
+## Network access
+
+At startup cRustDB makes two read-only GET requests (5 s timeout, no retry, failures ignored):
+
+- `https://api.github.com/repos/Desbravando-Rust/cRustDB/releases/latest`: shows an "Update available" link in the sidebar when a newer release exists.
+- `https://desbravandorust.com.br/feed.json`: picks a book chapter for the home banner (falls back to a static text).
+
+No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTDB_OFFLINE=1` to disable both requests (empty or `0` leaves them enabled).
+
 ## Performance
 
 Release build, Linux x86_64. Reproduce: `cargo test --release -p crustdb-app --test perf -- --include-ignored --test-threads=1 --nocapture`.

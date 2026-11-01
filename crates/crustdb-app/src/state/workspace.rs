@@ -107,6 +107,7 @@ pub struct AppState {
     pub workspaces: Vec<WorkspaceState>,
     pub active: Option<WorkspaceId>,
     pub dialogs: DialogStack,
+    pub news: std::sync::Arc<crate::news::News>,
     next_ws: u64,
     next_tab: u64,
     pub(super) evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
@@ -123,6 +124,7 @@ impl AppState {
             workspaces: vec![],
             active: None,
             dialogs: DialogStack::default(),
+            news: Default::default(),
             // 0 is the runtime's sentinel.
             next_ws: 1,
             next_tab: 1,

@@ -45,14 +45,18 @@ impl CrustApp {
         secrets: Box<dyn SecretStore>,
         drivers: crate::runtime::DriverRegistry,
     ) -> Self {
-        Self::with_ctx(
+        let app = Self::with_ctx(
             &cc.egui_ctx,
             config,
             store,
             secrets,
             drivers,
             crate::storage::paths::data_dir().join("history"),
-        )
+        );
+        // Network only here, never in `with_ctx` (UI tests).
+        let ctx = cc.egui_ctx.clone();
+        crate::news::spawn(app.state.news.clone(), move || ctx.request_repaint());
+        app
     }
 
     /// Construction without a window, so UI tests can drive the app.
