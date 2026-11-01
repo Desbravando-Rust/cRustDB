@@ -50,6 +50,7 @@ impl ResultPane {
         match e {
             Event::ResultStarted { header, .. } => {
                 self.header = Some(header.clone());
+                self.tab = ResultTab::Result;
                 self.rows.clear();
                 self.exhausted = false;
                 self.selected = None;
@@ -77,6 +78,10 @@ impl ResultPane {
                     (None, None) => "OK".into(),
                 };
                 self.push(*index, true, text, *duration);
+                // No grid to show (DDL, USE, INSERT): surface the message.
+                if self.header.is_none() {
+                    self.tab = ResultTab::Messages;
+                }
             }
             Event::ExecError { index, error, .. } => {
                 self.push(*index, false, error.message.clone(), Duration::ZERO);
@@ -92,6 +97,10 @@ impl ResultPane {
             text,
             duration,
         });
+        // Errors must never stay hidden behind the grid.
+        if !ok {
+            self.tab = ResultTab::Messages;
+        }
     }
 
     pub fn click_header(&mut self, column: &str, shift: bool) {

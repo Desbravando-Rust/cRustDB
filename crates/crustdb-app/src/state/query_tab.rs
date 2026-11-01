@@ -186,7 +186,11 @@ impl QueryTab {
                 let n = self.pane.messages.len();
                 self.pane.push(n, true, text.clone(), Duration::ZERO);
                 // The actor refused an Execute (stale evaluation) or lost the session.
-                if text.starts_with(LOST) || text == STALE_EVALUATION || self.bg {
+                let refused = text.starts_with(LOST) || text == STALE_EVALUATION;
+                if refused || self.bg {
+                    if refused {
+                        self.pane.tab = ResultTab::Messages;
+                    }
                     self.idle();
                 }
             }

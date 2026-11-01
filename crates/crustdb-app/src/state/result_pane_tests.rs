@@ -339,3 +339,60 @@ fn decimal_accepts_leading_dot() {
     // Assert
     assert_eq!(p.view, vec![2, 0, 1]);
 }
+
+#[test]
+fn exec_error_switches_to_messages() {
+    // Arrange
+    let mut p = ResultPane::default();
+
+    // Act
+    p.apply(&Event::ExecError {
+        req: RequestId(1),
+        index: 0,
+        error: crustdb_core::error::DriverError {
+            kind: crustdb_core::error::ErrorKind::Protocol,
+            message: "boom".into(),
+        },
+        history: hist(None),
+    });
+
+    // Assert
+    assert_eq!(p.tab, ResultTab::Messages);
+}
+
+#[test]
+fn statement_done_without_result_switches_to_messages() {
+    // Arrange
+    let mut p = ResultPane::default();
+
+    // Act
+    p.apply(&done(1, 0, Some(0), None));
+
+    // Assert
+    assert_eq!(p.tab, ResultTab::Messages);
+}
+
+#[test]
+fn result_started_keeps_result_tab() {
+    // Arrange
+    let mut p = ResultPane {
+        tab: ResultTab::Messages,
+        ..Default::default()
+    };
+    let r = RequestId(1);
+
+    // Act
+    p.apply(&Event::ResultStarted {
+        req: r,
+        header: header(),
+    });
+    p.apply(&Event::Rows {
+        req: r,
+        rows: rows(1),
+        exhausted: true,
+    });
+    p.apply(&done(1, 0, None, Some(1)));
+
+    // Assert
+    assert_eq!(p.tab, ResultTab::Result);
+}
