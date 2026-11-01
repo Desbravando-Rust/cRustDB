@@ -85,7 +85,6 @@ impl ResultPane {
             }
             Event::ExecError { index, error, .. } => {
                 self.push(*index, false, error.message.clone(), Duration::ZERO);
-                self.tab = ResultTab::Messages;
             }
             _ => {}
         }
@@ -98,6 +97,10 @@ impl ResultPane {
             text,
             duration,
         });
+        // Errors must never stay hidden behind the grid.
+        if !ok {
+            self.tab = ResultTab::Messages;
+        }
     }
 
     pub fn click_header(&mut self, column: &str, shift: bool) {
