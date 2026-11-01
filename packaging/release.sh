@@ -5,6 +5,8 @@
 #                                         real com Cargo diferente (ou sem seção no CHANGELOG): bump + PR;
 #                                         real com Cargo e CHANGELOG já na main: cria a release vX.Y.Z.
 #                                         Criar a release dispara .github/workflows/release.yml (instaladores).
+#   packaging/release.sh rc            -> pergunta nome (sugere a próxima -rcN) e título; cria a pre-release
+#                                         com notas geradas desde a última RC.
 #   packaging/release.sh kind TAG CARGO_VERSION -> imprime rc|real|mismatch (usado pelo workflow).
 #   packaging/release.sh notes X.Y.Z   -> imprime a seção `## [X.Y.Z]` do CHANGELOG.
 #   packaging/release.sh changelog X.Y.Z -> converte os fragmentos em `## [X.Y.Z]` (usado pelo bump e pelo workflow).
@@ -123,6 +125,32 @@ kind() {
   fi
 }
 
+# Pre-release vX.Y.Z-rcN a partir de origin/main; notas = PRs/commits desde a última RC (gerados pelo GitHub).
+rc() {
+  local version="${1:-}" last title suggested=""
+  git fetch -q --tags "$remote" main
+  last="$(git tag -l 'v*-rc*' --sort=-v:refname | head -n1)"
+  [[ "$last" =~ ^v(.+-rc)([0-9]+)$ ]] && suggested="${BASH_REMATCH[1]}$((BASH_REMATCH[2] + 1))"
+  if [ -z "$version" ]; then
+    read -rp "Nome da RC (X.Y.Z-rcN)${suggested:+ [$suggested]}: " version
+    version="${version:-$suggested}"
+  fi
+  [ "$(kind "v$version" 0)" = rc ] || { echo "❌ Não é uma RC: '$version'"; exit 1; }
+  if git ls-remote --exit-code --tags "$remote" "refs/tags/v$version" >/dev/null; then
+    echo "❌ Tag v$version já existe em $remote."
+    exit 1
+  fi
+  read -rp "Título [v$version]: " title
+  title="${title:-v$version}"
+
+  echo "Mudanças em $remote/main desde ${last:-o início}:"
+  git log --oneline --no-merges ${last:+"$last.."}"$remote/main" | head -n 50
+  confirm "Criar a pre-release v$version a partir de $remote/main?"
+  gh release create "v$version" --prerelease --target "$(git rev-parse "$remote/main")" \
+    --title "$title" --generate-notes ${last:+--notes-start-tag "$last"}
+  echo "✅ Pre-release v$version criada. Acompanhe os instaladores em: gh run list --workflow release.yml"
+}
+
 notes() { awk -v h="## [$1]" '$0 == h {f = 1; next} f && /^## / {exit} f' "$changelog_file"; }
 
 release() {
@@ -135,8 +163,8 @@ release() {
     exit 1
   fi
   if [[ "$version" == *-rc* ]]; then
-    confirm "Criar a pre-release v$version a partir de $remote/main?"
-    gh release create "v$version" --prerelease --target "$(git rev-parse "$remote/main")" --title "v$version" --notes "Release candidate $version."
+    rc "$version"
+    return
   else
     cargo="$(git show "$remote/main:$manifest" | awk -F'"' '/^version = / {print $2; exit}')"
     if [ "$cargo" = "$version" ] && git show "$remote/main:$changelog_file" | grep -qxF "## [$version]"; then
@@ -156,6 +184,7 @@ release() {
 
 case "${1:-}" in
   release) release ;;
+  rc) rc ;;
   bump) bump ;;
   kind) kind "${2:-}" "${3:-}" ;;
   notes) notes "${2:-}" ;;
