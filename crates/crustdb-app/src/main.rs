@@ -69,6 +69,11 @@ fn main() -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title(APP_NAME)
+            // Wayland matches the app id to `crustdb.desktop`; X11 uses the icon and WM_CLASS.
+            .with_app_id("crustdb")
+            .with_icon(Arc::new(eframe::icon_data::from_png_bytes(
+                include_bytes!("../../../packaging/crustdb.png"),
+            )?))
             .with_inner_size([1024.0, 768.0])
             .with_min_inner_size([640.0, 480.0]),
         ..Default::default()
