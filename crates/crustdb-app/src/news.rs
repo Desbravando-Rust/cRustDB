@@ -34,7 +34,7 @@ pub fn parse_latest_tag(body: &str) -> Option<String> {
     Some(v.get("tag_name")?.as_str()?.to_owned())
 }
 
-/// JSON Feed `items[]`; items without a `url` are dropped.
+/// JSON Feed `items[]`; items without an `https://` `url` are dropped.
 pub fn parse_feed(body: &str) -> Vec<Chapter> {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
         return vec![];
@@ -46,6 +46,10 @@ pub fn parse_feed(body: &str) -> Vec<Chapter> {
         .filter_map(|i| {
             let title = i.get("title")?.as_str()?.to_owned();
             let url = i.get("url")?.as_str()?.to_owned();
+            // Untrusted remote feed: egui would open any scheme.
+            if !url.starts_with("https://") {
+                return None;
+            }
             Some(Chapter { title, url })
         })
         .collect()
@@ -65,9 +69,14 @@ fn fetch(agent: &ureq::Agent, url: &str) -> Option<String> {
     }
 }
 
-/// One background thread, no data sent; skipped when `CRUSTDB_OFFLINE` is set. Failures keep the static fallback.
+/// `CRUSTDB_OFFLINE` counts as set unless empty or `0`.
+fn offline_from(v: Option<&str>) -> bool {
+    v.is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// One background thread, no data sent; skipped when `CRUSTDB_OFFLINE` is set (not empty or `0`). Failures keep the static fallback.
 pub fn spawn(news: Arc<News>, repaint: impl Fn() + Send + 'static) {
-    if std::env::var_os("CRUSTDB_OFFLINE").is_some() {
+    if offline_from(std::env::var("CRUSTDB_OFFLINE").ok().as_deref()) {
         return;
     }
     let spawned = std::thread::Builder::new()
@@ -125,9 +134,18 @@ mod tests {
     }
 
     #[test]
+    fn offline_from_ignores_empty_and_zero() {
+        // Act & Assert
+        assert!(!offline_from(None));
+        assert!(!offline_from(Some("")));
+        assert!(!offline_from(Some("0")));
+        assert!(offline_from(Some("1")));
+    }
+
+    #[test]
     fn parse_feed_reads_title_and_url() {
         // Arrange
-        let body = r#"{"items":[{"title":"Ch 1","url":"https://x/1"},{"title":"No url"}]}"#;
+        let body = r#"{"items":[{"title":"Ch 1","url":"https://x/1"},{"title":"No url"},{"title":"Bad","url":"javascript:x"},{"title":"Http","url":"http://x/2"}]}"#;
 
         // Act
         let chapters = parse_feed(body);
