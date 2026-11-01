@@ -338,6 +338,7 @@ impl WorkspaceActor {
         self.ensure_metadata(&key)
             .await
             .map_err(|e| (key.clone(), e))?;
+        let home = self.home.clone();
         let Some(s) = self.sessions.get_mut(&key) else {
             return Err((key, not_connected()));
         };
@@ -349,10 +350,11 @@ impl WorkspaceActor {
             kind,
         };
         let items = match kind {
-            None | Some(ObjectKind::Database) => intro.databases(s.as_mut()).await.map(|v| {
-                v.into_iter()
+            None | Some(ObjectKind::Database) => intro.databases(s.as_mut()).await.and_then(|v| {
+                let v = only_home(v, &home, sh.driver.kind())?;
+                Ok(v.into_iter()
                     .map(|n| obj(&n, None, n.clone(), ObjectKind::Database))
-                    .collect()
+                    .collect())
             }),
             Some(ObjectKind::Schema) => intro.schemas(s.as_mut(), database).await.map(|v| {
                 v.into_iter()
@@ -363,6 +365,34 @@ impl WorkspaceActor {
         };
         items.map_err(|e| (key, e))
     }
+}
+
+/// A connection that names a database lists only it; a name the server
+/// lacks is an error. SQLite (file path) and Redis (numeric dbs) are exempt.
+fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>, DriverError> {
+    if home.is_empty() || !matches!(kind, DriverKind::Postgres | DriverKind::Mysql) {
+        return Ok(v);
+    }
+    // MySQL names follow lower_case_table_names, so fall back to a case-insensitive match.
+    let found = v.iter().find(|n| *n == home).or_else(|| {
+        (kind == DriverKind::Mysql)
+            .then(|| v.iter().find(|n| n.eq_ignore_ascii_case(home)))
+            .flatten()
+    });
+    if found.is_some() {
+        // Keep the configured spelling: the tree keys on `config.database`.
+        return Ok(vec![home.to_string()]);
+    }
+    // ponytail: PG template databases connect but `databases()` filters
+    // `NOT datistemplate`, so they are reported missing; upgrade by letting the
+    // introspector expose templates if that ever matters.
+    Err(DriverError {
+        kind: ErrorKind::Query {
+            code: None,
+            position: None,
+        },
+        message: format!("database \"{home}\" not found on server"),
+    })
 }
 
 fn not_connected() -> DriverError {

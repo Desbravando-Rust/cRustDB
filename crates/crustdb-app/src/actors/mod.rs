@@ -25,6 +25,8 @@ mod workspace;
 #[cfg(test)]
 mod data_tests;
 #[cfg(test)]
+mod databases_tests;
+#[cfg(test)]
 mod diagram_tests;
 #[cfg(test)]
 mod disconnect_tests;

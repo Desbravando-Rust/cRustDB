@@ -342,7 +342,7 @@ impl Session for FakeSession {
 #[async_trait]
 impl Introspector for FakeDriver {
     async fn databases(&self, _: &mut dyn Session) -> Result<Vec<String>, DriverError> {
-        Ok(vec!["fake".into()])
+        Ok(vec!["fake".into(), "other".into()])
     }
     async fn schemas(&self, _: &mut dyn Session, _: &str) -> Result<Vec<String>, DriverError> {
         Ok(vec!["public".into()])
