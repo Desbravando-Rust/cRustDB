@@ -85,3 +85,18 @@ async fn sqlite_file_path_is_not_checked_against_databases() {
     // Assert
     assert_eq!(n, ["fake", "other"]);
 }
+
+#[tokio::test]
+async fn mysql_database_match_ignores_case() {
+    // Arrange
+    let h = harness_with(FakeDriver::with_kind(
+        FakeScript::default(),
+        DriverKind::Mysql,
+    ));
+
+    // Act
+    let n = names(h, DriverKind::Mysql, Some("FAKE")).await;
+
+    // Assert
+    assert_eq!(n, ["fake"]);
+}

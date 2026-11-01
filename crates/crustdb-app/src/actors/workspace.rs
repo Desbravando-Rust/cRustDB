@@ -373,9 +373,18 @@ fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>
     if home.is_empty() || !matches!(kind, DriverKind::Postgres | DriverKind::Mysql) {
         return Ok(v);
     }
-    if v.iter().any(|n| n == home) {
-        return Ok(vec![home.to_string()]);
+    // MySQL names follow lower_case_table_names, so fall back to a case-insensitive match.
+    let found = v.iter().find(|n| *n == home).or_else(|| {
+        (kind == DriverKind::Mysql)
+            .then(|| v.iter().find(|n| n.eq_ignore_ascii_case(home)))
+            .flatten()
+    });
+    if let Some(n) = found {
+        return Ok(vec![n.clone()]);
     }
+    // ponytail: PG template databases connect but `databases()` filters
+    // `NOT datistemplate`, so they are reported missing; upgrade by letting the
+    // introspector expose templates if that ever matters.
     Err(DriverError {
         kind: ErrorKind::Query {
             code: None,
