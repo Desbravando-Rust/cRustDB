@@ -74,6 +74,9 @@ pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
     });
 }
 
+/// Static paragraph on Rust (the dynamic feed is a follow-up).
+const BOOK_BLURB: &str = "Rust garante segurança de memória sem garbage collector: o compilador barra use-after-free e data races antes do programa rodar, e o resultado é um binário nativo, rápido e leve. Por isso o cRustDB é feito em Rust.";
+
 fn book_promo(ui: &mut egui::Ui) {
     egui::Panel::bottom("home_book_promo")
         .resizable(false)
@@ -89,6 +92,9 @@ fn book_promo(ui: &mut egui::Ui) {
                 ui.vertical(|ui| {
                     ui.weak(
                         "Este app é feito em Rust. Vindo do Python? Aprenda com o Desbravando Rust.",
+                    );
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(BOOK_BLURB).weak().small()).wrap(),
                     );
                     ui.hyperlink_to(format!("Leia um capítulo grátis {}", icon::ARROW_RIGHT), BOOK_URL);
                 });
@@ -224,3 +230,7 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "home_empty_tests.rs"]
 mod empty_tests;
+
+#[cfg(test)]
+#[path = "home_book_tests.rs"]
+mod book_tests;

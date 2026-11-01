@@ -286,6 +286,10 @@ pub enum Event {
         req: RequestId,
         text: String,
     },
+    /// A query tab's batch changed the schema (DDL committed): cached catalog data is stale.
+    CatalogChanged {
+        tab: TabId,
+    },
     Evaluated {
         req: RequestId,
         evaluation: Evaluation,

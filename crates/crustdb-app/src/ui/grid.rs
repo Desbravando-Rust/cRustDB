@@ -169,12 +169,21 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
     }
 }
 
-/// Why "Add row"/"Delete rows" cannot act on the tab right now.
-fn write_block(tab: &TableTab) -> Option<&'static str> {
+/// Why the tab can never be edited from the grid; `None` while the columns are still unknown.
+fn read_only_reason(tab: &TableTab) -> Option<&'static str> {
     if tab.object.kind != ObjectKind::Table {
         Some("Views are read-only")
-    } else if !tab.columns.iter().any(|c| c.is_primary_key) {
+    } else if !tab.columns.is_empty() && !tab.columns.iter().any(|c| c.is_primary_key) {
         Some("Table has no primary key")
+    } else {
+        None
+    }
+}
+
+/// Why "Add row"/"Delete rows" cannot act on the tab right now.
+fn write_block(tab: &TableTab) -> Option<&'static str> {
+    if let Some(why) = read_only_reason(tab) {
+        Some(why)
     } else if tab.has_pending() {
         Some("Save or discard pending changes")
     } else if tab.is_loading() || tab.edit_req.is_some() {
@@ -236,6 +245,18 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::StopTab(id));
             }
             row_buttons(ui, tab, &mut out);
+            if tab.object.kind == ObjectKind::Table
+                && let Some(why) = read_only_reason(tab)
+            {
+                ui.colored_label(
+                    Color32::YELLOW,
+                    format!(
+                        "{} Read-only: {}",
+                        egui_phosphor::regular::WARNING,
+                        why.to_lowercase()
+                    ),
+                );
+            }
             if tab.has_pending() {
                 let save = egui::Button::new("Save");
                 if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {

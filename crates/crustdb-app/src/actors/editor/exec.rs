@@ -171,6 +171,12 @@ impl EditorActor {
                 break;
             }
         }
+        // One per batch. ponytail: ROLLBACK keeps the flag, so a rolled-back DDL costs one
+        // extra (harmless) reload; tracking savepoints is not worth it.
+        if self.catalog_dirty && self.tx == TxState::Idle {
+            self.catalog_dirty = false;
+            self.out.emit(Event::CatalogChanged { tab: self.tab });
+        }
     }
 
     /// Returns false when the batch must stop.
@@ -242,6 +248,7 @@ impl EditorActor {
     }
 
     fn after_success(&mut self, c: &Classified, kind: DriverKind) {
+        self.catalog_dirty |= c.is_ddl;
         match c.class {
             StatementClass::Tx(TxOp::Begin) => self.set_tx(TxState::Open),
             StatementClass::Tx(TxOp::Commit | TxOp::Rollback) => self.set_tx(TxState::Idle),

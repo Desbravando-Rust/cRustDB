@@ -179,7 +179,10 @@ fn add_and_delete_disabled_for_view_or_no_pk() {
     no_pk.columns[0].is_primary_key = false;
     for mut t in [view, no_pk] {
         t.selected_row = Some(0);
-        let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+        let mut h = Harness::new_ui(|ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            drop(show(ui, &mut t));
+        });
 
         // Act
         h.run();
@@ -271,4 +274,45 @@ fn empty_insert_row_shows_save_and_new_row_label() {
             .any(|i| matches!(i, Intent::SavePending(TabId(1))))
     );
     assert!(new_row && !zero);
+}
+
+const NO_PK_NOTICE: &str = "Read-only: table has no primary key";
+
+#[test]
+fn table_without_pk_shows_read_only_notice() {
+    // Arrange
+    let mut t = tab();
+    t.columns[0].is_primary_key = false;
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label_contains(NO_PK_NOTICE).is_some());
+}
+
+#[test]
+fn table_with_pk_has_no_read_only_notice() {
+    // Arrange
+    let mut with_pk = tab();
+    let mut loading = tab();
+    loading.columns.clear();
+    loading.rows.clear();
+    loading.editing = None;
+    for t in [&mut with_pk, &mut loading] {
+        let mut h = Harness::new_ui(|ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            drop(show(ui, t));
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label_contains(NO_PK_NOTICE).is_none());
+    }
 }

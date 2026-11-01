@@ -19,6 +19,13 @@ fn active_label<'a>(
         .map_or(active.config.label.as_deref(), |c| c.label.as_deref())
 }
 
+/// App version at the bottom of the sidebar; draw it before the rest so it keeps its place.
+pub fn footer(ui: &mut egui::Ui) {
+    egui::Panel::bottom("sidebar_footer").show(ui, |ui| {
+        ui.weak(concat!("v", env!("CARGO_PKG_VERSION")));
+    });
+}
+
 /// Workspace selector, filter box and the lazy object tree of the active workspace.
 pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let mut out = vec![];
@@ -203,6 +210,21 @@ mod tests {
         h.get_by_label("New query");
         assert!(h.query_by_role(egui::accesskit::Role::Image).is_none());
         assert!(h.query_by_label("cRustDB logo").is_none());
+    }
+
+    #[test]
+    fn footer_shows_app_version() {
+        // Arrange
+        let mut h = Harness::new_ui(footer);
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(
+            h.query_by_label(concat!("v", env!("CARGO_PKG_VERSION")))
+                .is_some()
+        );
     }
 
     fn online() -> AppState {

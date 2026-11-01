@@ -13,6 +13,8 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 #[cfg(test)]
+mod catalog_tests;
+#[cfg(test)]
 mod eval_tests;
 mod exec;
 mod export;
@@ -71,6 +73,8 @@ pub(crate) struct EditorActor {
     pending: Option<(RequestId, Vec<String>)>,
     /// What the last statement returned, for `ExportResult`.
     kept: Option<Kept>,
+    /// A DDL succeeded and its `CatalogChanged` is still unsent (waiting for the tx to end).
+    catalog_dirty: bool,
 }
 
 impl EditorActor {
@@ -90,6 +94,7 @@ impl EditorActor {
             paused: None,
             pending: None,
             kept: None,
+            catalog_dirty: false,
         }
     }
 
