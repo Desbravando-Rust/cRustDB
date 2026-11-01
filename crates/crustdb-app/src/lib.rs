@@ -5,6 +5,7 @@ pub mod export_fmt;
 pub mod keymap;
 pub mod metrics;
 pub mod net;
+pub mod news;
 pub mod runtime;
 pub mod state;
 pub mod storage;

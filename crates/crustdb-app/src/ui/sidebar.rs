@@ -20,9 +20,21 @@ fn active_label<'a>(
 }
 
 /// App version at the bottom of the sidebar; draw it before the rest so it keeps its place.
-pub fn footer(ui: &mut egui::Ui) {
+pub fn footer(ui: &mut egui::Ui, state: &AppState) {
     egui::Panel::bottom("sidebar_footer").show(ui, |ui| {
-        ui.weak(concat!("v", env!("CARGO_PKG_VERSION")));
+        const VERSION: &str = env!("CARGO_PKG_VERSION");
+        ui.weak(format!("v{VERSION}"));
+        if let Some(tag) = state
+            .news
+            .latest
+            .get()
+            .filter(|t| crate::news::is_newer(VERSION, t))
+        {
+            ui.hyperlink_to(
+                format!("Update available: {tag}"),
+                crate::news::RELEASES_URL,
+            );
+        }
     });
 }
 
@@ -215,7 +227,8 @@ mod tests {
     #[test]
     fn footer_shows_app_version() {
         // Arrange
-        let mut h = Harness::new_ui(footer);
+        let s = state(&[]);
+        let mut h = Harness::new_ui(|ui| footer(ui, &s));
 
         // Act
         h.run();
@@ -225,6 +238,20 @@ mod tests {
             h.query_by_label(concat!("v", env!("CARGO_PKG_VERSION")))
                 .is_some()
         );
+    }
+
+    #[test]
+    fn footer_shows_update_link_when_newer_release() {
+        // Arrange
+        let s = state(&[]);
+        let _ = s.news.latest.set("v999.0.0".into());
+        let mut h = Harness::new_ui(|ui| footer(ui, &s));
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("Update available: v999.0.0");
     }
 
     fn online() -> AppState {
