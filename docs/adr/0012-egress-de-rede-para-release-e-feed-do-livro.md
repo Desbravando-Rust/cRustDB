@@ -25,7 +25,7 @@ Escolhemos a **Opção 1** porque `ureq` não adiciona árvore nova (já está n
 * Uma thread, duas GETs (GitHub `releases/latest` e `feed.json`), timeout global curto (5 s), sem
   retry; falha é silenciosa (log `debug`) e a UI mantém o fallback.
 * Só em `CrustApp::new` (binário real); `CrustApp::with_ctx` (testes de UI) nunca faz rede.
-* Opt-out: `CRUSTDB_OFFLINE=1` desliga ambas as requisições. Nenhum dado do usuário é enviado; só
+* Opt-out: `CRUSTDB_OFFLINE=1` desliga ambas as requisições (vazio ou `0` equivale a não definido). Nenhum dado do usuário é enviado; só
   `User-Agent: cRustDB/<versão>`. Documentado no README.
 * Parsing/comparação de versão são funções puras testáveis; sem crate `semver` nem `rand`
   (índice aleatório via `SystemTime` nanos).

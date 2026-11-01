@@ -146,7 +146,7 @@ At startup cRustDB makes two read-only GET requests (5 s timeout, no retry, fail
 - `https://api.github.com/repos/Desbravando-Rust/cRustDB/releases/latest`: shows an "Update available" link in the sidebar when a newer release exists.
 - `https://desbravandorust.com.br/feed.json`: picks a book chapter for the home banner (falls back to a static text).
 
-No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTDB_OFFLINE=1` to disable both requests.
+No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTDB_OFFLINE=1` to disable both requests (empty or `0` leaves them enabled).
 
 ## Performance
 
