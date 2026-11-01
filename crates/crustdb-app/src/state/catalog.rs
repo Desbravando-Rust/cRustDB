@@ -1,5 +1,6 @@
 //! Schema changes made from a query tab (DDL): refresh everything that cached the catalog.
 use super::autocomplete::ColumnCache;
+use super::table_tab::TableView;
 use super::workspace::{AppState, Tab};
 use crate::runtime::{Command, RequestId, TabId};
 
@@ -14,12 +15,13 @@ impl AppState {
         else {
             return;
         };
-        let mut cmds = w.tree.reload_loaded();
-        cmds.extend(w.expand_home());
+        // Home list is a node of the tree, so `reload_loaded` already covers it.
+        let cmds = w.tree.reload_loaded();
         w.columns = ColumnCache::default();
         for Tab::Table(t) in &mut w.tabs {
-            // A tab with staged edits keeps its columns; it reloads on the next manual refresh.
-            t.needs_structure = !t.has_pending();
+            // DDL tabs have no structure; a tab with staged or in-progress edits would lose them
+            // when the page reloads, so it waits for a manual refresh.
+            t.needs_structure = t.view != TableView::Ddl && !t.has_pending() && t.editing.is_none();
         }
         self.outbox.extend(cmds);
     }

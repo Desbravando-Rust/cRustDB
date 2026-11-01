@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use crustdb_core::model::{ColumnDetail, ColumnMeta, ObjectKind, ObjectRef, TypeCategory};
 
+use super::table_tab::TableView;
 use super::workspace::tests::state;
 use super::*;
 use crate::runtime::{Command, Event, RequestId, TabId, WorkspaceId};
@@ -102,4 +103,49 @@ fn catalog_changed_reloads_structure_of_clean_table_tabs_only() {
         panic!("expected a single LoadStructure, got {cmds:?}");
     };
     assert_eq!(*tab, s.workspace_mut(ws).unwrap().tabs[0].id());
+}
+
+fn changed_tab_ids(s: &mut AppState, query: TabId) -> Vec<TabId> {
+    s.apply(Event::CatalogChanged { tab: query });
+    s.take_fetches(|| RequestId(100))
+        .iter()
+        .filter_map(|c| match c {
+            Command::LoadStructure { tab, .. } => Some(*tab),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn catalog_changed_skips_ddl_view_tabs() {
+    // Arrange
+    let (mut s, ws, query) = setup();
+    s.open_table(ws, table(), RequestId(1));
+    let Some(Tab::Table(t)) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
+        panic!("expected a table tab");
+    };
+    t.view = TableView::Ddl;
+
+    // Act
+    let reloaded = changed_tab_ids(&mut s, query);
+
+    // Assert
+    assert!(reloaded.is_empty());
+}
+
+#[test]
+fn catalog_changed_skips_tabs_with_open_cell_editor() {
+    // Arrange
+    let (mut s, ws, query) = setup();
+    s.open_table(ws, table(), RequestId(1));
+    let Some(Tab::Table(t)) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
+        panic!("expected a table tab");
+    };
+    t.editing = Some((0, 0, "x".into()));
+
+    // Act
+    let reloaded = changed_tab_ids(&mut s, query);
+
+    // Assert
+    assert!(reloaded.is_empty());
 }
