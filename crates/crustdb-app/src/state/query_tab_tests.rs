@@ -406,3 +406,21 @@ fn history_double_click_inserts_at_cursor() {
     assert_eq!(t.text, "aéSELECT 1 b");
     assert!(t.dirty);
 }
+
+#[test]
+fn actor_crash_and_lost_notice_show_messages_tab() {
+    // Arrange
+    let mut crashed = tab("");
+    let mut lost = tab("");
+
+    // Act
+    crashed.apply(&Event::ActorCrashed { tab: crashed.id });
+    lost.apply(&Event::Notice {
+        tab: lost.id,
+        text: STALE_EVALUATION.into(),
+    });
+
+    // Assert
+    assert_eq!(crashed.pane.tab, ResultTab::Messages);
+    assert_eq!(lost.pane.tab, ResultTab::Messages);
+}

@@ -375,7 +375,10 @@ fn statement_done_without_result_switches_to_messages() {
 #[test]
 fn result_started_keeps_result_tab() {
     // Arrange
-    let mut p = ResultPane::default();
+    let mut p = ResultPane {
+        tab: ResultTab::Messages,
+        ..Default::default()
+    };
     let r = RequestId(1);
 
     // Act
