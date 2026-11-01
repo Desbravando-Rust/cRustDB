@@ -155,6 +155,23 @@ impl ObjectTree {
         self.entries.clear();
     }
 
+    /// Re-requests every loaded (or failed) node, keeping the expanded state: the catalog changed.
+    pub fn reload_loaded(&mut self) -> Vec<Command> {
+        let mut cmds = vec![];
+        if matches!(self.root, Load::Done(_) | Load::Failed(_)) {
+            self.root = Load::Idle;
+            cmds.extend(self.load_roots());
+        }
+        let stale: Vec<NodePath> = self
+            .entries
+            .iter()
+            .filter(|(_, e)| matches!(e.load, Load::Done(_) | Load::Failed(_)))
+            .map(|(k, _)| k.clone())
+            .collect();
+        cmds.extend(stale.iter().filter_map(|n| self.request(n)));
+        cmds
+    }
+
     pub fn refresh_root(&mut self) -> Option<Command> {
         self.reset();
         self.load_roots()

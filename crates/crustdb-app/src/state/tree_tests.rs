@@ -212,3 +212,37 @@ fn failed_roots_report_error_and_do_not_retry_by_themselves() {
     assert!(t.refresh_root().is_some());
     assert_eq!(t.root_error(), None);
 }
+
+#[test]
+fn reload_loaded_rerequests_done_nodes_and_keeps_expanded() {
+    // Arrange
+    let mut t = tree(DriverKind::Mysql);
+    let tables = folder(None, ObjectKind::Table);
+    t.expand(NodePath::Database("app".into()));
+    let r = req_of(t.expand(tables.clone()));
+    t.apply_children(r, vec![obj("app", None, "a", ObjectKind::Table)]);
+
+    // Act
+    let cmds = t.reload_loaded();
+
+    // Assert
+    assert_eq!(cmds.len(), 2, "root and tables folder");
+    for c in cmds {
+        let Command::LoadChildren { req, kind, .. } = c else {
+            panic!("expected LoadChildren");
+        };
+        let items = match kind {
+            Some(ObjectKind::Table) => vec![
+                obj("app", None, "a", ObjectKind::Table),
+                obj("app", None, "b", ObjectKind::Table),
+            ],
+            _ => vec![obj("app", None, "app", ObjectKind::Database)],
+        };
+        t.apply_children(req, items);
+    }
+    assert_eq!(t.items(&tables).len(), 2);
+    assert!(
+        t.visible()
+            .any(|n| n.path == Some(tables.clone()) && n.expanded)
+    );
+}

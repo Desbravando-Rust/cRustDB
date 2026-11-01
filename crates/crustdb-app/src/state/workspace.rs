@@ -257,17 +257,6 @@ impl AppState {
             .find(|t| t.id == id)
     }
 
-    /// Commands for tabs whose catalog structure just arrived: their first page.
-    pub fn take_fetches(&mut self, mut next_req: impl FnMut() -> RequestId) -> Vec<Command> {
-        self.workspaces
-            .iter_mut()
-            .flat_map(|w| w.tabs.iter_mut())
-            .map(|Tab::Table(t)| t)
-            .filter_map(|t| std::mem::take(&mut t.needs_fetch).then_some(t))
-            .map(|t| t.fetch(next_req()))
-            .collect()
-    }
-
     pub fn active_online(&self) -> Option<&WorkspaceState> {
         let id = self.active?;
         self.workspaces
@@ -409,6 +398,7 @@ impl AppState {
                     self.tx_resolved(tab);
                 }
             }
+            Event::CatalogChanged { tab } => self.catalog_changed(tab),
             Event::Ddl { req, text } => {
                 let tab = self
                     .workspaces

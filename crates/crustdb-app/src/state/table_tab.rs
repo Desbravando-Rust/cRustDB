@@ -47,6 +47,8 @@ pub struct TableTab {
     /// Pending `LoadStructure`; the first page is fetched once it arrives.
     pub structure_req: Option<RequestId>,
     pub needs_fetch: bool,
+    /// The catalog changed: reload the structure (then the page) on the next `take_fetches`.
+    pub needs_structure: bool,
     pub notice: Option<String>,
     /// Pending `LoadDdl` and its result (`view == Ddl`).
     pub ddl_req: Option<RequestId>,
@@ -88,6 +90,7 @@ impl TableTab {
             structure: None,
             structure_req: None,
             needs_fetch: false,
+            needs_structure: false,
             notice: None,
             ddl_req: None,
             ddl: None,
