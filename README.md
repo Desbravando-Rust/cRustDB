@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Native Linux desktop client for PostgreSQL and MySQL/MariaDB, written in Rust with egui.
+  Native Linux desktop client for PostgreSQL, MySQL/MariaDB, SQLite and Redis, written in Rust with egui.
 </p>
 
 <p align="center">
@@ -20,26 +20,34 @@
   <img src="https://img.shields.io/badge/PostgreSQL-%E2%89%A5%2012-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 12+">
   <img src="https://img.shields.io/badge/MySQL-%E2%89%A5%205.6.5-4479a1?logo=mysql&logoColor=white" alt="MySQL 5.6.5+">
   <img src="https://img.shields.io/badge/MariaDB-%E2%89%A5%2010.0.5-003545?logo=mariadb&logoColor=white" alt="MariaDB 10.0.5+">
+  <img src="https://img.shields.io/badge/SQLite-3%20(bundled%203.53.2)-003b57?logo=sqlite&logoColor=white" alt="SQLite 3 (bundled 3.53.2)">
+  <img src="https://img.shields.io/badge/Redis-%E2%89%A5%205.0-dc382d?logo=redis&logoColor=white" alt="Redis 5.0+">
 </p>
 
 > **Pre-release.** All v1 features are implemented; packaging and performance budgets are being finalized. Acceptance status per criterion: [`docs/acceptance/v1-checklist.md`](docs/acceptance/v1-checklist.md).
 
 ## What it is
 
-**cRustDB** browses data in a **read-only grid** and runs **raw SQL** with guards against accidental writes. It is fast, small and keeps your secrets off disk. No data editing, diagrams, import, backup or AI: v1 does a few things and does them well.
+**cRustDB** browses and edits data in a virtualized grid, runs **raw SQL** and **Redis commands** with guards against accidental writes, and draws read-only ER diagrams. It is fast, small and keeps your secrets off disk. No import, backup or AI.
 
 ## Features
 
-- **Connections**: saved connections, import from `postgres://`, `postgresql://`, `mysql://`, `mariadb://` URLs, several connections open at once in one window.
-- **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade.
+- **Connections**: saved connections, import from `postgres://`, `postgresql://`, `mysql://`, `mariadb://`, `sqlite://`, `redis://` and `rediss://` URLs, SQLite file picker, several connections open at once in one window.
+- **Labels**: one colored label per connection (defaults: local, dev, staging, production); the connection list groups, searches and filters by label.
+- **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade. Client certificates (mTLS) for PostgreSQL and MySQL.
 - **SSH tunnel** via `russh`: password, key file (+ passphrase) or agent, strict `known_hosts`.
 - **Secrets** in the system keyring (Secret Service). Without one, **cRustDB** asks every time and never writes passwords to disk.
 - **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily.
-- **Table tab**: virtualized grid, `LIMIT/OFFSET` pagination, multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
-- **SQL editor**: highlighting, autocomplete, run statement under cursor / selection / all, cancel, "Load more" from a server-side cursor, history, open/save `.sql` files.
-- **Transactions**: autocommit by default, Begin / Commit / Rollback per tab, state shown in the status bar.
-- **Safety policy**: destructive or multi-row statements ask for confirmation; DML estimated (via `EXPLAIN`) above a per-connection threshold asks for the password.
-- **CSV export** (RFC 4180), streamed with constant memory and cancellable.
+- **Table tab**: virtualized grid, keyset pagination (falls back to `LIMIT/OFFSET` when the sort key does not allow it), multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
+- **Data editing**: edit cells inline, insert and delete rows in tables with a primary key; edits to a row are saved as one `UPDATE`, deletes ask for confirmation.
+- **Foreign keys**: Ctrl+click a foreign key cell to open the referenced table filtered to the matching row.
+- **ER diagram**: read-only diagram of a schema or database, opened from the sidebar context menu.
+- **SQL editor**: highlighting, autocomplete, find and replace (Ctrl+F), format (Ctrl+Shift+F), run statement under cursor / selection / all, cancel, "Load more" from a server-side cursor, history, open/save `.sql` files.
+- **Result grid**: click headers to sort (Shift for multi-column), filter loaded rows, copy cells or rows as TSV.
+- **Transactions**: autocommit by default, Begin / Commit / Rollback per tab, state shown in the status bar. Disconnecting with an open transaction asks to commit, roll back or cancel.
+- **Safety policy**: destructive or multi-row statements ask for confirmation; DML estimated (via `EXPLAIN`) above a per-connection threshold asks for the password. SQLite has no row estimate, so its DML always takes the strictest path.
+- **Redis**: keyspace tree loaded in `SCAN` batches (never `KEYS`) with a key filter, database selector, read-only value viewer (type, TTL, size), and a command editor on its own session. Dangerous commands ask for confirmation or the password; blocking, transaction and Pub/Sub commands are refused.
+- **Export** to CSV (RFC 4180), JSON Lines or SQL `INSERT` (picked by file extension), streamed with constant memory and cancellable.
 - **Status bar**: TLS/SSH state, transaction badge, query timings, ping latency, process CPU% and RSS.
 
 ## Supported databases
@@ -49,6 +57,8 @@
 | PostgreSQL | 12 |
 | MySQL | 5.6.5 |
 | MariaDB | 10.0.5 |
+| SQLite | 3 (engine bundled, 3.53.2; no system `libsqlite3` needed) |
+| Redis | 5.0 (6.0 for ACL users and TLS) |
 
 Integration suite results (full `cargo test --workspace -- --include-ignored`, 2026-10-18):
 
@@ -60,7 +70,7 @@ Integration suite results (full `cargo test --workspace -- --include-ignored`, 2
 | latest | MariaDB 10.0 | pass, **no TLS** (see limitations) |
 | latest | MariaDB latest | pass |
 
-The floors may move up if the driver fails integration tests on them; any change will be recorded here. SQLite is planned for v2 ([#26](https://github.com/Desbravando-Rust/crustdb/issues/26)).
+The floors may move up if the driver fails integration tests on them; any change will be recorded here. SQLite tests run against the bundled engine, with no Docker. The Redis floor comes from the commands the driver uses (streams need 5.0); its integration tests run only against `redis:latest`.
 
 ## Building
 
@@ -88,16 +98,20 @@ The packages rely on the system graphics stack (a Vulkan or OpenGL driver, `libx
 ## Workspace layout
 
 ```
-crustdb-app ──► crustdb-postgres ──► crustdb-core
-     │      └─► crustdb-mysql    ──► crustdb-core
-     └──────────────────────────────► crustdb-core
+crustdb-app ─┬─► crustdb-postgres ─┐
+             ├─► crustdb-mysql    ─┤
+             ├─► crustdb-sqlite   ─┼─► crustdb-core
+             ├─► crustdb-redis    ─┤
+             └─────────────────────┘
 ```
 
 | Crate | Role |
 |---|---|
-| `crustdb-core` | Domain types, driver traits, SQL split/classify/highlight/autocomplete, safety policy. No IO, no tokio, no egui. |
+| `crustdb-core` | Domain types, driver traits, store abstraction for non-relational drivers, SQL split/classify/highlight/autocomplete, safety policy. No IO, no tokio, no egui. |
 | `crustdb-postgres` | PostgreSQL driver (`tokio-postgres`). |
 | `crustdb-mysql` | MySQL/MariaDB driver (`mysql_async`). |
+| `crustdb-sqlite` | SQLite driver (`rusqlite`, bundled engine, one thread per session). |
+| `crustdb-redis` | Redis store driver (`redis`): `SCAN` browsing, typed reads, command classification. |
 | `crustdb-app` | egui UI, tokio runtime and actors, SSH tunnel, storage, metrics, CSV export. Binary: `crustdb`. |
 | `crustdb-testkit` | Test support (containers and certificates). |
 
@@ -115,7 +129,7 @@ cargo build --release
 
 CI also enforces line-coverage floors (`cargo llvm-cov`, `ui/` excluded): `crustdb-core` ≥ 90%, drivers ≥ 70%, `crustdb-app/src/state` ≥ 70%.
 
-Integration tests run against PostgreSQL, MySQL and MariaDB in Docker via `testcontainers`. The design and plan live in [`docs/specs/`](docs/specs/).
+Integration tests run against PostgreSQL, MySQL, MariaDB and Redis in Docker via `testcontainers`; SQLite tests use temporary files. The design and plan live in [`docs/specs/`](docs/specs/).
 
 ## Files on disk
 
@@ -149,7 +163,9 @@ Typing: highlighting turns off above 750 lines (measured limit). The 5,000-line 
 - The local port of the SSH tunnel is reachable by other local users while the session is open.
 - Query history stores SQL in plain text, including any secret typed into a query.
 - CSV export does not neutralize spreadsheet formulas (CSV injection).
-- Pagination uses `OFFSET`, so very deep pages are slow. Keyset pagination is planned for v2.
+- When the sort key does not allow keyset pagination, the table falls back to `OFFSET`, so very deep pages are slow.
+- SQLite: only the `main` database is listed (no `ATTACH`); no SQLCipher or loadable extensions.
+- Redis: no Cluster, Sentinel, Pub/Sub, `MULTI`/`EXEC`, value editing or mTLS. Cancelling drops the connection but does not stop the command on the server.
 - MariaDB 10.0 and MySQL 5.7 (5.7.44 image, OpenSSL 1.0) cannot negotiate TLS with `rustls` because the server only offers DHE suites: use `disable` through an SSH tunnel or a trusted network.
 - MySQL/MariaDB `verify-ca` behaves like `verify-full` (a certificate whose name does not match the host is rejected); use `require` if the certificate lacks the hostname.
 - The MySQL driver trusts the embedded Mozilla roots (`webpki-roots`) instead of the system store; use `ca_path` for a private CA.

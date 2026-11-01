@@ -33,6 +33,7 @@ cargo deny check
 
 - Conventional Commits, lowercase imperative, scopes: `core`, `postgres`, `mysql`, `drivers`, `app`, `ui`, `test`, `docs`, `chore`.
 - One branch/PR per milestone (`feat/m0-foundation` … `feat/m5-release`). Per-task worktrees on `wip/tNN` under `../crustdb-wt/`, brought into the milestone branch with a normal merge.
+- A PR that adds a feature or changes anything the README describes (features, supported databases/versions, badges, workspace layout, files on disk, limitations, build steps) updates `README.md` in the same PR.
 - Never push to `main`. Commit/push only with explicit approval. No AI mentions or `Co-Authored-By` in commits/PRs.
 
 ## Don't read
