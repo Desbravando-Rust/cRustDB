@@ -1,11 +1,9 @@
 name: integration
 # Manual only: the image matrix pulls many containers and is slow/flaky on registry
-# hiccups, so it stays off push/PR. Trigger it from Actions > integration > Run workflow
-# (any branch), or by adding the `run_integration_tests` label to a PR.
+# hiccups, so it stays off push/PR (a PR-triggered run would block auto merge). Trigger it
+# from Actions > integration > Run workflow (any branch).
 on:
   workflow_dispatch:
-  pull_request:
-    types: [labeled]
 
 permissions:
   contents: read
@@ -15,7 +13,6 @@ env:
 
 jobs:
   integration:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run_integration_tests'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
