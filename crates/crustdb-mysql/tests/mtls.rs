@@ -5,7 +5,9 @@ use std::time::Duration;
 use crustdb_core::driver::{ConnectTarget, Driver, SessionPurpose, TlsConfig, TlsMode};
 use crustdb_core::error::ErrorKind;
 use crustdb_mysql::MysqlDriver;
-use crustdb_testkit::{MysqlContainer, TestCerts, certs_for, start_mysql_mtls};
+use crustdb_testkit::{
+    MysqlContainer, TestCerts, certs_for, mysql_without_ecdhe, start_mysql_mtls,
+};
 use secrecy::SecretString;
 
 fn target(db: &MysqlContainer, certs: &TestCerts, with_client_cert: bool) -> ConnectTarget {
@@ -31,6 +33,9 @@ fn target(db: &MysqlContainer, certs: &TestCerts, with_client_cert: bool) -> Con
 #[ignore = "docker"]
 async fn mtls_connects_with_client_cert() {
     // Arrange
+    if mysql_without_ecdhe() {
+        return;
+    }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql_mtls(&certs).await;
 
@@ -49,6 +54,9 @@ async fn mtls_connects_with_client_cert() {
 #[ignore = "docker"]
 async fn mtls_rejects_without_client_cert() {
     // Arrange
+    if mysql_without_ecdhe() {
+        return;
+    }
     let certs = certs_for(&["localhost"]);
     let db = start_mysql_mtls(&certs).await;
 
