@@ -175,14 +175,16 @@ async fn start_pg(tls: Option<&TestCerts>, network: Option<&str>, access: PgAcce
         for (target, src) in copy_tls(t, "/tmp/tls") {
             req = req.with_copy_to(target, src);
         }
+        // `md5`, not `scram-sha-256`: PG <= 13 stores the password as md5, and PG 14+
+        // upgrades `md5` to SCRAM when the stored password is SCRAM.
         let hba = match access {
             PgAccess::Any => "",
             PgAccess::TlsOnly => {
-                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256\\n' > /tmp/tls/hba.conf \
+                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all md5\\n' > /tmp/tls/hba.conf \
              && "
             }
             PgAccess::ClientCert => {
-                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all scram-sha-256 clientcert=verify-ca\\n' > /tmp/tls/hba.conf \
+                "printf 'local all all trust\\nhostnossl all all all reject\\nhostssl all all all md5 clientcert=verify-ca\\n' > /tmp/tls/hba.conf \
              && "
             }
         };
@@ -220,6 +222,13 @@ pub async fn start_mysql(tls: Option<&TestCerts>, network: Option<&str>) -> Mysq
     start_my(tls, network, false).await
 }
 
+/// `CRUSTDB_MYSQL_IMAGE` servers that only offer DHE suites: rustls (ECDHE only) cannot
+/// negotiate TLS with them.
+pub fn mysql_without_ecdhe() -> bool {
+    let image = std::env::var("CRUSTDB_MYSQL_IMAGE").unwrap_or_default();
+    image.starts_with("mariadb:10.0") || image.starts_with("mysql:5.7")
+}
+
 /// TLS server where `root` over TCP must present a CA-signed client certificate (`REQUIRE X509`).
 pub async fn start_mysql_mtls(tls: &TestCerts) -> MysqlContainer {
     start_my(Some(tls), None, true).await
@@ -249,7 +258,10 @@ async fn start_my(tls: Option<&TestCerts>, network: Option<&str>, x509: bool) ->
     wait_exec(&c, &["sh", "-c", "mysqladmin --protocol=tcp -h127.0.0.1 ping --silent || mariadb-admin --protocol=tcp -h127.0.0.1 ping --silent"]).await;
     if x509 {
         // Over the local socket: root@localhost is not affected, only root@'%' (TCP).
-        wait_exec(&c, &["sh", "-c", "q=\"ALTER USER 'root'@'%' REQUIRE X509\"; mysql -uroot -pcrustdb -e \"$q\" || mariadb -uroot -pcrustdb -e \"$q\""]).await;
+        // `ALTER USER ... REQUIRE` needs MySQL 5.7.6+/MariaDB 10.2+; older ones only take
+        // `GRANT ... REQUIRE`, which MySQL 8.0 removed.
+        wait_exec(&c, &["sh", "-c", "for q in \"ALTER USER 'root'@'%' REQUIRE X509\" \"GRANT USAGE ON *.* TO 'root'@'%' REQUIRE X509\"; do \
+            mysql -uroot -pcrustdb -e \"$q\" || mariadb -uroot -pcrustdb -e \"$q\" && exit 0; done; exit 1"]).await;
     }
     let (host, port) = endpoint(&c, 3306).await;
     MysqlContainer {
