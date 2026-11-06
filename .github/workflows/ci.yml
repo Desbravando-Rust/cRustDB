@@ -37,8 +37,8 @@ jobs:
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             echo "match=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          # Default covers manifests/lockfile too, so dependency-only PRs still run deny and tests.
-          pats=$(echo "${EXT_LIST:-*.rs,*Cargo.toml,Cargo.lock,deny.toml,rust-toolchain.toml,.github/workflows/*}" | tr ',' ' ')
+          # Workflow edits always run the full pipeline, whatever the repo variable says.
+          pats=$(echo "${EXT_LIST:-*.rs,*.toml,Cargo.lock},.github/workflows/*" | tr ',' ' ')
           match=false
           while IFS= read -r f; do
             for pat in $pats; do
