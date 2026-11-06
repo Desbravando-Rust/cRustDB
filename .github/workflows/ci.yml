@@ -85,7 +85,7 @@ jobs:
           cache-targets: false
       - run: cargo deny check
   coverage:
-    needs: [check-files, fmt, clippy, deny]
+    needs: [check-files, fmt]
     if: needs.check-files.outputs.has_extension == 'true'
     timeout-minutes: 30
     runs-on: ubuntu-latest
