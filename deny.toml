@@ -1,6 +1,6 @@
 [advisories]
 version = 2
-# All four are "unmaintained" notices with no patched version (patched = []); each crate is
+# All but the rsa entry are "unmaintained" notices with no patched version (patched = []); each crate is
 # already on its latest published release, so there is nothing to bump.
 ignore = [
     # ttf-parser: winit 0.30 -> sctk-adwaita 0.10 -> ab_glyph -> owned_ttf_parser -> ttf-parser.
@@ -17,6 +17,9 @@ ignore = [
     # loop, so an observer needs many signatures from one session. Without it RSA-only users and
     # RSA-only hosts cannot use the tunnel. Revisit when `rsa` ships a fix (then drop this entry).
     "RUSTSEC-2023-0071",
+    # astral-tokio-tar (unmaintained, no patch): dev-only, testcontainers 0.28 -> crustdb-testkit.
+    # Not in the shipped binary. Revisit when testcontainers drops it (then drop this entry).
+    "RUSTSEC-2026-0440",
 ]
 
 [licenses]
