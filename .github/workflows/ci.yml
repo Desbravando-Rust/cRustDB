@@ -17,6 +17,7 @@ env:
 
 jobs:
   check-files:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     outputs:
       has_extension: ${{ steps.filter.outputs.match }}
@@ -36,7 +37,8 @@ jobs:
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             echo "match=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          pats=$(echo "${EXT_LIST:-*.rs}" | tr ',' ' ')
+          # Workflow edits always run the full pipeline, whatever the repo variable says.
+          pats=$(echo "${EXT_LIST:-*.rs,*.toml,Cargo.lock},.github/workflows/*" | tr ',' ' ')
           match=false
           while IFS= read -r f; do
             for pat in $pats; do
@@ -48,6 +50,7 @@ jobs:
   fmt:
     needs: check-files
     if: needs.check-files.outputs.has_extension == 'true'
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -56,6 +59,7 @@ jobs:
   clippy:
     needs: check-files
     if: needs.check-files.outputs.has_extension == 'true'
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -65,24 +69,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  test:
-    needs: [check-files, fmt, clippy, deny]
-    if: needs.check-files.outputs.has_extension == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          shared-key: test
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - run: cargo nextest run --workspace --fail-fast
   deny:
     needs: [check-files]
     if: needs.check-files.outputs.has_extension == 'true'
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -95,8 +85,9 @@ jobs:
           cache-targets: false
       - run: cargo deny check
   coverage:
-    needs: [check-files, fmt, clippy, deny]
+    needs: [check-files, fmt]
     if: needs.check-files.outputs.has_extension == 'true'
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -136,3 +127,13 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Single required check for branch protection: fails if any gate failed or was cancelled
+  # (skipped jobs, e.g. docs-only PRs, count as success).
+  ci-ok:
+    if: always()
+    needs: [check-files, fmt, clippy, deny, coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: '! echo "${{ toJSON(needs.*.result) }}" | grep -qE "failure|cancelled"'
