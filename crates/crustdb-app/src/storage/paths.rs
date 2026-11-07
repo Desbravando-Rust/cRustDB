@@ -2,7 +2,40 @@ use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 
-fn resolve(env: impl Fn(&str) -> Option<String>, xdg: &str, fallback: &str) -> PathBuf {
+// One variant per OS; the other only exists in tests.
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+enum Os {
+    Linux,
+    Mac,
+}
+
+#[cfg(target_os = "macos")]
+const CURRENT: Os = Os::Mac;
+#[cfg(not(target_os = "macos"))]
+const CURRENT: Os = Os::Linux;
+
+#[derive(Clone, Copy)]
+enum Dir {
+    Config,
+    Data,
+    State,
+}
+
+/// (XDG variable, fallback under `$HOME`). XDG wins on every OS.
+fn spec(os: Os, dir: Dir) -> (&'static str, &'static str) {
+    match (dir, os) {
+        (Dir::Config, Os::Linux) => ("XDG_CONFIG_HOME", ".config"),
+        (Dir::Data, Os::Linux) => ("XDG_DATA_HOME", ".local/share"),
+        (Dir::State, Os::Linux) => ("XDG_STATE_HOME", ".local/state"),
+        (Dir::Config, Os::Mac) => ("XDG_CONFIG_HOME", "Library/Application Support"),
+        (Dir::Data, Os::Mac) => ("XDG_DATA_HOME", "Library/Application Support"),
+        (Dir::State, Os::Mac) => ("XDG_STATE_HOME", "Library/Logs"),
+    }
+}
+
+fn resolve(env: impl Fn(&str) -> Option<String>, os: Os, dir: Dir) -> PathBuf {
+    let (xdg, fallback) = spec(os, dir);
     let base = match env(xdg).filter(|v| !v.is_empty()) {
         Some(v) => PathBuf::from(v),
         None => PathBuf::from(env("HOME").unwrap_or_default()).join(fallback),
@@ -21,15 +54,15 @@ fn sys(name: &str) -> Option<String> {
 }
 
 pub fn config_dir() -> PathBuf {
-    ensure(resolve(sys, "XDG_CONFIG_HOME", ".config"))
+    ensure(resolve(sys, CURRENT, Dir::Config))
 }
 
 pub fn data_dir() -> PathBuf {
-    ensure(resolve(sys, "XDG_DATA_HOME", ".local/share"))
+    ensure(resolve(sys, CURRENT, Dir::Data))
 }
 
 pub fn state_dir() -> PathBuf {
-    ensure(resolve(sys, "XDG_STATE_HOME", ".local/state"))
+    ensure(resolve(sys, CURRENT, Dir::State))
 }
 
 #[cfg(test)]
@@ -44,13 +77,41 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            resolve(xdg, "XDG_DATA_HOME", ".local/share"),
+            resolve(xdg, Os::Linux, Dir::Data),
             PathBuf::from("/x/crustdb")
         );
         let home = |k: &str| (k == "HOME").then(|| "/h".to_string());
         assert_eq!(
-            resolve(home, "XDG_STATE_HOME", ".local/state"),
+            resolve(home, Os::Linux, Dir::State),
             PathBuf::from("/h/.local/state/crustdb")
+        );
+    }
+
+    #[test]
+    fn mac_falls_back_to_application_support() {
+        // Arrange
+        let home = |k: &str| (k == "HOME").then(|| "/h".to_string());
+
+        // Act & Assert
+        assert_eq!(
+            resolve(home, Os::Mac, Dir::Config),
+            PathBuf::from("/h/Library/Application Support/crustdb")
+        );
+        assert_eq!(
+            resolve(home, Os::Mac, Dir::State),
+            PathBuf::from("/h/Library/Logs/crustdb")
+        );
+    }
+
+    #[test]
+    fn xdg_still_wins_on_mac() {
+        // Arrange
+        let xdg = |k: &str| (k == "XDG_CONFIG_HOME").then(|| "/x".to_string());
+
+        // Act & Assert
+        assert_eq!(
+            resolve(xdg, Os::Mac, Dir::Config),
+            PathBuf::from("/x/crustdb")
         );
     }
 

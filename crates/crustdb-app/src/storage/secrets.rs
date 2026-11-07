@@ -185,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs secret service"]
+    #[ignore = "needs secret service or keychain"]
     fn keyring_roundtrip() {
         // Arrange
         let s = KeyringStore;
