@@ -430,6 +430,7 @@ fn toolbar_filter_rows_opens_filter_bar() {
     let mut t = tab();
     t.editing = None;
     let mut h = Harness::builder()
+        // TODO(#186): drop once the filter TextInput has an accessible name.
         .with_accessibility_check(false)
         .build_ui(|ui| {
             crate::ui::theme::install_theme(ui.ctx());
