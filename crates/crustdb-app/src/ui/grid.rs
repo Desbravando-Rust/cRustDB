@@ -207,7 +207,7 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
 }
 
 /// Why the tab can never be edited from the grid; `None` while the columns are still unknown.
-fn read_only_reason(tab: &TableTab) -> Option<&'static str> {
+pub(super) fn read_only_reason(tab: &TableTab) -> Option<&'static str> {
     if tab.object.kind != ObjectKind::Table {
         Some("Views are read-only")
     } else if !tab.columns.is_empty() && !tab.columns.iter().any(|c| c.is_primary_key) {
@@ -218,7 +218,7 @@ fn read_only_reason(tab: &TableTab) -> Option<&'static str> {
 }
 
 /// Why "Add row"/"Delete rows" cannot act on the tab right now.
-fn write_block(tab: &TableTab) -> Option<&'static str> {
+pub(super) fn write_block(tab: &TableTab) -> Option<&'static str> {
     if let Some(why) = read_only_reason(tab) {
         Some(why)
     } else if tab.has_pending() {
@@ -230,24 +230,17 @@ fn write_block(tab: &TableTab) -> Option<&'static str> {
     }
 }
 
-fn row_buttons(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
-    let block = write_block(tab);
-    let delete_block = block.or(tab
+fn delete_button(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
+    let block = write_block(tab).or(tab
         .selected_row
         .is_none()
         .then_some("Select rows to delete"));
-    let mut button = |label: &str, block: Option<&str>| {
-        let r = ui.add_enabled(block.is_none(), egui::Button::new(label));
-        match block {
-            Some(why) => r.on_disabled_hover_text(why),
-            None => r,
-        }
-        .clicked()
+    let r = ui.add_enabled(block.is_none(), egui::Button::new("Delete rows"));
+    let r = match block {
+        Some(why) => r.on_disabled_hover_text(why),
+        None => r,
     };
-    if button("Add row", block) {
-        out.push(Intent::AddRow(tab.id));
-    }
-    if button("Delete rows", delete_block) {
+    if r.clicked() {
         out.push(Intent::DeleteRows(tab.id));
     }
 }
@@ -270,18 +263,10 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::NextPage(id));
             }
             ui.label(tab.footer_label());
-            let refresh = egui::Button::new("Refresh");
-            if ui
-                .add_enabled(!tab.is_loading(), refresh)
-                .on_hover_text("Reload page (F5)")
-                .clicked()
-            {
-                out.push(Intent::Retry(id));
-            }
             if tab.is_loading() && ui.button("Stop").clicked() {
                 out.push(Intent::StopTab(id));
             }
-            row_buttons(ui, tab, &mut out);
+            delete_button(ui, tab, &mut out);
             if tab.object.kind == ObjectKind::Table
                 && let Some(why) = read_only_reason(tab)
             {
@@ -300,13 +285,6 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                     .corner_radius(4.0)
                     .inner_margin(4.0)
                     .show(ui, |ui| {
-                        let save = egui::Button::new("Save");
-                        if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
-                            // The grid is drawn after the footer: an open editor would be cancelled
-                            // this frame, so stage its text now.
-                            tab.commit_edit();
-                            out.push(Intent::SavePending(id));
-                        }
                         if ui.button("Discard").clicked() {
                             out.push(Intent::DiscardPending(id));
                         }
@@ -325,6 +303,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             }
         });
     });
+    out.extend(
+        egui::Panel::top(("data_toolbar", id.0))
+            .show(ui, |ui| super::data_toolbar::show(ui, tab))
+            .inner,
+    );
     if tab.filter_open {
         egui::Panel::top(("filter_bar", id.0)).show(ui, |ui| {
             out.extend(super::filter_bar::show(ui, tab));
