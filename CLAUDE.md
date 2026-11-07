@@ -17,7 +17,7 @@ cargo deny check
 
 - Driver integration tests are `#[ignore = "docker"]` and start their own containers via testcontainers (no `DATABASE_URL`). Run them only for the driver crate you touched: `cargo test -p crustdb-postgres -- --include-ignored` (same for `crustdb-mysql`). Images: `CRUSTDB_PG_IMAGE` (default `postgres:latest`), `CRUSTDB_MYSQL_IMAGE` (default `mysql:8.4`; MariaDB works).
 - Binary: `cargo run -p crustdb-app` (binary is `crustdb`). Benches: `cargo bench -p crustdb-core`.
-- Toolchain pinned to 1.99.1, edition 2024. Linux x86_64 only.
+- Toolchain pinned to 1.99.1, edition 2024. Linux x86_64 is the primary target; macOS is verified in CI (build, clippy, tests).
 
 ## Code rules
 
