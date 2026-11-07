@@ -57,6 +57,7 @@ impl CrustApp {
             }
             intents.extend(self.on_action(a, focus));
         }
+        egui::Panel::top("top_bar").show(ui, |ui| ui::top_bar::show(ui, &self.state));
         if let Some(m) = self.status.current(&self.state) {
             let bar = egui::Frame::new()
                 .fill(ui::theme::ACCENT)
