@@ -10,6 +10,8 @@ use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
 
 const ROW_H: f32 = 20.0;
+/// Integers: light orange, legible on the dark panel and on the `ACCENT` selection fill.
+pub(crate) const INT_COLOR: Color32 = Color32::from_rgb(254, 215, 170);
 const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
 const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
 
@@ -145,7 +147,7 @@ pub fn grid(
                             let t = match meta.category {
                                 TypeCategory::Bool if bool_true => t.color(GREEN),
                                 TypeCategory::Bool => t.color(Color32::GRAY),
-                                TypeCategory::Integer => t.color(ACCENT),
+                                TypeCategory::Integer => t.color(INT_COLOR),
                                 _ => t,
                             };
                             ui.add(egui::Label::new(t).truncate().selectable(false));

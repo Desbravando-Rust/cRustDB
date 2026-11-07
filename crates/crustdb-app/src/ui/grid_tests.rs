@@ -365,3 +365,17 @@ fn footer_shows_changes_pending_count() {
     // Assert
     assert!(h.query_by_label("1 change pending").is_some());
 }
+
+fn luma(c: Color32) -> f32 {
+    f32::from(c.r()) * 0.299 + f32::from(c.g()) * 0.587 + f32::from(c.b()) * 0.114
+}
+
+#[test]
+fn integer_color_is_legible_on_selected_row() {
+    // Arrange
+    let selection = crate::ui::theme::ACCENT;
+
+    // Act & Assert
+    assert_ne!(INT_COLOR, selection);
+    assert!(luma(INT_COLOR) - luma(selection) > 80.0);
+}
