@@ -11,7 +11,8 @@ use crate::state::status::StatusModel;
 const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
 const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
 const RED: Color32 = Color32::from_rgb(220, 90, 90);
-const GRAY: Color32 = Color32::GRAY;
+// White on the orange bar: GRAY would lose contrast there.
+const GRAY: Color32 = Color32::WHITE;
 
 /// Closed lock = verified, amber = `require`/`verify-ca`, open and red = `disable`.
 pub fn tls_icon(mode: TlsMode) -> (&'static str, Color32) {

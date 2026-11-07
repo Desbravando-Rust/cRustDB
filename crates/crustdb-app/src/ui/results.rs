@@ -263,9 +263,11 @@ mod tests {
         // Arrange
         let mut tab = tab_with_rows();
         let mut h = run(&mut tab, show);
-        h.get_by_label("1").click();
+        // The first match is the row-number gutter; the last is the data cell.
+        h.get_all_by_label("1").last().unwrap().click();
         h.run();
-        h.get_by_label("2").click_modifiers(egui::Modifiers::SHIFT);
+        let two = h.get_all_by_label("2").last().unwrap();
+        two.click_modifiers(egui::Modifiers::SHIFT);
         h.run();
         h.event(egui::Event::Copy);
 

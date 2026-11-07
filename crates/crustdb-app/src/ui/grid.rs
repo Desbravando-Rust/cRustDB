@@ -1,14 +1,21 @@
 use crustdb_core::format::display_cell;
-use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, ObjectKind, Row};
+use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, ObjectKind, Row, TypeCategory};
 use crustdb_core::query::Sort;
 use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
+use super::theme::ACCENT;
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
 
 const ROW_H: f32 = 20.0;
+const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
+const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
+
+fn is_true(text: &str) -> bool {
+    matches!(text.to_lowercase().as_str(), "true" | "t" | "1")
+}
 
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
@@ -66,19 +73,33 @@ pub fn grid(
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click());
+    table = table.column(Column::auto().at_least(32.0));
     for _ in columns {
         table = table.column(Column::auto().at_least(60.0).clip(true));
     }
     table
         .header(ROW_H, |mut h| {
+            h.col(|ui| {
+                ui.label(RichText::new("#").weak());
+            });
             for c in columns {
                 h.col(|ui| {
-                    let text = format!("{}{}", c.name, sort_mark(sorts, &c.name));
-                    let r = ui.add(
-                        egui::Label::new(RichText::new(text).strong())
-                            .selectable(false)
-                            .sense(egui::Sense::click()),
-                    );
+                    let mark = sort_mark(sorts, &c.name);
+                    let r = ui
+                        .horizontal(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(format!("{}{mark}", c.name)).strong(),
+                                )
+                                .selectable(false)
+                                .sense(egui::Sense::click()),
+                            ) | ui.add(
+                                egui::Label::new(RichText::new(&c.type_name).small().weak())
+                                    .selectable(false)
+                                    .sense(egui::Sense::click()),
+                            )
+                        })
+                        .inner;
                     if r.clicked() {
                         clicked = Some((c.name.clone(), ui.input(|i| i.modifiers.shift)));
                     }
@@ -92,6 +113,12 @@ pub fn grid(
                 let i = view.and_then(|v| v.get(k).copied()).unwrap_or(k);
                 row.set_selected(sel.as_ref().is_some_and(|r| r.contains(&k)));
                 let Some(cells) = rows.get(i) else { return };
+                row.col(|ui| {
+                    ui.add(
+                        egui::Label::new(RichText::new((k + 1).to_string()).weak())
+                            .selectable(false),
+                    );
+                });
                 for (j, (cell, meta)) in cells.iter().zip(columns).enumerate() {
                     // Labels are not selectable so clicks reach the cell (selection, context menu).
                     let (_, cell_resp) = row.col(|ui| {
@@ -113,7 +140,15 @@ pub fn grid(
                             let null = RichText::new(text).italics().color(Color32::GRAY);
                             ui.add(egui::Label::new(null).selectable(false));
                         } else {
-                            ui.add(egui::Label::new(text).truncate().selectable(false));
+                            let bool_true = is_true(&text);
+                            let t = RichText::new(text).monospace();
+                            let t = match meta.category {
+                                TypeCategory::Bool if bool_true => t.color(GREEN),
+                                TypeCategory::Bool => t.color(Color32::GRAY),
+                                TypeCategory::Integer => t.color(ACCENT),
+                                _ => t,
+                            };
+                            ui.add(egui::Label::new(t).truncate().selectable(false));
                         }
                     });
                     cell_resp.context_menu(|ui| {
@@ -258,27 +293,33 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 );
             }
             if tab.has_pending() {
-                let save = egui::Button::new("Save");
-                if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
-                    // The grid is drawn after the footer: an open editor would be cancelled
-                    // this frame, so stage its text now.
-                    tab.commit_edit();
-                    out.push(Intent::SavePending(id));
-                }
-                if ui.button("Discard").clicked() {
-                    out.push(Intent::DiscardPending(id));
-                }
-                if tab.pending.is_empty() {
-                    ui.label("New row");
-                } else {
-                    ui.label(format!("{} pending", tab.pending.len()));
-                }
+                egui::Frame::new()
+                    .stroke(egui::Stroke::new(1.0, ACCENT))
+                    .corner_radius(4.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        let save = egui::Button::new("Save");
+                        if ui.add_enabled(tab.edit_req.is_none(), save).clicked() {
+                            // The grid is drawn after the footer: an open editor would be cancelled
+                            // this frame, so stage its text now.
+                            tab.commit_edit();
+                            out.push(Intent::SavePending(id));
+                        }
+                        if ui.button("Discard").clicked() {
+                            out.push(Intent::DiscardPending(id));
+                        }
+                        match tab.pending.len() {
+                            0 => ui.label("New row"),
+                            1 => ui.label("1 change pending"),
+                            n => ui.label(format!("{n} changes pending")),
+                        };
+                    });
             }
             if let Some(n) = tab.notice.clone() {
                 ui.colored_label(ui.visuals().error_fg_color, n);
             }
             if tab.unordered() {
-                ui.colored_label(Color32::YELLOW, "unordered");
+                ui.colored_label(AMBER, "unordered");
             }
         });
     });
