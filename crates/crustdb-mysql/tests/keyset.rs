@@ -126,7 +126,7 @@ async fn keyset_pages_match_offset_pages() {
     for sql in [
         "CREATE DATABASE ks_db",
         "CREATE TABLE ks_db.ks(id INT NOT NULL, tag VARCHAR(20) NOT NULL, v INT NOT NULL, e ENUM('b','a','c') NOT NULL, PRIMARY KEY(id, tag))",
-        "INSERT INTO ks_db.ks SELECT i % 10, CONCAT('g', i DIV 10), i % 7, ELT(i % 3 + 1, 'a', 'b', 'c') FROM (WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 49) SELECT i FROM n) AS t",
+        "INSERT INTO ks_db.ks SELECT i % 10, CONCAT('g', i DIV 10), i % 7, ELT(i % 3 + 1, 'a', 'b', 'c') FROM (SELECT a.d * 10 + b.d AS i FROM (SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) a CROSS JOIN (SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b) AS t",
     ] {
         s.start(sql, ExecMode::Other).await.unwrap();
         s.finish().await.unwrap();

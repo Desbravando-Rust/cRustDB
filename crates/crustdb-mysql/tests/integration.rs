@@ -7,7 +7,7 @@ use crustdb_core::driver::{ConnectTarget, Driver, ExecMode, SessionPurpose, TlsC
 use crustdb_core::error::ErrorKind;
 use crustdb_core::model::Product;
 use crustdb_mysql::MysqlDriver;
-use crustdb_testkit::{MysqlContainer, TestCerts, certs_for, start_mysql};
+use crustdb_testkit::{MysqlContainer, TestCerts, certs_for, mysql_without_ecdhe, start_mysql};
 use secrecy::SecretString;
 
 fn target(db: &MysqlContainer, mode: TlsMode, certs: Option<&TestCerts>) -> ConnectTarget {
@@ -32,17 +32,11 @@ fn image() -> String {
     std::env::var("CRUSTDB_MYSQL_IMAGE").unwrap_or_else(|_| "mysql:8.4".into())
 }
 
-/// Servers that only offer DHE suites: rustls (ECDHE only) cannot negotiate TLS with them.
-fn server_without_ecdhe() -> bool {
-    let image = image();
-    image.starts_with("mariadb:10.0") || image.starts_with("mysql:5.7")
-}
-
 #[tokio::test]
 #[ignore = "docker"]
 async fn connects_with_each_tls_mode() {
     // Arrange
-    if server_without_ecdhe() {
+    if mysql_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
@@ -156,7 +150,7 @@ async fn verify_ca_rejects_untrusted_ca() {
 #[ignore = "docker"]
 async fn tls_rejects_server_without_tls12() {
     // Arrange
-    if !server_without_ecdhe() {
+    if !mysql_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
@@ -271,7 +265,7 @@ async fn connect_timeout_after_10s() {
 #[ignore = "docker"]
 async fn hostname_override_used_with_tunnel_addr() {
     // Arrange
-    if server_without_ecdhe() {
+    if mysql_without_ecdhe() {
         return;
     }
     let certs = certs_for(&["localhost"]);
