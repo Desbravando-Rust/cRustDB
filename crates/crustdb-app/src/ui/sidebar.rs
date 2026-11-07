@@ -19,11 +19,27 @@ fn active_label<'a>(
         .map_or(active.config.label.as_deref(), |c| c.label.as_deref())
 }
 
-/// App version at the bottom of the sidebar; draw it before the rest so it keeps its place.
+/// Folder icon colour per object kind.
+fn folder_color(kind: crustdb_core::model::ObjectKind) -> egui::Color32 {
+    use crustdb_core::model::ObjectKind as K;
+    match kind {
+        K::Table => egui::Color32::from_rgb(96, 165, 250),
+        K::View | K::MaterializedView => egui::Color32::from_rgb(167, 139, 250),
+        K::Function | K::Procedure => egui::Color32::from_rgb(74, 222, 128),
+        _ => egui::Color32::GRAY,
+    }
+}
+
+/// Product name and app version at the bottom of the sidebar; draw it before the rest so it keeps its place.
 pub fn footer(ui: &mut egui::Ui, state: &AppState) {
     egui::Panel::bottom("sidebar_footer").show(ui, |ui| {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
-        ui.weak(format!("v{VERSION}"));
+        ui.horizontal(|ui| {
+            ui.weak("cRustDB Desktop");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.weak(format!("v{VERSION}"));
+            });
+        });
         if let Some(tag) = state
             .news
             .latest
@@ -44,38 +60,68 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let Some(active) = state.active_online() else {
         return out;
     };
-    let label = active_label(state, active);
     let caps = active.capabilities();
     ui.horizontal(|ui| {
-        if let Some(n) = label {
-            let stripe = ui.max_rect().left_top();
-            let c = super::labels::color32(super::labels::color_of(&state.config.labels, n));
-            let bar = egui::Rect::from_min_size(stripe, egui::vec2(3.0, 22.0));
-            ui.painter().rect_filled(bar, 1.0, c);
-            ui.add_space(5.0);
-        }
-        let ws_combo = egui::ComboBox::from_id_salt("workspace")
-            .selected_text(&active.config.name)
-            .show_ui(ui, |ui| {
-                for w in &state.workspaces {
-                    if ui
-                        .selectable_label(w.id == active.id, &w.config.name)
-                        .clicked()
-                    {
-                        out.push(Intent::SwitchWorkspace(w.id));
-                    }
-                }
+        ui.strong("CONNECTIONS");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let plus = ui.small_button(egui_phosphor::regular::PLUS);
+            plus.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::Button, true, "New connection")
             });
-        ws_combo.response.widget_info(|| {
-            let mut i =
-                egui::WidgetInfo::labeled(egui::Role::ComboBox, ui.is_enabled(), "Workspace");
-            i.current_text_value = Some(active.config.name.clone());
-            i
+            if plus.clicked() {
+                out.push(Intent::NewConnection);
+            }
         });
-        if let Some(n) = label {
-            super::labels::chip(ui, n, &state.config.labels);
-        }
     });
+    egui::ScrollArea::vertical()
+        .id_salt("sidebar_connections")
+        .max_height(160.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for w in &state.workspaces {
+                let is_active = w.id == active.id;
+                let online = matches!(w.status, crate::state::Status::Online(_));
+                let stroke = if is_active {
+                    egui::Stroke::new(1.0, super::theme::ACCENT)
+                } else {
+                    egui::Stroke::NONE
+                };
+                let wl = active_label(state, w);
+                let item = egui::Frame::new()
+                    .stroke(stroke)
+                    .corner_radius(4.0)
+                    .inner_margin(egui::Margin::symmetric(6, 2))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let (rect, dot) =
+                                ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                            let (color, text) = if online {
+                                (egui::Color32::from_rgb(34, 197, 94), "Online")
+                            } else {
+                                (egui::Color32::GRAY, "Offline")
+                            };
+                            ui.painter().circle_filled(rect.center(), 4.0, color);
+                            dot.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::Role::Label, true, text)
+                            });
+                            dot.on_hover_text(text);
+                            let reserve = if wl.is_some() { 70.0 } else { 0.0 };
+                            let r = ui.add(
+                                egui::Button::selectable(is_active, &w.config.name)
+                                    .min_size(egui::vec2(ui.available_width() - reserve, 0.0)),
+                            );
+                            if let Some(n) = wl {
+                                super::labels::chip(ui, n, &state.config.labels);
+                            }
+                            r
+                        })
+                        .inner
+                    });
+                if item.inner.clicked() && !is_active {
+                    out.push(Intent::SwitchWorkspace(w.id));
+                }
+            }
+        });
     ui.horizontal(|ui| {
         let new_query = ui
             .add_enabled(caps.sql_editor, egui::Button::new("New query"))
@@ -92,6 +138,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         out.extend(super::keyspace::sidebar(ui, ks));
         return out;
     }
+    ui.strong("EXPLORER");
     let mut q = active.tree.filter_text().to_owned();
     let edit = egui::Frame::new()
         .fill(egui::Color32::from_gray(40))
@@ -114,15 +161,23 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 ui.add_space(n.depth as f32 * 14.0);
                 match (&n.path, &n.object) {
                     (Some(path), _) => {
-                        let arrow = if n.expanded { "▾" } else { "▸" };
+                        let arrow = if n.expanded {
+                            egui_phosphor::regular::CARET_DOWN
+                        } else {
+                            egui_phosphor::regular::CARET_RIGHT
+                        };
                         let sel = active.tree.selected.as_ref() == Some(path);
                         let label = if n.loading {
-                            format!("{arrow} {} …", n.label)
+                            format!("{} …", n.label)
                         } else if n.error.is_some() {
-                            format!("{arrow} {} (failed)", n.label)
+                            format!("{} (failed)", n.label)
                         } else {
-                            format!("{arrow} {}", n.label)
+                            n.label.clone()
                         };
+                        ui.label(arrow);
+                        if let NodePath::Folder { kind, .. } = path {
+                            ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
+                        }
                         let mut r = ui.selectable_label(sel, label);
                         if let Some(e) = &n.error {
                             r = r.on_hover_text(e);
@@ -163,240 +218,5 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use egui_kittest::Harness;
-    use egui_kittest::kittest::Queryable;
-
-    use crustdb_core::model::{Product, ServerVersion};
-
-    use crate::runtime::Command;
-
-    use super::*;
-    use crate::state::Status;
-    use crate::state::workspace::tests::state;
-    use crate::ui::home::tests::ready;
-
-    #[test]
-    fn sidebar_failed_root_shows_error_and_retry() {
-        // Arrange
-        let mut s = online();
-        let Some(Command::LoadChildren { req, .. }) = s.workspaces[0].tree.load_roots() else {
-            panic!("expected roots load");
-        };
-        s.workspaces[0].tree.fail_children(req, "boom".into());
-        let mut done = false;
-        let mut got = vec![];
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                got.extend(show(ui, &s));
-            }
-        });
-        h.run();
-
-        // Act
-        h.get_by_label("Retry").click();
-        h.run();
-
-        // Assert
-        assert!(h.query_by_label_contains("boom").is_some());
-        drop(h);
-        assert!(got.contains(&Intent::RefreshRoot));
-    }
-
-    #[test]
-    fn sidebar_has_no_logo() {
-        // Arrange
-        let s = online();
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("New query");
-        assert!(h.query_by_role(egui::accesskit::Role::Image).is_none());
-        assert!(h.query_by_label("cRustDB logo").is_none());
-    }
-
-    #[test]
-    fn footer_shows_app_version() {
-        // Arrange
-        let s = state(&[]);
-        let mut h = Harness::new_ui(|ui| footer(ui, &s));
-
-        // Act
-        h.run();
-
-        // Assert
-        assert!(
-            h.query_by_label(concat!("v", env!("CARGO_PKG_VERSION")))
-                .is_some()
-        );
-    }
-
-    #[test]
-    fn footer_shows_update_link_when_newer_release() {
-        // Arrange
-        let s = state(&[]);
-        let _ = s.news.latest.set("v999.0.0".into());
-        let mut h = Harness::new_ui(|ui| footer(ui, &s));
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("Update available: v999.0.0");
-    }
-
-    fn online() -> AppState {
-        let mut s = state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].status = Status::Online(ServerVersion {
-            product: Product::Postgres,
-            major: 16,
-            minor: 0,
-            patch: 0,
-            raw: "16.0".into(),
-        });
-        s.active = Some(ws);
-        s
-    }
-
-    #[test]
-    fn sidebar_shows_label_chip() {
-        // Arrange
-        let mut s = online();
-        s.config.connections[0].label = Some("dev".into());
-        s.config.labels = vec![crate::storage::config::Label {
-            name: "dev".into(),
-            color: [1, 2, 3],
-        }];
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("dev");
-    }
-
-    /// (shows "new", shows "dev") after applying `f`.
-    fn chip_after(f: impl FnOnce(&mut AppState)) -> (bool, bool) {
-        let mut s = online();
-        s.workspaces[0].config.label = Some("dev".into());
-        s.config.connections[0].label = Some("dev".into());
-        f(&mut s);
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-        h.run();
-        (
-            h.query_by_label("new").is_some(),
-            h.query_by_label("dev").is_some(),
-        )
-    }
-
-    #[test]
-    fn sidebar_chip_follows_label_rename() {
-        // Arrange & Act
-        let shown = chip_after(|s| s.config.connections[0].label = Some("new".into()));
-
-        // Assert
-        assert_eq!(shown, (true, false));
-    }
-
-    #[test]
-    fn sidebar_chip_gone_after_label_delete() {
-        // Arrange & Act
-        let shown = chip_after(|s| s.config.connections[0].label = None);
-
-        // Assert
-        assert_eq!(shown, (false, false));
-    }
-
-    #[test]
-    fn sidebar_buttons_are_spaced() {
-        // Arrange
-        let s = online();
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        let new = h.get_by_label("New query").rect();
-        let disc = h.get_by_label("Disconnect").rect();
-        assert!(disc.left() - new.right() >= 8.0 + h.ctx.global_style().spacing.item_spacing.x);
-    }
-
-    #[test]
-    fn workspace_combo_has_accessible_name() {
-        // Arrange
-        let s = online();
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        h.get_by_label("Workspace");
-    }
-
-    #[test]
-    fn sidebar_filter_sits_in_gray_frame() {
-        // Arrange
-        let mut s = state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].status = Status::Online(ServerVersion {
-            product: Product::Postgres,
-            major: 16,
-            minor: 0,
-            patch: 0,
-            raw: "16.0".into(),
-        });
-        s.active = Some(ws);
-        let mut done = false;
-        let mut h = Harness::builder().build_ui(|ui| {
-            if ready(ui, &mut done) {
-                show(ui, &s);
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        let input = h.get_by_role(egui::accesskit::Role::TextInput).rect();
-        let framed = h.output().shapes.iter().any(|s| match &s.shape {
-            egui::Shape::Rect(r) => {
-                r.fill == egui::Color32::from_gray(40) && r.rect.contains_rect(input)
-            }
-            _ => false,
-        });
-        assert!(framed);
-    }
-}
+#[path = "sidebar_tests.rs"]
+mod tests;
