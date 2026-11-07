@@ -316,3 +316,66 @@ fn table_with_pk_has_no_read_only_notice() {
         assert!(h.query_by_label_contains(NO_PK_NOTICE).is_none());
     }
 }
+
+#[test]
+fn grid_header_shows_muted_column_type() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    t.columns[0].type_name = "INT".into();
+    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("INT").is_some());
+    assert!(h.query_by_label("id").is_some());
+}
+
+#[test]
+fn grid_shows_row_numbers() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    t.rows = vec![
+        vec![Cell::text_capped("a"), Cell::text_capped("b")].into(),
+        vec![Cell::text_capped("c"), Cell::text_capped("d")].into(),
+    ];
+    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("#").is_some());
+    assert!(h.query_by_label("1").is_some());
+    assert!(h.query_by_label("2").is_some());
+}
+
+#[test]
+fn footer_shows_changes_pending_count() {
+    // Arrange
+    let mut t = staged();
+    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("1 change pending").is_some());
+}
+
+fn luma(c: Color32) -> f32 {
+    f32::from(c.r()) * 0.299 + f32::from(c.g()) * 0.587 + f32::from(c.b()) * 0.114
+}
+
+#[test]
+fn integer_color_is_legible_on_selected_row() {
+    // Arrange
+    let selection = crate::ui::theme::ACCENT;
+
+    // Act & Assert
+    assert_ne!(INT_COLOR, selection);
+    assert!(luma(INT_COLOR) - luma(selection) > 80.0);
+}

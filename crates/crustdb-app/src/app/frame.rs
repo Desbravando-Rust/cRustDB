@@ -58,7 +58,12 @@ impl CrustApp {
             intents.extend(self.on_action(a, focus));
         }
         if let Some(m) = self.status.current(&self.state) {
-            egui::Panel::bottom("status_bar").show(ui, |ui| ui::status_bar::show(ui, m));
+            let bar = egui::Frame::new()
+                .fill(ui::theme::ACCENT)
+                .inner_margin(egui::Margin::symmetric(8, 2));
+            egui::Panel::bottom("status_bar")
+                .frame(bar)
+                .show(ui, |ui| ui::status_bar::show(ui, m));
         }
         self.sidebar_rect = None;
         // Same panel id on both screens: the width carries over on connect.

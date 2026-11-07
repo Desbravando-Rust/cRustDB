@@ -12,6 +12,8 @@ const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
 const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
 const RED: Color32 = Color32::from_rgb(220, 90, 90);
 const GRAY: Color32 = Color32::GRAY;
+/// Dark chip behind every item: state colours would vanish on the orange bar.
+const CHIP: Color32 = Color32::from_rgb(22, 26, 36);
 
 /// Closed lock = verified, amber = `require`/`verify-ca`, open and red = `disable`.
 pub fn tls_icon(mode: TlsMode) -> (&'static str, Color32) {
@@ -33,7 +35,12 @@ pub fn safety_tooltip(threshold: u64) -> String {
 }
 
 fn item(ui: &mut egui::Ui, text: String, color: Color32, tip: &str) {
-    ui.label(RichText::new(text).color(color))
+    egui::Frame::new()
+        .fill(CHIP)
+        .corner_radius(4.0)
+        .inner_margin(egui::Margin::symmetric(6, 1))
+        .show(ui, |ui| ui.label(RichText::new(text).color(color)))
+        .inner
         .on_hover_text(tip);
 }
 
@@ -145,6 +152,19 @@ mod tests {
         assert_eq!((closed, amber_icon), (icon::LOCK, icon::LOCK));
         assert_eq!(cut, icon::LOCK_OPEN);
         assert!(ok != amber && amber != bad && ok != bad);
+    }
+
+    #[test]
+    fn state_colours_are_legible_on_chip() {
+        // Arrange
+        let luma = |c: Color32| {
+            f32::from(c.r()) * 0.299 + f32::from(c.g()) * 0.587 + f32::from(c.b()) * 0.114
+        };
+
+        // Act & Assert
+        for c in [GREEN, AMBER, RED, GRAY] {
+            assert!(luma(c) - luma(CHIP) > 80.0, "{c:?}");
+        }
     }
 
     #[test]
