@@ -32,7 +32,9 @@ Estado atual relevante:
   no macOS, e os caminhos XDG atuais no Linux. A função de resolução recebe o SO como parâmetro e é
   testada para os dois SOs em qualquer host; o único `#[cfg(target_os = "macos")]` escolhe o SO atual.
 * **Segredos:** Keychain via `keyring` 4 já configurado; sem mudança de feature. `keyring_roundtrip`
-  roda no job macOS do CI (o login keychain do runner é desbloqueado).
+  roda no job macOS do CI (a ser confirmado no primeiro CI do PR se o login keychain do runner está desbloqueado).
+* **Limitação:** a faixa de métricas (CPU/memória) lê `/proc` e só funciona no Linux; no macOS
+  `sample()` devolve `None` e nada é exibido. Implementação em #257.
 * **CI:** job `macos` em `macos-latest`: `cargo clippy --all-targets -D warnings`,
   `cargo nextest run --workspace` (testes `#[ignore = "docker"]` ficam só no Linux) e
   `cargo check --target x86_64-apple-darwin`. Entra em `ci-ok`.

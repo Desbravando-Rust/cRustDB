@@ -83,7 +83,7 @@ Requirements: Linux x86_64 or macOS, and the Rust toolchain pinned in `rust-tool
 sudo apt-get install -y libxkbcommon-dev libwayland-dev
 ```
 
-On macOS, install the Xcode Command Line Tools (`xcode-select --install`); no other system libraries are needed.
+On macOS, install the Xcode Command Line Tools (`xcode-select --install`); no other system libraries are needed. CPU/memory are shown only on Linux for now (#257).
 
 Build and run:
 
