@@ -5,6 +5,8 @@ use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::runtime::TabId;
+use crate::ui::data_toolbar::{COMMIT_LABEL, FILTER_HINT};
+use egui_phosphor::regular as icon;
 
 fn tab() -> TableTab {
     let object = ObjectRef {
@@ -31,7 +33,10 @@ fn tab() -> TableTab {
 
 fn run_keys(t: &mut TableTab, text: &str, key: egui::Key) -> Vec<Intent> {
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, t));
+    });
     h.run();
     h.event(egui::Event::Text(text.into()));
     h.run();
@@ -83,11 +88,14 @@ fn save_and_discard_buttons_emit_intents_when_pending() {
     // Arrange
     let mut t = staged();
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
 
     // Act
-    h.get_by_label("Save").click();
+    h.get_by_label(COMMIT_LABEL).click();
     h.run();
     h.get_by_label("Discard").click();
     h.run();
@@ -107,11 +115,14 @@ fn save_commits_open_cell_editor_first() {
     let mut t = staged();
     t.editing = Some((0, 1, "typed".into()));
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
 
     // Act
-    h.get_by_label("Save").click();
+    h.get_by_label(COMMIT_LABEL).click();
     h.run();
     drop(h);
 
@@ -125,23 +136,29 @@ fn save_commits_open_cell_editor_first() {
 }
 
 #[test]
-fn no_save_button_without_pending() {
+fn commit_changes_disabled_without_pending() {
     // Arrange
     let mut t = tab();
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
 
     // Assert
-    assert!(h.query_by_label("Save").is_none());
+    assert!(disabled(&h, COMMIT_LABEL));
 }
 
 #[test]
 fn pending_cell_shows_staged_value() {
     // Arrange
     let mut t = staged();
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
@@ -156,14 +173,17 @@ fn data_view_notice_has_no_duplicate_retry() {
     // Arrange
     let mut t = tab();
     t.notice = Some("boom".into());
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
 
     // Assert
     assert!(h.query_by_label("Retry").is_none());
-    assert!(h.query_by_label("Refresh").is_some());
+    assert!(h.query_by_label(icon::ARROW_CLOCKWISE).is_some());
 }
 
 fn disabled(h: &Harness<'_>, label: &str) -> bool {
@@ -188,7 +208,7 @@ fn add_and_delete_disabled_for_view_or_no_pk() {
         h.run();
 
         // Assert
-        assert!(disabled(&h, "Add row"));
+        assert!(disabled(&h, icon::PLUS));
         assert!(disabled(&h, "Delete rows"));
     }
 }
@@ -198,11 +218,14 @@ fn add_row_button_emits_intent() {
     // Arrange
     let mut t = tab();
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
 
     // Act
-    h.get_by_label("Add row").click();
+    h.get_by_label(icon::PLUS).click();
     h.run();
     drop(h);
 
@@ -215,12 +238,18 @@ fn delete_button_emits_intent_with_selection() {
     // Arrange
     let mut t = tab();
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
     assert!(disabled(&h, "Delete rows"));
     drop(h);
     t.selected_row = Some(0);
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
 
     // Act
@@ -241,14 +270,17 @@ fn discard_shows_for_empty_insert_row() {
     let mut t = tab();
     t.editing = None;
     t.add_row();
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
 
     // Assert
     assert!(h.query_by_label("Discard").is_some());
-    assert!(disabled(&h, "Add row"));
+    assert!(disabled(&h, icon::PLUS));
 }
 
 #[test]
@@ -258,11 +290,14 @@ fn empty_insert_row_shows_save_and_new_row_label() {
     t.editing = None;
     t.add_row();
     let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| out.extend(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
     h.run();
 
     // Act
-    h.get_by_label("Save").click();
+    h.get_by_label(COMMIT_LABEL).click();
     h.run();
     let new_row = h.query_by_label("New row").is_some();
     let zero = h.query_by_label("0 pending").is_some();
@@ -323,7 +358,10 @@ fn grid_header_shows_muted_column_type() {
     let mut t = tab();
     t.editing = None;
     t.columns[0].type_name = "INT".into();
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
@@ -342,7 +380,10 @@ fn grid_shows_row_numbers() {
         vec![Cell::text_capped("a"), Cell::text_capped("b")].into(),
         vec![Cell::text_capped("c"), Cell::text_capped("d")].into(),
     ];
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
@@ -357,7 +398,10 @@ fn grid_shows_row_numbers() {
 fn footer_shows_changes_pending_count() {
     // Arrange
     let mut t = staged();
-    let mut h = Harness::new_ui(|ui| drop(show(ui, &mut t)));
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
 
     // Act
     h.run();
@@ -378,4 +422,67 @@ fn integer_color_is_legible_on_selected_row() {
     // Act & Assert
     assert_ne!(INT_COLOR, selection);
     assert!(luma(INT_COLOR) - luma(selection) > 80.0);
+}
+
+#[test]
+fn toolbar_filter_rows_opens_filter_bar() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    let mut h = Harness::builder()
+        // TODO(#186): drop once the filter TextInput has an accessible name.
+        .with_accessibility_check(false)
+        .build_ui(|ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            drop(show(ui, &mut t));
+        });
+    h.run();
+
+    // Act
+    h.get_by_label(FILTER_HINT).click();
+    h.run();
+    drop(h);
+
+    // Assert
+    assert!(t.filter_open);
+    assert!(!t.drafts.is_empty());
+}
+
+#[test]
+fn toolbar_refresh_emits_retry() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    let mut out = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
+    h.run();
+
+    // Act
+    h.get_by_label(icon::ARROW_CLOCKWISE).click();
+    h.run();
+    drop(h);
+
+    // Assert
+    assert!(out.iter().any(|i| matches!(i, Intent::Retry(TabId(1)))));
+}
+
+#[test]
+fn footer_has_no_save_or_refresh_button() {
+    // Arrange
+    let mut t = staged();
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut t));
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(h.query_by_label("Save").is_none());
+    assert!(h.query_by_label("Refresh").is_none());
+    assert!(h.query_by_label("Add row").is_none());
 }

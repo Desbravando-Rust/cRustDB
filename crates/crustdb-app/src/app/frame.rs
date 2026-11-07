@@ -65,6 +65,7 @@ impl CrustApp {
             egui::Panel::bottom("status_bar")
                 .frame(bar)
                 .show(ui, |ui| ui::status_bar::show(ui, m));
+            egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
         }
         self.sidebar_rect = None;
         // Same panel id on both screens: the width carries over on connect.
@@ -146,7 +147,7 @@ impl CrustApp {
                 Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
                 None => match self.state.active_online() {
                     Some(w) if w.config.database.is_some() => {
-                        intents.extend(ui::workspace_home::show(ui, w));
+                        intents.extend(ui::workspace_home::show(ui, w, &self.state.news));
                     }
                     // Server-level connection (no database): as before #146, the
                     // saved list stays in the central area.
