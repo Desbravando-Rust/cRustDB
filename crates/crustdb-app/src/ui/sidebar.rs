@@ -19,11 +19,27 @@ fn active_label<'a>(
         .map_or(active.config.label.as_deref(), |c| c.label.as_deref())
 }
 
-/// App version at the bottom of the sidebar; draw it before the rest so it keeps its place.
+/// Folder icon colour per object kind.
+fn folder_color(kind: crustdb_core::model::ObjectKind) -> egui::Color32 {
+    use crustdb_core::model::ObjectKind as K;
+    match kind {
+        K::Table => egui::Color32::from_rgb(96, 165, 250),
+        K::View | K::MaterializedView => egui::Color32::from_rgb(167, 139, 250),
+        K::Function | K::Procedure => egui::Color32::from_rgb(74, 222, 128),
+        _ => egui::Color32::GRAY,
+    }
+}
+
+/// Product name and app version at the bottom of the sidebar; draw it before the rest so it keeps its place.
 pub fn footer(ui: &mut egui::Ui, state: &AppState) {
     egui::Panel::bottom("sidebar_footer").show(ui, |ui| {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
-        ui.weak(format!("v{VERSION}"));
+        ui.horizontal(|ui| {
+            ui.weak("cRustDB Desktop");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.weak(format!("v{VERSION}"));
+            });
+        });
         if let Some(tag) = state
             .news
             .latest
@@ -47,35 +63,48 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let label = active_label(state, active);
     let caps = active.capabilities();
     ui.horizontal(|ui| {
-        if let Some(n) = label {
-            let stripe = ui.max_rect().left_top();
-            let c = super::labels::color32(super::labels::color_of(&state.config.labels, n));
-            let bar = egui::Rect::from_min_size(stripe, egui::vec2(3.0, 22.0));
-            ui.painter().rect_filled(bar, 1.0, c);
-            ui.add_space(5.0);
-        }
-        let ws_combo = egui::ComboBox::from_id_salt("workspace")
-            .selected_text(&active.config.name)
-            .show_ui(ui, |ui| {
-                for w in &state.workspaces {
-                    if ui
-                        .selectable_label(w.id == active.id, &w.config.name)
-                        .clicked()
-                    {
-                        out.push(Intent::SwitchWorkspace(w.id));
-                    }
-                }
+        ui.strong("CONNECTIONS");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let plus = ui.small_button(egui_phosphor::regular::PLUS);
+            plus.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::Button, true, "New connection")
             });
-        ws_combo.response.widget_info(|| {
-            let mut i =
-                egui::WidgetInfo::labeled(egui::Role::ComboBox, ui.is_enabled(), "Workspace");
-            i.current_text_value = Some(active.config.name.clone());
-            i
+            if plus.clicked() {
+                out.push(Intent::NewConnection);
+            }
         });
-        if let Some(n) = label {
-            super::labels::chip(ui, n, &state.config.labels);
-        }
     });
+    for w in &state.workspaces {
+        let is_active = w.id == active.id;
+        let dot = if matches!(w.status, crate::state::Status::Online(_)) {
+            egui::Color32::from_rgb(34, 197, 94)
+        } else {
+            egui::Color32::GRAY
+        };
+        let stroke = if is_active {
+            egui::Stroke::new(1.0, super::theme::ACCENT)
+        } else {
+            egui::Stroke::NONE
+        };
+        let item = egui::Frame::new()
+            .stroke(stroke)
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::symmetric(6, 2))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.colored_label(dot, egui_phosphor::regular::CIRCLE);
+                    let r = ui.add(egui::Button::new(&w.config.name).frame(false));
+                    if is_active && let Some(n) = label {
+                        super::labels::chip(ui, n, &state.config.labels);
+                    }
+                    r
+                })
+                .inner
+            });
+        if item.inner.clicked() && !is_active {
+            out.push(Intent::SwitchWorkspace(w.id));
+        }
+    }
     ui.horizontal(|ui| {
         let new_query = ui
             .add_enabled(caps.sql_editor, egui::Button::new("New query"))
@@ -92,6 +121,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         out.extend(super::keyspace::sidebar(ui, ks));
         return out;
     }
+    ui.strong("EXPLORER");
     let mut q = active.tree.filter_text().to_owned();
     let edit = egui::Frame::new()
         .fill(egui::Color32::from_gray(40))
@@ -114,7 +144,11 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 ui.add_space(n.depth as f32 * 14.0);
                 match (&n.path, &n.object) {
                     (Some(path), _) => {
-                        let arrow = if n.expanded { "▾" } else { "▸" };
+                        let arrow = if n.expanded {
+                            egui_phosphor::regular::CARET_DOWN
+                        } else {
+                            egui_phosphor::regular::CARET_RIGHT
+                        };
                         let sel = active.tree.selected.as_ref() == Some(path);
                         let label = if n.loading {
                             format!("{arrow} {} …", n.label)
@@ -123,6 +157,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         } else {
                             format!("{arrow} {}", n.label)
                         };
+                        if let NodePath::Folder { kind, .. } = path {
+                            ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
+                        }
                         let mut r = ui.selectable_label(sel, label);
                         if let Some(e) = &n.error {
                             r = r.on_hover_text(e);

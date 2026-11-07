@@ -140,7 +140,7 @@ fn connect_and_open_table_renders_grid() {
 
     // Assert
     wait_for(&mut h, "alice@example.com");
-    h.get_by_label("users"); // tab strip entry
+    h.get_by_label_contains("Data: users"); // tab strip entry
 }
 
 #[test]

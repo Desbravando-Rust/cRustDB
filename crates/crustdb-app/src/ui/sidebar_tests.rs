@@ -183,24 +183,6 @@ fn sidebar_buttons_are_spaced() {
 }
 
 #[test]
-fn workspace_combo_has_accessible_name() {
-    // Arrange
-    let s = online();
-    let mut done = false;
-    let mut h = Harness::new_ui(|ui| {
-        if ready(ui, &mut done) {
-            show(ui, &s);
-        }
-    });
-
-    // Act
-    h.run();
-
-    // Assert
-    h.get_by_label("Workspace");
-}
-
-#[test]
 fn sidebar_filter_sits_in_gray_frame() {
     // Arrange
     let mut s = state(&["alpha"]);
@@ -232,4 +214,74 @@ fn sidebar_filter_sits_in_gray_frame() {
         _ => false,
     });
     assert!(framed);
+}
+
+#[test]
+fn sidebar_lists_open_connections_with_active_marked() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    s.open_workspace(s.config.connections[0].clone());
+    let other = s.open_workspace(s.config.connections[1].clone());
+    s.workspaces[0].status = Status::Online(ServerVersion {
+        product: Product::Postgres,
+        major: 16,
+        minor: 0,
+        patch: 0,
+        raw: "16.0".into(),
+    });
+    s.active = Some(s.workspaces[0].id);
+    let mut done = false;
+    let mut got = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            got.extend(show(ui, &s));
+        }
+    });
+    h.run();
+
+    // Act
+    h.get_by_label("beta").click();
+    h.run();
+
+    // Assert
+    h.get_by_label("alpha");
+    drop(h);
+    assert!(got.contains(&Intent::SwitchWorkspace(other)));
+}
+
+#[test]
+fn sidebar_has_connections_and_explorer_headers() {
+    // Arrange
+    let s = online();
+    let mut done = false;
+    let mut got = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            got.extend(show(ui, &s));
+        }
+    });
+    h.run();
+
+    // Act
+    h.get_by_label("New connection").click();
+    h.run();
+
+    // Assert
+    h.get_by_label("CONNECTIONS");
+    h.get_by_label("EXPLORER");
+    drop(h);
+    assert!(got.contains(&Intent::NewConnection));
+}
+
+#[test]
+fn footer_shows_product_name() {
+    // Arrange
+    let s = state(&[]);
+    let mut h = Harness::new_ui(|ui| footer(ui, &s));
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_label("cRustDB Desktop");
 }
