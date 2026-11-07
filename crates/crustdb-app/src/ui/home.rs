@@ -36,7 +36,7 @@ pub(crate) fn unsupported_for(kind: DriverKind) -> String {
     format!("Not supported for {}", engine_name(kind))
 }
 
-const BANNER_MIN: egui::Vec2 = egui::vec2(420.0, 430.0);
+pub(super) const BANNER_MIN: egui::Vec2 = egui::vec2(420.0, 430.0);
 const WATERMARK_MIN: egui::Vec2 = egui::vec2(240.0, 300.0);
 
 /// Memory id of the home search text; session-only.
@@ -51,7 +51,7 @@ const BOOK_URL: &str = "https://desbravandorust.com.br/";
 pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
     let (w, h) = (ui.available_width(), ui.available_height());
     if w >= BANNER_MIN.x && h >= BANNER_MIN.y {
-        book_promo(ui, state);
+        book_promo(ui, &state.news);
     }
     let watermark = w >= WATERMARK_MIN.x && h >= WATERMARK_MIN.y;
     ui.vertical_centered(|ui| {
@@ -77,7 +77,7 @@ pub fn empty_state(ui: &mut egui::Ui, state: &AppState) {
 /// Static paragraph on Rust (the dynamic feed is a follow-up).
 const BOOK_BLURB: &str = "Rust garante segurança de memória sem garbage collector: o compilador barra use-after-free e data races antes do programa rodar, e o resultado é um binário nativo, rápido e leve. Por isso o cRustDB é feito em Rust.";
 
-fn book_promo(ui: &mut egui::Ui, state: &AppState) {
+pub(super) fn book_promo(ui: &mut egui::Ui, news: &crate::news::News) {
     egui::Panel::bottom("home_book_promo")
         .resizable(false)
         .show(ui, |ui| {
@@ -93,7 +93,7 @@ fn book_promo(ui: &mut egui::Ui, state: &AppState) {
                     ui.weak(
                         "Este app é feito em Rust. Vindo do Python? Aprenda com o Desbravando Rust.",
                     );
-                    if let Some(c) = state.news.chapter.get() {
+                    if let Some(c) = news.chapter.get() {
                         ui.hyperlink_to(format!("{} {}", c.title, icon::ARROW_RIGHT), &c.url);
                         return;
                     }

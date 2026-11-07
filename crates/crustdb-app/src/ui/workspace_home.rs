@@ -2,10 +2,16 @@
 use eframe::egui;
 
 use super::Intent;
+use crate::news::News;
 use crate::state::WorkspaceState;
 
-pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
+pub fn show(ui: &mut egui::Ui, w: &WorkspaceState, news: &News) -> Vec<Intent> {
     let mut out = vec![];
+    if ui.available_width() >= super::home::BANNER_MIN.x
+        && ui.available_height() >= super::home::BANNER_MIN.y
+    {
+        super::home::book_promo(ui, news);
+    }
     let Some(db) = &w.config.database else {
         return out;
     };
@@ -51,6 +57,7 @@ mod tests {
     use crustdb_core::model::{ObjectKind, ObjectRef};
 
     use super::*;
+    use crate::news::News;
     use crate::runtime::Command;
     use crate::state::workspace::tests::state;
     use crate::ui::home::tests::ready;
@@ -185,7 +192,7 @@ mod tests {
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
             if ready(ui, &mut done) {
-                show(ui, &w);
+                show(ui, &w, &News::default());
             }
         });
 
@@ -206,7 +213,7 @@ mod tests {
         let mut got = vec![];
         let mut h = Harness::new_ui(|ui| {
             if ready(ui, &mut done) {
-                got.extend(show(ui, &w));
+                got.extend(show(ui, &w, &News::default()));
             }
         });
         h.run();
@@ -230,7 +237,7 @@ mod tests {
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
             if ready(ui, &mut done) {
-                show(ui, &w);
+                show(ui, &w, &News::default());
             }
         });
 
@@ -249,7 +256,7 @@ mod tests {
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
             if ready(ui, &mut done) {
-                show(ui, &w);
+                show(ui, &w, &News::default());
             }
         });
 
@@ -269,7 +276,7 @@ mod tests {
         // Short frames keep both clicks inside egui's double-click window.
         let mut h = Harness::builder().with_step_dt(0.01).build_ui(|ui| {
             if ready(ui, &mut done) {
-                got.extend(show(ui, &w));
+                got.extend(show(ui, &w, &News::default()));
             }
         });
         h.run();
@@ -284,5 +291,25 @@ mod tests {
         assert!(got.contains(&Intent::OpenObject {
             object: table("users")
         }));
+    }
+
+    #[test]
+    fn workspace_home_shows_book_promo() {
+        // Arrange
+        let w = loaded(&["t"]);
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(800.0, 700.0))
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &w, &News::default());
+                }
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        assert!(h.query_by_label_contains("sem garbage collector").is_some());
     }
 }

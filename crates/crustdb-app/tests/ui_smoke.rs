@@ -213,7 +213,8 @@ fn refresh_button_refetches_open_table() {
     let before = driver.log.ops().len();
 
     // Act
-    h.get_by_label("Refresh").click();
+    h.get_by_label(egui_phosphor::regular::ARROW_CLOCKWISE)
+        .click();
     let end = Instant::now() + Duration::from_secs(10);
     while !driver.log.ops()[before..]
         .iter()
