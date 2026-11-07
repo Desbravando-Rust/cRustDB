@@ -147,7 +147,7 @@ impl CrustApp {
                 Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
                 None => match self.state.active_online() {
                     Some(w) if w.config.database.is_some() => {
-                        intents.extend(ui::workspace_home::show(ui, w));
+                        intents.extend(ui::workspace_home::show(ui, w, &self.state.news));
                     }
                     // Server-level connection (no database): as before #146, the
                     // saved list stays in the central area.
