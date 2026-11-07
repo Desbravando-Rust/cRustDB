@@ -2,8 +2,8 @@ use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 
-// `Mac` is only built on macOS (and in tests): the table stays testable on Linux.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+// One variant per OS; the other only exists in tests.
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 enum Os {
     Linux,
