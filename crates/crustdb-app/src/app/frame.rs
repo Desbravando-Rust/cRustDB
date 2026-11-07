@@ -65,6 +65,7 @@ impl CrustApp {
             egui::Panel::bottom("status_bar")
                 .frame(bar)
                 .show(ui, |ui| ui::status_bar::show(ui, m));
+            egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
         }
         self.sidebar_rect = None;
         // Same panel id on both screens: the width carries over on connect.

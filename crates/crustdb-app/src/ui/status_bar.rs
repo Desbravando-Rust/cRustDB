@@ -66,10 +66,6 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
                 "Not connected",
             ),
         }
-        if let Some(mode) = m.tls {
-            let (i, c) = tls_icon(mode);
-            item(ui, i.into(), c, &format!("TLS mode: {mode:?}"));
-        }
         if m.ssh {
             item(ui, icon::TERMINAL_WINDOW.into(), GREEN, "SSH tunnel");
         }
@@ -78,12 +74,6 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
             TxState::Open => item(ui, "TX open".into(), AMBER, "Transaction open"),
             TxState::Aborted => item(ui, "TX aborted".into(), RED, "Transaction aborted"),
         }
-        item(
-            ui,
-            format!("{} {}", icon::SHIELD_CHECK, m.threshold),
-            GRAY,
-            &safety_tooltip(m.threshold),
-        );
         if let Some(q) = m.last_query {
             let tip = format!(
                 "First row: {}\nFetch total: {}\nRender: {}",
@@ -109,21 +99,6 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
                 "Ping latency",
             );
         }
-        if let Some(p) = m.proc {
-            item(
-                ui,
-                format!("{} {:.0}%", icon::CPU, p.cpu_percent),
-                GRAY,
-                "Process CPU (100% = one core, summed over threads)",
-            );
-            let mb = p.rss_bytes / (1024 * 1024);
-            item(
-                ui,
-                format!("{} {mb} MB", icon::MEMORY),
-                GRAY,
-                "Resident memory",
-            );
-        }
         for (_, rows) in &m.exports {
             item(
                 ui,
@@ -135,10 +110,46 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
     });
 }
 
+/// Metrics strip above the status bar: TLS, safety rules, process CPU and memory.
+pub fn metrics(ui: &mut egui::Ui, m: &StatusModel) {
+    ui.horizontal(|ui| {
+        let put = |ui: &mut egui::Ui, text: String, color: Color32, tip: &str| {
+            ui.label(RichText::new(text).color(color))
+                .on_hover_text(tip);
+        };
+        if let Some(mode) = m.tls {
+            let (i, c) = tls_icon(mode);
+            put(ui, i.into(), c, &format!("TLS mode: {mode:?}"));
+        }
+        put(
+            ui,
+            format!("{} {}", icon::SHIELD_CHECK, m.threshold),
+            GRAY,
+            &safety_tooltip(m.threshold),
+        );
+        if let Some(p) = m.proc {
+            put(
+                ui,
+                format!("{} {:.0}%", icon::CPU, p.cpu_percent),
+                GRAY,
+                "Process CPU (100% = one core, summed over threads)",
+            );
+            let mb = p.rss_bytes / (1024 * 1024);
+            put(
+                ui,
+                format!("{} {mb} MB", icon::MEMORY),
+                GRAY,
+                "Resident memory",
+            );
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use egui_kittest::kittest::Queryable;
 
     #[test]
     fn status_icons_follow_tls_mode() {
@@ -175,6 +186,77 @@ mod tests {
         // Act & Assert
         for needle in ["1000", "WHERE", "Password", "Confirm", "DROP"] {
             assert!(t.contains(needle), "missing {needle}: {t}");
+        }
+    }
+
+    fn model() -> StatusModel {
+        let version = crustdb_core::model::ServerVersion {
+            product: crustdb_core::model::Product::Postgres,
+            major: 16,
+            minor: 1,
+            patch: 0,
+            raw: "16.1".into(),
+        };
+        let mut m = StatusModel::default();
+        m.connection = Some(("pg".into(), version, true));
+        m.tls = Some(TlsMode::VerifyFull);
+        m.ssh = true;
+        m.threshold = 1000;
+        m.rows = Some(7);
+        m.latency = Some(Duration::from_millis(3));
+        m.proc = Some(crate::metrics::ProcStats {
+            cpu_percent: 12.0,
+            rss_bytes: 64 * 1024 * 1024,
+        });
+        m
+    }
+
+    fn harness<'a>(m: &'a StatusModel, strip: bool) -> egui_kittest::Harness<'a> {
+        egui_kittest::Harness::new_ui(move |ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            if strip {
+                metrics(ui, m);
+            } else {
+                show(ui, m);
+            }
+        })
+    }
+
+    #[test]
+    fn metrics_strip_shows_tls_safety_cpu_memory() {
+        // Arrange
+        let m = model();
+        let mut h = harness(&m, true);
+
+        // Act
+        h.run();
+
+        // Assert
+        for l in [
+            icon::LOCK.to_string(),
+            format!("{} 1000", icon::SHIELD_CHECK),
+            format!("{} 12%", icon::CPU),
+            format!("{} 64 MB", icon::MEMORY),
+        ] {
+            h.get_by_label(&l);
+        }
+    }
+
+    #[test]
+    fn status_bar_keeps_version_rows_time_ssh_and_omits_moved_items() {
+        // Arrange
+        let m = model();
+        let mut h = harness(&m, false);
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label_contains("16.1");
+        h.get_by_label(icon::TERMINAL_WINDOW);
+        h.get_by_label(&format!("{} 7", icon::ROWS));
+        for gone in [icon::LOCK, icon::SHIELD_CHECK, icon::CPU, icon::MEMORY] {
+            assert!(h.query_by_label_contains(gone).is_none(), "{gone}");
         }
     }
 }
