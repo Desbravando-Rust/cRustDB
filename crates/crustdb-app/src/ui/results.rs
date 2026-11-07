@@ -263,9 +263,9 @@ mod tests {
         // Arrange
         let mut tab = tab_with_rows();
         let mut h = run(&mut tab, show);
-        h.get_by_label("1").click();
+        h.get_by_label("a").click();
         h.run();
-        h.get_by_label("2").click_modifiers(egui::Modifiers::SHIFT);
+        h.get_by_label("b").click_modifiers(egui::Modifiers::SHIFT);
         h.run();
         h.event(egui::Event::Copy);
 
