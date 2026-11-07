@@ -12,14 +12,20 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) {
         );
         if let Some(w) = state.active_online() {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.colored_label(
-                    egui::Color32::from_rgb(34, 197, 94),
-                    format!(
-                        "{} Connected: {}",
-                        egui_phosphor::regular::CIRCLE,
-                        w.config.name
-                    ),
-                );
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(20, 60, 40))
+                    .corner_radius(10.0)
+                    .inner_margin(egui::Margin::symmetric(8, 2))
+                    .show(ui, |ui| {
+                        ui.colored_label(
+                            egui::Color32::from_rgb(34, 197, 94),
+                            format!(
+                                "{} Connected: {}",
+                                egui_phosphor::regular::CIRCLE,
+                                w.config.name
+                            ),
+                        );
+                    });
             });
         }
     });

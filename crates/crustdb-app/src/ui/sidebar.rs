@@ -60,7 +60,6 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     let Some(active) = state.active_online() else {
         return out;
     };
-    let label = active_label(state, active);
     let caps = active.capabilities();
     ui.horizontal(|ui| {
         ui.strong("CONNECTIONS");
@@ -74,37 +73,55 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             }
         });
     });
-    for w in &state.workspaces {
-        let is_active = w.id == active.id;
-        let dot = if matches!(w.status, crate::state::Status::Online(_)) {
-            egui::Color32::from_rgb(34, 197, 94)
-        } else {
-            egui::Color32::GRAY
-        };
-        let stroke = if is_active {
-            egui::Stroke::new(1.0, super::theme::ACCENT)
-        } else {
-            egui::Stroke::NONE
-        };
-        let item = egui::Frame::new()
-            .stroke(stroke)
-            .corner_radius(4.0)
-            .inner_margin(egui::Margin::symmetric(6, 2))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.colored_label(dot, egui_phosphor::regular::CIRCLE);
-                    let r = ui.add(egui::Button::new(&w.config.name).frame(false));
-                    if is_active && let Some(n) = label {
-                        super::labels::chip(ui, n, &state.config.labels);
-                    }
-                    r
-                })
-                .inner
-            });
-        if item.inner.clicked() && !is_active {
-            out.push(Intent::SwitchWorkspace(w.id));
-        }
-    }
+    egui::ScrollArea::vertical()
+        .id_salt("sidebar_connections")
+        .max_height(160.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for w in &state.workspaces {
+                let is_active = w.id == active.id;
+                let online = matches!(w.status, crate::state::Status::Online(_));
+                let stroke = if is_active {
+                    egui::Stroke::new(1.0, super::theme::ACCENT)
+                } else {
+                    egui::Stroke::NONE
+                };
+                let wl = active_label(state, w);
+                let item = egui::Frame::new()
+                    .stroke(stroke)
+                    .corner_radius(4.0)
+                    .inner_margin(egui::Margin::symmetric(6, 2))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let (rect, dot) =
+                                ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                            let (color, text) = if online {
+                                (egui::Color32::from_rgb(34, 197, 94), "Online")
+                            } else {
+                                (egui::Color32::GRAY, "Offline")
+                            };
+                            ui.painter().circle_filled(rect.center(), 4.0, color);
+                            dot.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::Role::Label, true, text)
+                            });
+                            dot.on_hover_text(text);
+                            let reserve = if wl.is_some() { 70.0 } else { 0.0 };
+                            let r = ui.add(
+                                egui::Button::selectable(is_active, &w.config.name)
+                                    .min_size(egui::vec2(ui.available_width() - reserve, 0.0)),
+                            );
+                            if let Some(n) = wl {
+                                super::labels::chip(ui, n, &state.config.labels);
+                            }
+                            r
+                        })
+                        .inner
+                    });
+                if item.inner.clicked() && !is_active {
+                    out.push(Intent::SwitchWorkspace(w.id));
+                }
+            }
+        });
     ui.horizontal(|ui| {
         let new_query = ui
             .add_enabled(caps.sql_editor, egui::Button::new("New query"))
@@ -151,12 +168,13 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         };
                         let sel = active.tree.selected.as_ref() == Some(path);
                         let label = if n.loading {
-                            format!("{arrow} {} …", n.label)
+                            format!("{} …", n.label)
                         } else if n.error.is_some() {
-                            format!("{arrow} {} (failed)", n.label)
+                            format!("{} (failed)", n.label)
                         } else {
-                            format!("{arrow} {}", n.label)
+                            n.label.clone()
                         };
+                        ui.label(arrow);
                         if let NodePath::Folder { kind, .. } = path {
                             ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
                         }

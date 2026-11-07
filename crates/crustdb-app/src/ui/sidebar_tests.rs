@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use crustdb_core::model::{Product, ServerVersion};
 
@@ -244,9 +244,66 @@ fn sidebar_lists_open_connections_with_active_marked() {
     h.run();
 
     // Assert
-    h.get_by_label("alpha");
+    assert_eq!(
+        h.get_by_label("alpha").accesskit_node().toggled(),
+        Some(egui::accesskit::Toggled::True)
+    );
     drop(h);
     assert!(got.contains(&Intent::SwitchWorkspace(other)));
+
+    // Act: clicking the active one
+    let mut again = vec![];
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            again.extend(show(ui, &s));
+        }
+    });
+    h.run();
+    h.get_by_label("alpha").click();
+    h.run();
+    drop(h);
+    assert!(again.is_empty());
+}
+
+#[test]
+fn sidebar_shows_chip_on_every_labeled_workspace() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    s.open_workspace(s.config.connections[0].clone());
+    s.open_workspace(s.config.connections[1].clone());
+    s.config.connections[1].label = Some("prod".into());
+    s.workspaces[0].status = Status::Online(ServerVersion {
+        product: Product::Postgres,
+        major: 16,
+        minor: 0,
+        patch: 0,
+        raw: "16.0".into(),
+    });
+    s.active = Some(s.workspaces[0].id);
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_label("prod");
+}
+
+#[test]
+fn folder_color_distinguishes_kinds() {
+    // Arrange & Act & Assert
+    use crustdb_core::model::ObjectKind as K;
+    assert_ne!(folder_color(K::Table), folder_color(K::View));
+    assert_eq!(folder_color(K::View), folder_color(K::MaterializedView));
+    assert_eq!(folder_color(K::Function), folder_color(K::Procedure));
+    assert_ne!(folder_color(K::Function), folder_color(K::Table));
+    assert_eq!(folder_color(K::Sequence), egui::Color32::GRAY);
 }
 
 #[test]
