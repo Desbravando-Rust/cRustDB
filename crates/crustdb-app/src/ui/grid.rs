@@ -5,6 +5,7 @@ use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
+use super::grid_layout::{bool_text, layout};
 use super::theme::ACCENT;
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
@@ -14,10 +15,6 @@ const ROW_H: f32 = 20.0;
 pub(crate) const INT_COLOR: Color32 = Color32::from_rgb(254, 215, 170);
 const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
 const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
-
-fn is_true(text: &str) -> bool {
-    matches!(text.to_lowercase().as_str(), "true" | "t" | "1")
-}
 
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
@@ -62,6 +59,38 @@ pub fn grid(
     selected: &mut Option<usize>,
     anchor: &mut Option<usize>,
     sorts: &[Sort],
+    edit: Option<CellEdit<'_>>,
+    pending: &[(usize, Option<String>)],
+    pending_row: Option<usize>,
+) -> Option<(String, bool)> {
+    // The table paints column dividers down to its parent's bottom edge; a child
+    // ui only extends as far as the content, so the empty area stays clean.
+    ui.scope(|ui| {
+        table(
+            ui,
+            columns,
+            rows,
+            view,
+            selected,
+            anchor,
+            sorts,
+            edit,
+            pending,
+            pending_row,
+        )
+    })
+    .inner
+}
+
+#[allow(clippy::too_many_arguments)]
+fn table(
+    ui: &mut egui::Ui,
+    columns: &[ColumnMeta],
+    rows: &[Row],
+    view: Option<&[usize]>,
+    selected: &mut Option<usize>,
+    anchor: &mut Option<usize>,
+    sorts: &[Sort],
     mut edit: Option<CellEdit<'_>>,
     pending: &[(usize, Option<String>)],
     pending_row: Option<usize>,
@@ -71,13 +100,16 @@ pub fn grid(
     let pos = |i: usize| view.map_or(Some(i), |v| v.iter().position(|&x| x == i));
     let sel = grid_copy::range(selected.and_then(pos), anchor.and_then(pos));
     grid_copy::shortcut(ui, columns, rows, view, sel.clone());
+    // Size to content (dates and timestamps stay whole); see `grid_layout::layout`.
+    let (salt, widths) = layout(ui, columns, rows, view);
     let mut table = TableBuilder::new(ui)
+        .id_salt(salt)
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click());
     table = table.column(Column::auto().at_least(32.0));
-    for _ in columns {
-        table = table.column(Column::auto().at_least(60.0).clip(true));
+    for &w in widths.iter() {
+        table = table.column(Column::initial(w).at_least(60.0).clip(true));
     }
     table
         .header(ROW_H, |mut h| {
@@ -137,17 +169,19 @@ pub fn grid(
                             ui.add(egui::Label::new(t).truncate().selectable(false));
                             return;
                         }
-                        let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
+                        let raw = display_cell(cell, meta, GRID_DISPLAY_CHARS);
+                        // Display only: copy, export and edit keep the stored value.
+                        let flag = bool_text(meta, &raw);
+                        let text = flag.map_or(raw, std::borrow::Cow::Borrowed);
                         if matches!(cell, Cell::Null) {
                             let null = RichText::new(text).italics().color(Color32::GRAY);
                             ui.add(egui::Label::new(null).selectable(false));
                         } else {
-                            let bool_true = is_true(&text);
                             let t = RichText::new(text).monospace();
-                            let t = match meta.category {
-                                TypeCategory::Bool if bool_true => t.color(GREEN),
-                                TypeCategory::Bool => t.color(Color32::GRAY),
-                                TypeCategory::Integer => t.color(INT_COLOR),
+                            let t = match (flag, meta.category) {
+                                (Some("true"), _) => t.color(GREEN),
+                                (Some(_), _) => t.color(Color32::GRAY),
+                                (None, TypeCategory::Integer) => t.color(INT_COLOR),
                                 _ => t,
                             };
                             ui.add(egui::Label::new(t).truncate().selectable(false));
@@ -323,18 +357,23 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     }
     egui::CentralPanel::default().show(ui, |ui| {
         let mut op = None;
-        let clicked = grid(
-            ui,
-            &tab.columns,
-            &tab.rows,
-            None,
-            &mut tab.selected_row,
-            &mut tab.select_anchor,
-            &tab.sorts,
-            Some((&mut tab.editing, &mut op)),
-            &tab.pending,
-            tab.pending_row,
-        );
+        // Per-tab id: widths and scroll state must not be shared between table tabs.
+        let clicked = ui
+            .push_id(id.0, |ui| {
+                grid(
+                    ui,
+                    &tab.columns,
+                    &tab.rows,
+                    None,
+                    &mut tab.selected_row,
+                    &mut tab.select_anchor,
+                    &tab.sorts,
+                    Some((&mut tab.editing, &mut op)),
+                    &tab.pending,
+                    tab.pending_row,
+                )
+            })
+            .inner;
         match op {
             Some(CellOp::Begin { row, col }) => tab.begin_edit(row, col),
             Some(CellOp::Commit) => out.push(Intent::CommitEdit(id)),
@@ -415,6 +454,9 @@ pub fn show_tab(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     out
 }
 
+#[cfg(test)]
+#[path = "grid_layout_tests.rs"]
+mod layout_tests;
 #[cfg(test)]
 #[path = "grid_tests.rs"]
 mod tests;

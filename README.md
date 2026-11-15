@@ -44,7 +44,7 @@
 - **Foreign keys**: Ctrl+click a foreign key cell to open the referenced table filtered to the matching row.
 - **ER diagram**: read-only diagram of a schema or database, opened from the sidebar context menu.
 - **SQL editor**: highlighting, autocomplete, find and replace (Ctrl+F), format (Ctrl+Shift+F), run statement under cursor / selection / all, cancel, "Load more" from a server-side cursor, history, open/save `.sql` files.
-- **Result grid**: click headers to sort (Shift for multi-column), filter loaded rows, copy cells or rows as TSV.
+- **Result grid**: click headers to sort (Shift for multi-column), filter loaded rows, copy cells or rows as TSV. Columns open sized to their content (dates and timestamps stay whole) and `bool`/`tinyint(1)` columns show `true`/`false` (display only: copy, export and the cell editor keep the stored value).
 - **Transactions**: autocommit by default, Begin / Commit / Rollback per tab, state shown in the status bar. Disconnecting with an open transaction asks to commit, roll back or cancel.
 - **Safety policy**: destructive or multi-row statements ask for confirmation; DML estimated (via `EXPLAIN`) above a per-connection threshold asks for the password. SQLite has no row estimate, so its DML always takes the strictest path.
 - **Redis**: keyspace tree loaded in `SCAN` batches (never `KEYS`) with a key filter, database selector, read-only value viewer (type, TTL, size), and a command editor on its own session. Dangerous commands ask for confirmation or the password; blocking, transaction and Pub/Sub commands are refused.
@@ -186,6 +186,7 @@ Typing: highlighting turns off above 750 lines (measured limit). The 5,000-line 
 - The MySQL driver trusts the embedded Mozilla roots (`webpki-roots`) instead of the system store; use `ca_path` for a private CA.
 - SSH RSA keys (user and host) are supported through `russh`'s `rsa` feature, which pulls in the `rsa` crate (RUSTSEC-2023-0071, Marvin timing leak, no upstream patch). The advisory is ignored in `deny.toml`; it matters only to an observer collecting many signatures from one session. Prefer ed25519 or ECDSA keys when you can.
 - A one-column CSV export writes a `NULL` cell as an empty line.
+- Boolean display for MySQL `tinyint(1)` applies when browsing tables; raw MySQL queries report `tiny` and keep showing 0/1.
 - The grid does not virtualize columns; tables with more than 200 columns may render slower.
 
 ## License
