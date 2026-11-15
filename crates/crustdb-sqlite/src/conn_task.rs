@@ -123,7 +123,6 @@ fn header(stmt: &Statement<'_>) -> ResultHeader {
     ResultHeader {
         columns: stmt
             .columns()
-            .iter()
             .map(|c| ColumnMeta {
                 name: c.name().to_owned(),
                 type_name: c.decl_type().unwrap_or_default().to_owned(),
