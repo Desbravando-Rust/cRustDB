@@ -381,7 +381,6 @@ impl AppState {
             | Event::Rows { req, .. }
             | Event::FetchDone { req }
             | Event::StatementDone { req, .. }
-            | Event::ExportDone { req, .. }
             | Event::ExecError { req, .. } => {
                 if let Some(q) = self
                     .workspaces
@@ -392,6 +391,7 @@ impl AppState {
                     q.apply(&e);
                 }
             }
+            Event::ExportDone { req, result } => self.export_done(req, result),
             Event::TxChanged { tab, state } => {
                 if let Some(q) = self.query_mut(tab) {
                     q.apply(&e);

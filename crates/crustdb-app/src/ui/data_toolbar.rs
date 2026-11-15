@@ -8,6 +8,7 @@ use super::theme::ACCENT;
 use crate::state::TableTab;
 
 pub const FILTER_HINT: &str = "Filter rows... (Ctrl+F)";
+pub const EXPORT_LABEL: &str = "Export filtered rows...";
 pub const COMMIT_LABEL: &str = "Commit Changes";
 
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
@@ -34,6 +35,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         if reload.on_hover_text("Reload page (F5)").clicked() {
             out.push(Intent::Retry(id));
         }
+        let export = ui.add_enabled(tab.can_export(), egui::Button::new(icon::DOWNLOAD_SIMPLE));
+        export.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, EXPORT_LABEL));
+        if export.on_hover_text(EXPORT_LABEL).clicked() {
+            out.push(Intent::ExportTable(id));
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let on = tab.has_pending() && tab.edit_req.is_none();
             let mut commit = egui::Button::new(RichText::new(COMMIT_LABEL).strong());
@@ -50,3 +56,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     });
     out
 }
+
+#[cfg(test)]
+#[path = "data_toolbar_tests.rs"]
+mod tests;

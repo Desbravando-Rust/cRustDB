@@ -114,6 +114,8 @@ pub enum Intent {
     LoadMore(TabId),
     /// Native save dialog, then the export.
     ExportResult(TabId),
+    /// Native save dialog, then the export of the table tab's filtered rows.
+    ExportTable(TabId),
     OpenFile,
     Save(TabId),
     SaveAs(TabId),

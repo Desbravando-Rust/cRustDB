@@ -50,6 +50,8 @@ pub struct TableTab {
     /// The catalog changed: reload the structure (then the page) on the next `take_fetches`.
     pub needs_structure: bool,
     pub notice: Option<String>,
+    /// Pending `ExportTable` for this tab.
+    pub export_req: Option<RequestId>,
     /// Pending `LoadDdl` and its result (`view == Ddl`).
     pub ddl_req: Option<RequestId>,
     pub ddl: Option<String>,
@@ -92,6 +94,7 @@ impl TableTab {
             needs_fetch: false,
             needs_structure: false,
             notice: None,
+            export_req: None,
             ddl_req: None,
             ddl: None,
             driver: DriverKind::Postgres,
@@ -148,6 +151,39 @@ impl TableTab {
         self.structure_req = None;
         self.ddl_req = None;
         self.notice = Some(text);
+    }
+
+    /// Rows are loaded and no export is running (the toolbar button and its shortcut).
+    pub fn can_export(&self) -> bool {
+        !self.rows.is_empty() && self.export_req.is_none()
+    }
+
+    /// Exports every row matching the tab's filters and sorts. One export at a time; none
+    /// without loaded rows.
+    // ponytail: closing the tab mid-export does not cancel it; the file still completes and
+    // its result is dropped. Send `CancelExport` from `close_tab_tx` if that matters.
+    pub fn export(&mut self, path: std::path::PathBuf, req: RequestId) -> Option<Command> {
+        if !self.can_export() {
+            return None;
+        }
+        self.export_req = Some(req);
+        Some(Command::ExportTable {
+            tab: self.id,
+            req,
+            query: self.query(),
+            path,
+        })
+    }
+
+    pub fn finish_export(&mut self, req: RequestId, result: Result<u64, String>) {
+        if self.export_req != Some(req) {
+            return;
+        }
+        self.export_req = None;
+        self.notice = Some(match result {
+            Ok(n) => format!("exported {n} rows"),
+            Err(e) => format!("export failed: {e}"),
+        });
     }
 
     pub fn query(&self) -> TableQuery {

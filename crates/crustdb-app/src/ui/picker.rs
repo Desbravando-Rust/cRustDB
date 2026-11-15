@@ -11,6 +11,7 @@ pub enum Pick {
     Open,
     Save(TabId),
     Export(TabId),
+    ExportTable(TabId),
     /// For the connection form whose draft has this id.
     SqliteDb(crustdb_core::model::ConnectionId),
 }
@@ -50,7 +51,7 @@ impl Picker {
             let d = rfd::FileDialog::new();
             // The export format follows the chosen extension (`export_fmt::Format::from_path`).
             let d = match pick {
-                Pick::Export(_) => d
+                Pick::Export(_) | Pick::ExportTable(_) => d
                     .add_filter("CSV", &["csv"])
                     .add_filter("JSON Lines", &["jsonl"])
                     .add_filter("SQL", &["sql"]),
@@ -62,7 +63,9 @@ impl Picker {
             let path = match pick {
                 // The SQLite driver opens existing files only, so no save dialog here.
                 Pick::Open | Pick::SqliteDb(_) => d.pick_file(),
-                Pick::Save(_) | Pick::Export(_) => d.set_file_name(name).save_file(),
+                Pick::Save(_) | Pick::Export(_) | Pick::ExportTable(_) => {
+                    d.set_file_name(name).save_file()
+                }
             };
             let _ = tx.send((pick, path));
             ctx.request_repaint();

@@ -27,6 +27,13 @@ impl CrustApp {
                 self.picker
                     .start(Pick::Export(tab), &self.ctx, "result.csv")
             }
+            Intent::ExportTable(tab) => {
+                let name = self
+                    .state
+                    .table_mut(tab)
+                    .map_or_else(|| "table.csv".into(), |t| export_file_name(&t.object.name));
+                self.picker.start(Pick::ExportTable(tab), &self.ctx, &name)
+            }
             Intent::Save(tab) => self.save(tab, false),
             Intent::SaveAs(tab) => self.save(tab, true),
             // The unsaved-changes dialog: save the tab it names, then close it.
@@ -113,6 +120,11 @@ impl CrustApp {
                 Pick::Save(tab) => self.write_file(tab, path),
                 Pick::Export(tab) => {
                     let cmd = self.state.query_mut(tab).and_then(|q| q.export(path));
+                    self.send(cmd);
+                }
+                Pick::ExportTable(tab) => {
+                    let req = self.runtime.as_ref().map(|rt| rt.next_request_id());
+                    let cmd = req.and_then(|r| self.state.table_mut(tab)?.export(path, r));
                     self.send(cmd);
                 }
                 Pick::SqliteDb(id) => apply_sqlite_pick(self.form.as_mut(), id, &path),
@@ -206,10 +218,29 @@ fn note(q: &mut crate::state::QueryTab, text: String) {
     q.pane.push(n, false, text, Duration::ZERO);
 }
 
+/// Suggested file name: the table name with characters that are invalid in file names replaced.
+fn export_file_name(table: &str) -> String {
+    let safe = table.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    format!("{safe}.csv")
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_file_name_replaces_invalid_characters() {
+        // Arrange
+        let table = "a/b\\c:d*e?f\"g<h>i|j";
+
+        // Act
+        let name = export_file_name(table);
+
+        // Assert
+        assert_eq!(name, "a_b_c_d_e_f_g_h_i_j.csv");
+        assert_eq!(export_file_name("users"), "users.csv");
+    }
 
     fn sqlite_form() -> ConnectionForm {
         ConnectionForm::new(DriverKind::Sqlite, false)
