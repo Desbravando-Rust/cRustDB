@@ -9,6 +9,13 @@ pub const ONLINE: egui::Color32 = egui::Color32::from_rgb(34, 197, 94);
 /// Background of the "Connected" badge.
 pub const BADGE_FILL: egui::Color32 = egui::Color32::from_rgb(20, 60, 40);
 
+/// Restyle `selection` for list rows and tabs: a faint accent tint instead of a solid pill, with
+/// strong text colour (also the focus ring colour) so it stays readable in light and dark.
+pub fn subtle_selection(v: &mut egui::Visuals) {
+    v.selection.bg_fill = ACCENT.gamma_multiply(0.2);
+    v.selection.stroke = egui::Stroke::new(1.0, v.strong_text_color());
+}
+
 /// Fixed dark theme plus the Phosphor icon font.
 pub fn install_theme(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);
@@ -49,5 +56,18 @@ mod tests {
         let v = ctx.global_style().visuals.clone();
         assert_eq!(v.selection.bg_fill, ACCENT);
         assert_eq!(v.hyperlink_color, ACCENT);
+    }
+
+    #[test]
+    fn subtle_selection_is_translucent_with_readable_text() {
+        // Arrange
+        let mut v = egui::Visuals::dark();
+
+        // Act
+        subtle_selection(&mut v);
+
+        // Assert
+        assert!(v.selection.bg_fill.a() < 80, "not a solid pill");
+        assert_eq!(v.selection.stroke.color, v.strong_text_color());
     }
 }

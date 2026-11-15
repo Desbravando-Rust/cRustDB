@@ -11,6 +11,7 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             t.id,
             format!("{} Data: {}", egui_phosphor::regular::TABLE, t.object.name),
+            t.object.name.clone(),
         )
     });
     let queries = w.queries.iter().enumerate().map(|(i, q)| {
@@ -27,18 +28,45 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             q.id,
             format!("{} {name}{mark}", egui_phosphor::regular::FILE_SQL),
+            name,
         )
     });
     ui.horizontal(|ui| {
-        for (id, label) in tables.chain(queries) {
-            if ui
-                .selectable_label(w.active_tab == Some(id), label)
-                .clicked()
-            {
-                out.push(Intent::ActivateTab(id));
-            }
-            if ui.small_button(egui_phosphor::regular::X).clicked() {
-                out.push(Intent::CloseTab(id));
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (id, label, name) in tables.chain(queries) {
+            let active = w.active_tab == Some(id);
+            let tab = egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(6, 2))
+                .show(ui, |ui| {
+                    super::theme::subtle_selection(ui.visuals_mut());
+                    let r =
+                        ui.add(egui::Button::selectable(active, &label).frame_when_inactive(false));
+                    let x = ui.add(
+                        egui::Button::new(egui_phosphor::regular::X)
+                            .small()
+                            .frame(false),
+                    );
+                    x.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::Role::Button,
+                            true,
+                            format!("Close tab {name}"),
+                        )
+                    });
+                    if r.clicked() {
+                        out.push(Intent::ActivateTab(id));
+                    }
+                    if x.clicked() {
+                        out.push(Intent::CloseTab(id));
+                    }
+                });
+            if active {
+                let rect = tab.response.rect;
+                ui.painter().hline(
+                    rect.x_range(),
+                    rect.bottom(),
+                    egui::Stroke::new(2.0, super::theme::ACCENT),
+                );
             }
         }
     });
@@ -83,5 +111,76 @@ mod tests {
 
         // Assert
         assert!(h.query_by_label_contains("Data: users").is_some());
+    }
+
+    fn two_tabs() -> crate::state::AppState {
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let object = |n: &str| ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: n.into(),
+            kind: ObjectKind::Table,
+        };
+        let w = s.workspace_mut(ws).unwrap();
+        w.tabs
+            .push(Tab::Table(TableTab::new(TabId(1), object("users"), 100)));
+        w.tabs
+            .push(Tab::Table(TableTab::new(TabId(2), object("orders"), 100)));
+        w.active_tab = Some(TabId(1));
+        s
+    }
+
+    #[test]
+    fn tab_bar_active_tab_is_toggled_and_inactive_is_not() {
+        // Arrange
+        let s = two_tabs();
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                show(ui, s.workspaces.first().unwrap());
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        use egui_kittest::kittest::NodeT;
+        let on = h
+            .get_by_label_contains("Data: users")
+            .accesskit_node()
+            .toggled();
+        let off = h
+            .get_by_label_contains("Data: orders")
+            .accesskit_node()
+            .toggled();
+        assert_eq!(on, Some(egui::accesskit::Toggled::True));
+        assert_eq!(off, Some(egui::accesskit::Toggled::False));
+    }
+
+    #[test]
+    fn tab_bar_close_button_is_labeled_and_sits_inside_the_tab() {
+        // Arrange
+        let s = two_tabs();
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                got.extend(show(ui, s.workspaces.first().unwrap()));
+            }
+        });
+        h.run();
+        let tab = h.get_by_label_contains("Data: users").rect();
+        let close = h.get_by_label("Close tab users").rect();
+
+        // Act
+        h.get_by_label("Close tab users").click();
+        h.run();
+
+        // Assert
+        assert!(close.left() >= tab.right() - 1.0 && close.left() - tab.right() < 12.0);
+        drop(h);
+        assert!(got.contains(&Intent::CloseTab(TabId(1))));
     }
 }

@@ -30,6 +30,16 @@ fn folder_color(kind: crustdb_core::model::ObjectKind) -> egui::Color32 {
     }
 }
 
+/// Icon of a leaf object row.
+fn leaf_icon(kind: crustdb_core::model::ObjectKind) -> &'static str {
+    use crustdb_core::model::ObjectKind as K;
+    match kind {
+        K::Table => egui_phosphor::regular::TABLE,
+        K::View | K::MaterializedView => egui_phosphor::regular::EYE,
+        _ => egui_phosphor::regular::FUNCTION,
+    }
+}
+
 /// Product name and app version at the bottom of the sidebar; draw it before the rest so it keeps its place.
 pub fn footer(ui: &mut egui::Ui, state: &AppState) {
     egui::Panel::bottom("sidebar_footer").show(ui, |ui| {
@@ -81,39 +91,43 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
             for w in &state.workspaces {
                 let is_active = w.id == active.id;
                 let online = matches!(w.status, crate::state::Status::Online(_));
-                let stroke = if is_active {
-                    egui::Stroke::new(1.0, super::theme::ACCENT)
-                } else {
-                    egui::Stroke::NONE
-                };
                 let wl = active_label(state, w);
                 let item = egui::Frame::new()
-                    .stroke(stroke)
                     .corner_radius(4.0)
                     .inner_margin(egui::Margin::symmetric(6, 2))
                     .show(ui, |ui| {
+                        super::theme::subtle_selection(ui.visuals_mut());
+                        // Right edge first (dot, then chip); icon and name fill what is left.
                         ui.horizontal(|ui| {
-                            let (rect, dot) =
-                                ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-                            let (color, text) = if online {
-                                (super::theme::ONLINE, "Online")
-                            } else {
-                                (egui::Color32::GRAY, "Offline")
-                            };
-                            ui.painter().circle_filled(rect.center(), 4.0, color);
-                            dot.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::Role::Label, true, text)
-                            });
-                            dot.on_hover_text(text);
-                            // Chip first (right edge), button takes the width that is left.
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let (rect, dot) = ui.allocate_exact_size(
+                                    egui::vec2(8.0, 8.0),
+                                    egui::Sense::hover(),
+                                );
+                                let (color, text) = if online {
+                                    (super::theme::ONLINE, "Online")
+                                } else {
+                                    (egui::Color32::GRAY, "Offline")
+                                };
+                                ui.painter().circle_filled(rect.center(), 4.0, color);
+                                dot.widget_info(|| {
+                                    egui::WidgetInfo::labeled(egui::Role::Label, true, text)
+                                });
+                                dot.on_hover_text(text);
                                 if let Some(n) = wl {
                                     super::labels::chip(ui, n, &state.config.labels);
                                 }
-                                ui.add(
-                                    egui::Button::selectable(is_active, &w.config.name)
-                                        .min_size(egui::vec2(ui.available_width(), 0.0)),
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(egui_phosphor::regular::DATABASE);
+                                        ui.add(
+                                            egui::Button::selectable(is_active, &w.config.name)
+                                                .truncate(),
+                                        )
+                                    },
                                 )
+                                .inner
                             })
                             .inner
                         })
@@ -190,7 +204,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         if let NodePath::Folder { kind, .. } = path {
                             ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
                         }
-                        let mut r = ui.selectable_label(sel, label);
+                        let mut r = ui
+                            .scope(|ui| {
+                                super::theme::subtle_selection(ui.visuals_mut());
+                                ui.selectable_label(sel, label)
+                            })
+                            .inner;
                         if let Some(e) = &n.error {
                             r = r.on_hover_text(e);
                         }
@@ -214,11 +233,19 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                             });
                         }
                     }
-                    (None, Some(object))
-                        if ui.selectable_label(false, &n.label).double_clicked() =>
-                    {
-                        out.push(Intent::OpenObject {
-                            object: object.clone(),
+                    (None, Some(object)) => {
+                        let open = active
+                            .tabs
+                            .iter()
+                            .any(|crate::state::Tab::Table(t)| t.object == *object);
+                        ui.label(leaf_icon(object.kind));
+                        ui.scope(|ui| {
+                            super::theme::subtle_selection(ui.visuals_mut());
+                            if ui.selectable_label(open, &n.label).double_clicked() {
+                                out.push(Intent::OpenObject {
+                                    object: object.clone(),
+                                });
+                            }
                         });
                     }
                     _ => {}
@@ -229,6 +256,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     out
 }
 
+#[cfg(test)]
+#[path = "sidebar_nav_tests.rs"]
+mod nav_tests;
 #[cfg(test)]
 #[path = "sidebar_tests.rs"]
 mod tests;
