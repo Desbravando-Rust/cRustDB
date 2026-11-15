@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
 
+/// Exists and is readable on every OS.
+const READABLE_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+
 #[test]
 fn only_new_forms_show_url_box() {
     // Arrange
@@ -245,7 +248,7 @@ fn field_errors(f: &ConnectionForm) -> Vec<&'static str> {
 fn cert_without_key_is_an_error() {
     // Arrange
     let mut f = form();
-    f.draft.tls.client_cert_path = Some("/etc/hostname".into());
+    f.draft.tls.client_cert_path = Some(READABLE_FILE.into());
 
     // Act & Assert
     assert!(field_errors(&f).contains(&"client_key"));
@@ -255,7 +258,7 @@ fn cert_without_key_is_an_error() {
 fn key_without_cert_is_an_error() {
     // Arrange
     let mut f = form();
-    f.draft.tls.client_key_path = Some("/etc/hostname".into());
+    f.draft.tls.client_key_path = Some(READABLE_FILE.into());
 
     // Act & Assert
     assert!(field_errors(&f).contains(&"client_cert"));
@@ -266,7 +269,7 @@ fn unreadable_client_cert_is_an_error() {
     // Arrange
     let mut f = form();
     f.draft.tls.client_cert_path = Some("/nonexistent/c.crt".into());
-    f.draft.tls.client_key_path = Some("/etc/hostname".into());
+    f.draft.tls.client_key_path = Some(READABLE_FILE.into());
 
     // Act & Assert
     assert_eq!(field_errors(&f), vec!["client_cert"]);

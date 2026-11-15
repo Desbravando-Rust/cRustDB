@@ -128,11 +128,31 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  macos:
+    needs: check-files
+    if: needs.check-files.outputs.has_extension == 'true'
+    timeout-minutes: 30
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo nextest run --workspace
+      - name: Keychain round trip
+        run: cargo nextest run -p crustdb-app --run-ignored only -E 'test(keyring_roundtrip)'
+      - name: Intel build check
+        run: rustup target add x86_64-apple-darwin && cargo check --workspace --target x86_64-apple-darwin
+
   # Single required check for branch protection: fails if any gate failed or was cancelled
   # (skipped jobs, e.g. docs-only PRs, count as success).
   ci-ok:
     if: always()
-    needs: [check-files, fmt, clippy, deny, coverage]
+    needs: [check-files, fmt, clippy, deny, coverage, macos]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -110,6 +110,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn first_sample_has_zero_cpu_and_real_rss() {
         // Arrange
         let mut s = ProcSampler::default();

@@ -36,7 +36,7 @@
 - **Labels**: one colored label per connection (defaults: local, dev, staging, production); the connection list groups, searches and filters by label.
 - **TLS** via `rustls` (TLS 1.2+ only): `disable`, `require`, `verify-ca`, `verify-full` (default). No silent `prefer` downgrade. Client certificates (mTLS) for PostgreSQL and MySQL.
 - **SSH tunnel** via `russh`: password, key file (+ passphrase) or agent, strict `known_hosts`.
-- **Secrets** in the system keyring (Secret Service). Without one, **cRustDB** asks every time and never writes passwords to disk.
+- **Secrets** in the system keyring (Secret Service / Keychain). Without one, **cRustDB** asks every time and never writes passwords to disk.
 - **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily. When the connection sets a database (PostgreSQL, MySQL), only that database is listed; if the server has no such database, the tree shows an error. DDL run in a query tab (once committed) refreshes the tree, the home table list and open table tabs on its own. The sidebar lists the open connections (active one highlighted, `+` for a new one) above the tree, and shows the product name and app version at the bottom. A top bar shows the logo and a "Connected" badge.
 - **Table tab**: virtualized grid, keyset pagination (falls back to `LIMIT/OFFSET` when the sort key does not allow it), multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
 - **Data toolbar**: filter field (Ctrl+F), add row, reload (F5) and **Commit Changes** sit above the grid; the footer keeps paging, delete and the pending-changes chip. A metrics strip above the status bar shows TLS mode, safety threshold, process CPU and memory.
@@ -77,11 +77,13 @@ The floors may move up if the driver fails integration tests on them; any change
 
 > **On Windows?** [Read this first](docs/windows.md). We prepared you a soft landing.
 
-Requirements: Linux x86_64, the Rust toolchain pinned in `rust-toolchain.toml` (installed automatically by `rustup`), and the GUI system libraries:
+Requirements: Linux x86_64 or macOS, and the Rust toolchain pinned in `rust-toolchain.toml` (installed automatically by `rustup`). On Linux, also the GUI system libraries:
 
 ```sh
 sudo apt-get install -y libxkbcommon-dev libwayland-dev
 ```
+
+On macOS, install the Xcode Command Line Tools (`xcode-select --install`); no other system libraries are needed. CPU/memory are shown only on Linux for now (#257).
 
 Build and run:
 
@@ -134,11 +136,14 @@ Integration tests run against PostgreSQL, MySQL, MariaDB and Redis in Docker via
 
 ## Files on disk
 
-| Path | Content |
-|---|---|
-| `$XDG_CONFIG_HOME/crustdb/connections.json` | Saved connections, no secrets (0600) |
-| `$XDG_CONFIG_HOME/crustdb/known_hosts` | Accepted SSH host keys (OpenSSH format) |
-| `$XDG_DATA_HOME/crustdb/history/<id>.jsonl` | Query history per connection, last 10,000 entries (0600) |
+| Linux path | macOS path | Content |
+|---|---|---|
+| `$XDG_CONFIG_HOME/crustdb/connections.json` | `~/Library/Application Support/crustdb/connections.json` | Saved connections, no secrets (0600) |
+| `$XDG_CONFIG_HOME/crustdb/known_hosts` | `~/Library/Application Support/crustdb/known_hosts` | Accepted SSH host keys (OpenSSH format) |
+| `$XDG_DATA_HOME/crustdb/history/<id>.jsonl` | `~/Library/Application Support/crustdb/history/<id>.jsonl` | Query history per connection, last 10,000 entries (0600) |
+| `$XDG_STATE_HOME/crustdb/` | `~/Library/Logs/crustdb/` | Logs |
+
+On macOS the XDG variables still take precedence when set.
 
 ## Network access
 
