@@ -38,4 +38,4 @@ jobs:
           for img in "${CRUSTDB_PG_IMAGE:-postgres:latest}" "${CRUSTDB_MYSQL_IMAGE:-mysql:8.4}" linuxserver/openssh-server:latest; do
             for i in 1 2 3 4 5; do docker pull -q "$img" && break; [ "$i" = 5 ] && exit 1; sleep $((i * 10)); done
           done
-      - run: cargo test --workspace -- --include-ignored --skip keyring_roundtrip
+      - run: cargo test --workspace --no-fail-fast -- --include-ignored --skip keyring_roundtrip
