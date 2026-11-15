@@ -30,6 +30,16 @@ fn folder_color(kind: crustdb_core::model::ObjectKind) -> egui::Color32 {
     }
 }
 
+/// Decorative icon glyph: painted without a widget, so it has no accessible label.
+fn icon(ui: &mut egui::Ui, glyph: &str) {
+    let color = ui.visuals().text_color();
+    let galley =
+        ui.painter()
+            .layout_no_wrap(glyph.to_owned(), egui::FontId::proportional(14.0), color);
+    let (rect, _) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
+    ui.painter().galley(rect.min, galley, color);
+}
+
 /// Icon of a leaf object row.
 fn leaf_icon(kind: crustdb_core::model::ObjectKind) -> &'static str {
     use crustdb_core::model::ObjectKind as K;
@@ -93,9 +103,16 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 let online = matches!(w.status, crate::state::Status::Online(_));
                 let wl = active_label(state, w);
                 let item = egui::Frame::new()
+                    .fill(if is_active {
+                        super::theme::subtle_fill()
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    })
                     .corner_radius(4.0)
                     .inner_margin(egui::Margin::symmetric(6, 2))
                     .show(ui, |ui| {
+                        // The whole row is the click and highlight target.
+                        ui.set_width(ui.available_width());
                         super::theme::subtle_selection(ui.visuals_mut());
                         // Right edge first (dot, then chip); icon and name fill what is left.
                         ui.horizontal(|ui| {
@@ -120,9 +137,10 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
-                                        ui.label(egui_phosphor::regular::DATABASE);
+                                        icon(ui, egui_phosphor::regular::DATABASE);
                                         ui.add(
                                             egui::Button::selectable(is_active, &w.config.name)
+                                                .frame(false)
                                                 .truncate(),
                                         )
                                     },
@@ -133,7 +151,14 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         })
                         .inner
                     });
-                if item.inner.clicked() && !is_active {
+                let row = ui
+                    .interact(
+                        item.response.rect,
+                        ui.scope_id().with(("workspace_row", w.id)),
+                        egui::Sense::click(),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+                if (row.clicked() || item.inner.clicked()) && !is_active {
                     out.push(Intent::SwitchWorkspace(w.id));
                 }
             }
@@ -234,11 +259,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         }
                     }
                     (None, Some(object)) => {
+                        // ponytail: O(folhas visíveis × abas) por frame; índice por objeto se árvores/abas crescerem
                         let open = active
                             .tabs
                             .iter()
                             .any(|crate::state::Tab::Table(t)| t.object == *object);
-                        ui.label(leaf_icon(object.kind));
+                        icon(ui, leaf_icon(object.kind));
                         ui.scope(|ui| {
                             super::theme::subtle_selection(ui.visuals_mut());
                             if ui.selectable_label(open, &n.label).double_clicked() {

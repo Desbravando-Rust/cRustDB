@@ -9,6 +9,7 @@ use crate::runtime::{Command, TabId};
 use crate::state::tree::NodePath;
 use crate::state::workspace::tests::state;
 use crate::state::{AppState, Status, Tab, TableTab};
+use crate::ui::Intent;
 use crate::ui::home::tests::ready;
 
 fn obj(name: &str, kind: ObjectKind) -> ObjectRef {
@@ -115,7 +116,7 @@ fn explorer_closed_table_is_not_selected() {
 }
 
 #[test]
-fn explorer_table_row_has_table_icon() {
+fn explorer_icon_is_decorative() {
     // Arrange
     let s = with_users_leaf();
 
@@ -123,9 +124,10 @@ fn explorer_table_row_has_table_icon() {
     let h = render(&s);
 
     // Assert
+    assert!(h.query_by_label_contains("users").is_some());
     assert!(
-        h.query_by_label(egui_phosphor::regular::TABLE).is_some(),
-        "table icon next to the leaf"
+        h.query_by_label(egui_phosphor::regular::TABLE).is_none(),
+        "icon glyph is decorative, not an accessible label"
     );
 }
 
@@ -138,13 +140,61 @@ fn connection_item_has_database_icon_and_left_aligned_name() {
     let h = render(&s);
 
     // Assert
-    let icon = h.get_by_label(egui_phosphor::regular::DATABASE).rect();
+    assert!(
+        h.query_by_label(egui_phosphor::regular::DATABASE).is_none(),
+        "icon glyph is decorative"
+    );
+    let header = h.get_by_label("CONNECTIONS").rect();
     let name = h.get_by_label("alpha").rect();
     let dot = h.get_by_label("Online").rect();
-    assert!(icon.right() <= name.left());
+    assert!(name.left() - header.left() >= 14.0, "room for the icon");
     assert!(name.right() <= dot.left());
     assert!(
         dot.right() > name.right() + 20.0,
         "dot sits at the right edge"
     );
+}
+
+#[test]
+fn clicking_right_of_the_name_switches_workspace() {
+    // Arrange
+    let mut s = state(&["alpha", "beta"]);
+    s.open_workspace(s.config.connections[0].clone());
+    let other = s.open_workspace(s.config.connections[1].clone());
+    s.active = Some(s.workspaces[0].id);
+    s.workspaces[0].status = Status::Online(ServerVersion {
+        product: Product::Postgres,
+        major: 16,
+        minor: 0,
+        patch: 0,
+        raw: "16.0".into(),
+    });
+    let mut done = false;
+    let mut got = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            got.extend(super::show(ui, &s));
+        }
+    });
+    h.run();
+    let name = h.get_by_label("beta").rect();
+
+    // Act
+    let pos = egui::pos2(name.right() + 60.0, name.center().y);
+    h.hover_at(pos);
+    h.step();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    h.run();
+
+    // Assert
+    drop(h);
+    assert!(got.contains(&Intent::SwitchWorkspace(other)));
 }

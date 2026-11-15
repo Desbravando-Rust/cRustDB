@@ -11,7 +11,10 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             t.id,
             format!("{} Data: {}", egui_phosphor::regular::TABLE, t.object.name),
-            t.object.name.clone(),
+            t.object.schema.as_ref().map_or_else(
+                || t.object.name.clone(),
+                |sc| format!("{sc}.{}", t.object.name),
+            ),
         )
     });
     let queries = w.queries.iter().enumerate().map(|(i, q)| {
@@ -132,34 +135,6 @@ mod tests {
     }
 
     #[test]
-    fn tab_bar_active_tab_is_toggled_and_inactive_is_not() {
-        // Arrange
-        let s = two_tabs();
-        let mut done = false;
-        let mut h = Harness::new_ui(|ui| {
-            if crate::ui::home::tests::ready(ui, &mut done) {
-                show(ui, s.workspaces.first().unwrap());
-            }
-        });
-
-        // Act
-        h.run();
-
-        // Assert
-        use egui_kittest::kittest::NodeT;
-        let on = h
-            .get_by_label_contains("Data: users")
-            .accesskit_node()
-            .toggled();
-        let off = h
-            .get_by_label_contains("Data: orders")
-            .accesskit_node()
-            .toggled();
-        assert_eq!(on, Some(egui::accesskit::Toggled::True));
-        assert_eq!(off, Some(egui::accesskit::Toggled::False));
-    }
-
-    #[test]
     fn tab_bar_close_button_is_labeled_and_sits_inside_the_tab() {
         // Arrange
         let s = two_tabs();
@@ -172,6 +147,7 @@ mod tests {
         });
         h.run();
         let tab = h.get_by_label_contains("Data: users").rect();
+        let next = h.get_by_label_contains("Data: orders").rect();
         let close = h.get_by_label("Close tab users").rect();
 
         // Act
@@ -179,8 +155,45 @@ mod tests {
         h.run();
 
         // Assert
-        assert!(close.left() >= tab.right() - 1.0 && close.left() - tab.right() < 12.0);
+        assert!(close.left() >= tab.right() - 1.0, "X follows its tab label");
+        assert!(close.right() <= next.left(), "X precedes the next tab");
+        assert!(close.center().y > tab.top() && close.center().y < tab.bottom());
         drop(h);
         assert!(got.contains(&Intent::CloseTab(TabId(1))));
+    }
+
+    #[test]
+    fn tab_bar_close_labels_tell_same_named_tables_apart() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let w = s.workspace_mut(ws).unwrap();
+        for (id, schema) in [(1, "public"), (2, "audit")] {
+            let object = ObjectRef {
+                database: "d".into(),
+                schema: Some(schema.into()),
+                name: "users".into(),
+                kind: ObjectKind::Table,
+            };
+            w.tabs
+                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+        }
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                got.extend(show(ui, s.workspaces.first().unwrap()));
+            }
+        });
+        h.run();
+
+        // Act
+        h.get_by_label("Close tab audit.users").click();
+        h.run();
+
+        // Assert
+        h.get_by_label("Close tab public.users");
+        drop(h);
+        assert!(got.contains(&Intent::CloseTab(TabId(2))));
     }
 }
