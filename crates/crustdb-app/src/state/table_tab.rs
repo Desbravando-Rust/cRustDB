@@ -326,7 +326,11 @@ impl TableTab {
         let start = self.page * u64::from(self.page_size) + 1;
         let end = start + self.rows.len() as u64 - 1;
         match self.estimate {
-            Some(n) if self.filters.is_empty() => format!("Rows {start}–{end} of ~{}", short(n)),
+            // The estimate can lag behind reality (stale stats); never show less than we read.
+            // With more pages ahead, a total <= end would wrongly suggest the last page.
+            Some(n) if self.filters.is_empty() && (n > end || !self.has_more) => {
+                format!("Rows {start}–{end} of ~{}", short(n.max(end)))
+            }
             _ => format!("Rows {start}–{end}"),
         }
     }
