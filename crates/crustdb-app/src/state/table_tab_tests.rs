@@ -342,3 +342,56 @@ fn toggles_drafts_and_clear() {
     };
     assert!(query.filters.is_empty() && query.offset == 0 && t.drafts.is_empty());
 }
+
+#[test]
+fn export_command_keeps_filters_and_sorts_and_blocks_a_second_one() {
+    // Arrange
+    let mut t = tab_with(300, 2, None, vec![filter_eq("a", "1")]);
+    t.sorts = vec![desc("b")];
+    let path = std::path::PathBuf::from("/tmp/t.csv");
+
+    // Act
+    let first = t.export(path.clone(), RequestId(7));
+    let second = t.export(path.clone(), RequestId(8));
+
+    // Assert
+    let Some(Command::ExportTable {
+        tab,
+        req,
+        query,
+        path: p,
+    }) = first
+    else {
+        panic!("expected ExportTable");
+    };
+    assert_eq!((tab, req, p), (TabId(1), RequestId(7), path));
+    assert_eq!(query.filters, vec![filter_eq("a", "1")]);
+    assert_eq!(query.sorts[0], desc("b"));
+    assert!(second.is_none());
+}
+
+#[test]
+fn export_done_reports_and_unblocks() {
+    // Arrange
+    let mut t = tab_with(300, 0, None, vec![]);
+    t.export(std::path::PathBuf::from("/tmp/t.csv"), RequestId(7));
+
+    // Act
+    t.finish_export(RequestId(7), Ok(42));
+
+    // Assert
+    assert!(t.export_req.is_none());
+    assert_eq!(t.notice.as_deref(), Some("exported 42 rows"));
+}
+
+#[test]
+fn export_refused_without_rows() {
+    // Arrange
+    let mut t = tab(300);
+
+    // Act
+    let cmd = t.export(std::path::PathBuf::from("/tmp/t.csv"), RequestId(7));
+
+    // Assert
+    assert!(cmd.is_none());
+}

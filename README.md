@@ -48,7 +48,7 @@
 - **Transactions**: autocommit by default, Begin / Commit / Rollback per tab, state shown in the status bar. Disconnecting with an open transaction asks to commit, roll back or cancel.
 - **Safety policy**: destructive or multi-row statements ask for confirmation; DML estimated (via `EXPLAIN`) above a per-connection threshold asks for the password. SQLite has no row estimate, so its DML always takes the strictest path.
 - **Redis**: keyspace tree loaded in `SCAN` batches (never `KEYS`) with a key filter, database selector, read-only value viewer (type, TTL, size), and a command editor on its own session. Dangerous commands ask for confirmation or the password; blocking, transaction and Pub/Sub commands are refused.
-- **Export** to CSV (RFC 4180), JSON Lines or SQL `INSERT` (picked by file extension), streamed with constant memory and cancellable.
+- **Export** to CSV (RFC 4180), JSON Lines or SQL `INSERT` (picked by file extension), streamed with constant memory and cancellable. From a table tab, the toolbar export button writes every row matching the current filter and sort; from a query tab it exports the last result.
 - **Status bar**: TLS/SSH state, transaction badge, query timings, ping latency, process CPU% and RSS.
 
 ## Supported databases

@@ -486,3 +486,35 @@ fn footer_has_no_save_or_refresh_button() {
     assert!(h.query_by_label("Refresh").is_none());
     assert!(h.query_by_label("Add row").is_none());
 }
+
+#[test]
+fn toolbar_export_emits_intent_and_is_disabled_without_rows() {
+    // Arrange
+    let mut t = tab();
+    t.editing = None;
+    let mut out = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        out.extend(show(ui, &mut t));
+    });
+    h.run();
+
+    // Act
+    h.get_by_label(icon::DOWNLOAD_SIMPLE).click();
+    h.run();
+    drop(h);
+
+    // Assert
+    assert!(
+        out.iter()
+            .any(|i| matches!(i, Intent::ExportTable(TabId(1))))
+    );
+    let mut empty = tab();
+    empty.rows.clear();
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        drop(show(ui, &mut empty));
+    });
+    h.run();
+    assert!(disabled(&h, icon::DOWNLOAD_SIMPLE));
+}

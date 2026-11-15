@@ -34,6 +34,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
         if reload.on_hover_text("Reload page (F5)").clicked() {
             out.push(Intent::Retry(id));
         }
+        let export = ui.add_enabled(
+            !tab.rows.is_empty() && tab.export_req.is_none(),
+            egui::Button::new(icon::DOWNLOAD_SIMPLE),
+        );
+        if export.on_hover_text("Export filtered rows...").clicked() {
+            out.push(Intent::ExportTable(id));
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let on = tab.has_pending() && tab.edit_req.is_none();
             let mut commit = egui::Button::new(RichText::new(COMMIT_LABEL).strong());

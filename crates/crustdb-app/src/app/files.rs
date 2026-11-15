@@ -27,6 +27,13 @@ impl CrustApp {
                 self.picker
                     .start(Pick::Export(tab), &self.ctx, "result.csv")
             }
+            Intent::ExportTable(tab) => {
+                let name = self
+                    .state
+                    .table_mut(tab)
+                    .map_or_else(|| "table.csv".into(), |t| format!("{}.csv", t.object.name));
+                self.picker.start(Pick::ExportTable(tab), &self.ctx, &name)
+            }
             Intent::Save(tab) => self.save(tab, false),
             Intent::SaveAs(tab) => self.save(tab, true),
             // The unsaved-changes dialog: save the tab it names, then close it.
@@ -113,6 +120,11 @@ impl CrustApp {
                 Pick::Save(tab) => self.write_file(tab, path),
                 Pick::Export(tab) => {
                     let cmd = self.state.query_mut(tab).and_then(|q| q.export(path));
+                    self.send(cmd);
+                }
+                Pick::ExportTable(tab) => {
+                    let req = self.runtime.as_ref().map(|rt| rt.next_request_id());
+                    let cmd = req.and_then(|r| self.state.table_mut(tab)?.export(path, r));
                     self.send(cmd);
                 }
                 Pick::SqliteDb(id) => apply_sqlite_pick(self.form.as_mut(), id, &path),
