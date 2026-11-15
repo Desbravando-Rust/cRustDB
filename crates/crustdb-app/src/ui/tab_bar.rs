@@ -24,15 +24,11 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
             || format!("Query {}", i + 1),
             |n| n.to_string_lossy().into_owned(),
         );
-        // Parent folder disambiguates same-named files in the close label.
+        // Full path in the close label: no suffix heuristic can collide.
         let close_name = q
             .file
             .as_ref()
-            .and_then(|f| f.parent()?.file_name())
-            .map_or_else(
-                || name.clone(),
-                |d| format!("{}/{name}", d.to_string_lossy()),
-            );
+            .map_or_else(|| name.clone(), |f| f.display().to_string());
         let mark = match (q.tx, q.dirty) {
             (TxState::Open, _) => " (tx)",
             (TxState::Aborted, _) => " (aborted)",
@@ -229,7 +225,7 @@ mod tests {
         q1.file = Some("/x/a/q.sql".into());
         let mut q2 =
             crate::state::QueryTab::new(TabId(4), crustdb_core::model::DriverKind::Postgres, None);
-        q2.file = Some("/x/b/q.sql".into());
+        q2.file = Some("/y/a/q.sql".into());
         w.queries.extend([q1, q2]);
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
@@ -245,8 +241,8 @@ mod tests {
         for l in [
             "Close tab db1.public.users",
             "Close tab db2.public.users",
-            "Close tab a/q.sql",
-            "Close tab b/q.sql",
+            "Close tab /x/a/q.sql",
+            "Close tab /y/a/q.sql",
         ] {
             h.get_by_label(l);
         }

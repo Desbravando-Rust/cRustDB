@@ -241,3 +241,27 @@ fn connection_row_is_one_tab_stop_and_enter_switches() {
     drop(h);
     assert!(got.contains(&Intent::SwitchWorkspace(other)));
 }
+
+#[test]
+fn long_connection_name_truncates_and_keeps_dot_and_chip() {
+    // Arrange
+    let (mut s, _) = two_online();
+    s.workspaces[0].config.name = "a-very-long-connection-name-".repeat(6);
+    s.config.connections[0].label = Some("prod".into());
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            super::show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    let name = h.get_by_label_contains("a-very-long").rect();
+    let chip = h.get_by_label("prod").rect();
+    let dot = h.get_by_label("Online").rect();
+    assert!(name.right() <= chip.left(), "name stops before the chip");
+    assert!(chip.right() <= dot.left() && dot.width() > 0.0);
+}
