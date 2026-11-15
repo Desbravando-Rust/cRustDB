@@ -11,10 +11,12 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             t.id,
             format!("{} Data: {}", egui_phosphor::regular::TABLE, t.object.name),
-            t.object.schema.as_ref().map_or_else(
-                || t.object.name.clone(),
-                |sc| format!("{sc}.{}", t.object.name),
-            ),
+            std::iter::once(&t.object.database)
+                .chain(t.object.schema.as_ref())
+                .chain(std::iter::once(&t.object.name))
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("."),
         )
     });
     let queries = w.queries.iter().enumerate().map(|(i, q)| {
@@ -22,6 +24,15 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
             || format!("Query {}", i + 1),
             |n| n.to_string_lossy().into_owned(),
         );
+        // Parent folder disambiguates same-named files in the close label.
+        let close_name = q
+            .file
+            .as_ref()
+            .and_then(|f| f.parent()?.file_name())
+            .map_or_else(
+                || name.clone(),
+                |d| format!("{}/{name}", d.to_string_lossy()),
+            );
         let mark = match (q.tx, q.dirty) {
             (TxState::Open, _) => " (tx)",
             (TxState::Aborted, _) => " (aborted)",
@@ -31,7 +42,7 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             q.id,
             format!("{} {name}{mark}", egui_phosphor::regular::FILE_SQL),
-            name,
+            close_name,
         )
     });
     ui.horizontal(|ui| {
@@ -148,10 +159,10 @@ mod tests {
         h.run();
         let tab = h.get_by_label_contains("Data: users").rect();
         let next = h.get_by_label_contains("Data: orders").rect();
-        let close = h.get_by_label("Close tab users").rect();
+        let close = h.get_by_label("Close tab d.users").rect();
 
         // Act
-        h.get_by_label("Close tab users").click();
+        h.get_by_label("Close tab d.users").click();
         h.run();
 
         // Assert
@@ -188,12 +199,56 @@ mod tests {
         h.run();
 
         // Act
-        h.get_by_label("Close tab audit.users").click();
+        h.get_by_label("Close tab d.audit.users").click();
         h.run();
 
         // Assert
-        h.get_by_label("Close tab public.users");
+        h.get_by_label("Close tab d.public.users");
         drop(h);
         assert!(got.contains(&Intent::CloseTab(TabId(2))));
+    }
+
+    #[test]
+    fn tab_bar_close_labels_tell_apart_databases_and_same_named_files() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let w = s.workspace_mut(ws).unwrap();
+        for (id, db) in [(1, "db1"), (2, "db2")] {
+            let object = ObjectRef {
+                database: db.into(),
+                schema: Some("public".into()),
+                name: "users".into(),
+                kind: ObjectKind::Table,
+            };
+            w.tabs
+                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+        }
+        let mut q1 =
+            crate::state::QueryTab::new(TabId(3), crustdb_core::model::DriverKind::Postgres, None);
+        q1.file = Some("/x/a/q.sql".into());
+        let mut q2 =
+            crate::state::QueryTab::new(TabId(4), crustdb_core::model::DriverKind::Postgres, None);
+        q2.file = Some("/x/b/q.sql".into());
+        w.queries.extend([q1, q2]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                show(ui, s.workspaces.first().unwrap());
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        for l in [
+            "Close tab db1.public.users",
+            "Close tab db2.public.users",
+            "Close tab a/q.sql",
+            "Close tab b/q.sql",
+        ] {
+            h.get_by_label(l);
+        }
     }
 }

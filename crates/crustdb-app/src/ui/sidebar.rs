@@ -138,10 +138,16 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
                                         icon(ui, egui_phosphor::regular::DATABASE);
+                                        // One widget: `grow` left-aligns the name while the
+                                        // button spans the rest of the row (click, focus, a11y).
                                         ui.add(
-                                            egui::Button::selectable(is_active, &w.config.name)
-                                                .frame(false)
-                                                .truncate(),
+                                            egui::Button::selectable(
+                                                is_active,
+                                                (w.config.name.as_str(), egui::Atom::grow()),
+                                            )
+                                            .frame(false)
+                                            .truncate()
+                                            .min_size(egui::vec2(ui.available_width(), 0.0)),
                                         )
                                     },
                                 )
@@ -151,14 +157,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         })
                         .inner
                     });
-                let row = ui
-                    .interact(
-                        item.response.rect,
-                        ui.scope_id().with(("workspace_row", w.id)),
-                        egui::Sense::click(),
-                    )
-                    .on_hover_cursor(egui::CursorIcon::PointingHand);
-                if (row.clicked() || item.inner.clicked()) && !is_active {
+                if item.inner.clicked() && !is_active {
                     out.push(Intent::SwitchWorkspace(w.id));
                 }
             }
