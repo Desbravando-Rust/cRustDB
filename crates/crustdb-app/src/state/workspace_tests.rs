@@ -351,6 +351,13 @@ fn evaluate_failed_frees_tab_to_run_again_and_shows_notice() {
 
     // Assert
     assert!(s.run_query(tab, 0..0, true, RequestId(6)).is_some());
+    let q = s.workspace_mut(ws).unwrap().active_query_mut().unwrap();
+    assert!(
+        q.pane
+            .messages
+            .iter()
+            .any(|m| m.text.contains("workspace is not connected"))
+    );
 }
 
 #[test]
