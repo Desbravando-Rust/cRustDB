@@ -100,6 +100,31 @@ fn footer_estimate_never_below_rows_read() {
 }
 
 #[test]
+fn footer_keeps_estimate_above_rows_read() {
+    // Arrange
+    let t = tab_with(300, 0, Some(450), vec![]);
+
+    // Act
+    let label = t.footer_label();
+
+    // Assert
+    assert_eq!(label, "Rows 1–300 of ~450");
+}
+
+#[test]
+fn footer_omits_total_when_more_pages_and_estimate_not_above_rows_read() {
+    // Arrange
+    let mut t = tab_with(300, 0, Some(0), vec![]);
+    t.has_more = true;
+
+    // Act
+    let label = t.footer_label();
+
+    // Assert
+    assert_eq!(label, "Rows 1–300");
+}
+
+#[test]
 fn footer_hides_total_with_filters() {
     // Arrange
     let t = tab_with(300, 0, Some(1_200_000), vec![filter_eq("a", "1")]);
