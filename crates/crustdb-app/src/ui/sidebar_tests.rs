@@ -216,9 +216,8 @@ fn sidebar_filter_sits_in_gray_frame() {
     assert!(framed);
 }
 
-#[test]
-fn sidebar_lists_open_connections_with_active_marked() {
-    // Arrange
+/// Two open workspaces: alpha (online, active) and beta (offline).
+fn two_workspaces() -> (AppState, crate::runtime::WorkspaceId) {
     let mut s = state(&["alpha", "beta"]);
     s.open_workspace(s.config.connections[0].clone());
     let other = s.open_workspace(s.config.connections[1].clone());
@@ -230,6 +229,13 @@ fn sidebar_lists_open_connections_with_active_marked() {
         raw: "16.0".into(),
     });
     s.active = Some(s.workspaces[0].id);
+    (s, other)
+}
+
+#[test]
+fn sidebar_marks_active_and_switches_on_inactive_click() {
+    // Arrange
+    let (s, other) = two_workspaces();
     let mut done = false;
     let mut got = vec![];
     let mut h = Harness::new_ui(|ui| {
@@ -250,20 +256,124 @@ fn sidebar_lists_open_connections_with_active_marked() {
     );
     drop(h);
     assert!(got.contains(&Intent::SwitchWorkspace(other)));
+}
 
-    // Act: clicking the active one
-    let mut again = vec![];
+#[test]
+fn sidebar_click_on_active_emits_nothing() {
+    // Arrange
+    let (s, _) = two_workspaces();
     let mut done = false;
+    let mut got = vec![];
     let mut h = Harness::new_ui(|ui| {
         if ready(ui, &mut done) {
-            again.extend(show(ui, &s));
+            got.extend(show(ui, &s));
         }
     });
     h.run();
+
+    // Act
     h.get_by_label("alpha").click();
     h.run();
+
+    // Assert
     drop(h);
-    assert!(again.is_empty());
+    assert!(got.is_empty());
+}
+
+#[test]
+fn sidebar_status_dots_say_online_and_offline() {
+    // Arrange
+    let (s, _) = two_workspaces();
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_label("Online");
+    h.get_by_label("Offline");
+}
+
+#[test]
+fn sidebar_unlabeled_active_workspace_has_no_chip() {
+    // Arrange
+    let s = online();
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert!(s.config.connections[0].label.is_none());
+    assert!(h.query_by_label("dev").is_none());
+    assert!(h.query_by_label("prod").is_none());
+}
+
+#[test]
+fn sidebar_long_chip_keeps_button_inside_row() {
+    // Arrange
+    let mut s = online();
+    s.config.connections[0].label = Some("production-eu-west".into());
+    let mut done = false;
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    let button = h.get_by_label("alpha").rect();
+    let chip = h.get_by_label("production-eu-west").rect();
+    assert!(button.right() <= chip.left());
+}
+
+#[test]
+fn sidebar_caret_click_selects_and_toggles() {
+    // Arrange
+    let mut s = online();
+    let Some(Command::LoadChildren { req, .. }) = s.workspaces[0].tree.load_roots() else {
+        panic!("expected roots load");
+    };
+    s.workspaces[0].tree.apply_children(
+        req,
+        vec![crustdb_core::model::ObjectRef {
+            database: "app".into(),
+            schema: None,
+            name: "app".into(),
+            kind: crustdb_core::model::ObjectKind::Database,
+        }],
+    );
+    let mut done = false;
+    let mut got = vec![];
+    let mut h = Harness::new_ui(|ui| {
+        if ready(ui, &mut done) {
+            got.extend(show(ui, &s));
+        }
+    });
+    h.run();
+
+    // Act
+    h.get_by_label("Expand app").click();
+    h.run();
+
+    // Assert
+    drop(h);
+    let path = NodePath::Database("app".into());
+    assert!(got.contains(&Intent::SelectNode(path.clone())));
+    assert!(got.contains(&Intent::ToggleNode(path)));
 }
 
 #[test]

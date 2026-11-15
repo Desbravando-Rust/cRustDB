@@ -4,6 +4,11 @@ use egui_phosphor::Variant;
 /// Orange accent used for selection, links and the status bar.
 pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(234, 88, 12);
 
+/// Green of the "online" status dot and the "Connected" badge text.
+pub const ONLINE: egui::Color32 = egui::Color32::from_rgb(34, 197, 94);
+/// Background of the "Connected" badge.
+pub const BADGE_FILL: egui::Color32 = egui::Color32::from_rgb(20, 60, 40);
+
 /// Fixed dark theme plus the Phosphor icon font.
 pub fn install_theme(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);

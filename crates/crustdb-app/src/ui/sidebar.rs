@@ -96,7 +96,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                             let (rect, dot) =
                                 ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
                             let (color, text) = if online {
-                                (egui::Color32::from_rgb(34, 197, 94), "Online")
+                                (super::theme::ONLINE, "Online")
                             } else {
                                 (egui::Color32::GRAY, "Offline")
                             };
@@ -105,15 +105,17 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                                 egui::WidgetInfo::labeled(egui::Role::Label, true, text)
                             });
                             dot.on_hover_text(text);
-                            let reserve = if wl.is_some() { 70.0 } else { 0.0 };
-                            let r = ui.add(
-                                egui::Button::selectable(is_active, &w.config.name)
-                                    .min_size(egui::vec2(ui.available_width() - reserve, 0.0)),
-                            );
-                            if let Some(n) = wl {
-                                super::labels::chip(ui, n, &state.config.labels);
-                            }
-                            r
+                            // Chip first (right edge), button takes the width that is left.
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if let Some(n) = wl {
+                                    super::labels::chip(ui, n, &state.config.labels);
+                                }
+                                ui.add(
+                                    egui::Button::selectable(is_active, &w.config.name)
+                                        .min_size(egui::vec2(ui.available_width(), 0.0)),
+                                )
+                            })
+                            .inner
                         })
                         .inner
                     });
@@ -174,7 +176,17 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         } else {
                             n.label.clone()
                         };
-                        ui.label(arrow);
+                        let caret = ui
+                            .add(egui::Label::new(arrow).sense(egui::Sense::click()))
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                        caret.widget_info(|| {
+                            let verb = if n.expanded { "Collapse" } else { "Expand" };
+                            egui::WidgetInfo::labeled(
+                                egui::Role::Button,
+                                true,
+                                format!("{verb} {}", n.label),
+                            )
+                        });
                         if let NodePath::Folder { kind, .. } = path {
                             ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
                         }
@@ -182,7 +194,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                         if let Some(e) = &n.error {
                             r = r.on_hover_text(e);
                         }
-                        if r.clicked() {
+                        if r.clicked() || caret.clicked() {
                             out.push(Intent::SelectNode(path.clone()));
                             out.push(Intent::ToggleNode(path.clone()));
                         }
