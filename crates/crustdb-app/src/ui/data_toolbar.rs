@@ -35,8 +35,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             out.push(Intent::Retry(id));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let commit = egui::Button::new(RichText::new(COMMIT_LABEL).strong()).fill(ACCENT);
             let on = tab.has_pending() && tab.edit_req.is_none();
+            let mut commit = egui::Button::new(RichText::new(COMMIT_LABEL).strong());
+            if on {
+                commit = commit.fill(ACCENT);
+            }
             if ui.add_enabled(on, commit).clicked() {
                 // The grid is drawn after the toolbar: an open editor would be cancelled
                 // this frame, so stage its text now.
