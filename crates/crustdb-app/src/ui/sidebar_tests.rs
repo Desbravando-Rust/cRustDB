@@ -366,7 +366,7 @@ fn sidebar_caret_click_selects_and_toggles() {
     h.run();
 
     // Act
-    h.get_by_label("Expand").click();
+    h.get_by_label("Expand app").click();
     h.run();
 
     // Assert

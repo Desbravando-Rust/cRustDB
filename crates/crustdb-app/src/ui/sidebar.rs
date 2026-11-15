@@ -180,8 +180,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                             .add(egui::Label::new(arrow).sense(egui::Sense::click()))
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
                         caret.widget_info(|| {
-                            let name = if n.expanded { "Collapse" } else { "Expand" };
-                            egui::WidgetInfo::labeled(egui::Role::Button, true, name)
+                            let verb = if n.expanded { "Collapse" } else { "Expand" };
+                            egui::WidgetInfo::labeled(
+                                egui::Role::Button,
+                                true,
+                                format!("{verb} {}", n.label),
+                            )
                         });
                         if let NodePath::Folder { kind, .. } = path {
                             ui.colored_label(folder_color(*kind), egui_phosphor::regular::FOLDER);
