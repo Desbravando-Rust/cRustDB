@@ -11,6 +11,12 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             t.id,
             format!("{} Data: {}", egui_phosphor::regular::TABLE, t.object.name),
+            std::iter::once(&t.object.database)
+                .chain(t.object.schema.as_ref())
+                .chain(std::iter::once(&t.object.name))
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("."),
         )
     });
     let queries = w.queries.iter().enumerate().map(|(i, q)| {
@@ -18,6 +24,11 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
             || format!("Query {}", i + 1),
             |n| n.to_string_lossy().into_owned(),
         );
+        // Full path in the close label: no suffix heuristic can collide.
+        let close_name = q
+            .file
+            .as_ref()
+            .map_or_else(|| name.clone(), |f| f.display().to_string());
         let mark = match (q.tx, q.dirty) {
             (TxState::Open, _) => " (tx)",
             (TxState::Aborted, _) => " (aborted)",
@@ -27,18 +38,45 @@ pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
         (
             q.id,
             format!("{} {name}{mark}", egui_phosphor::regular::FILE_SQL),
+            close_name,
         )
     });
     ui.horizontal(|ui| {
-        for (id, label) in tables.chain(queries) {
-            if ui
-                .selectable_label(w.active_tab == Some(id), label)
-                .clicked()
-            {
-                out.push(Intent::ActivateTab(id));
-            }
-            if ui.small_button(egui_phosphor::regular::X).clicked() {
-                out.push(Intent::CloseTab(id));
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (id, label, name) in tables.chain(queries) {
+            let active = w.active_tab == Some(id);
+            let tab = egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(6, 2))
+                .show(ui, |ui| {
+                    super::theme::subtle_selection(ui.visuals_mut());
+                    let r =
+                        ui.add(egui::Button::selectable(active, &label).frame_when_inactive(false));
+                    let x = ui.add(
+                        egui::Button::new(egui_phosphor::regular::X)
+                            .small()
+                            .frame(false),
+                    );
+                    x.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::Role::Button,
+                            true,
+                            format!("Close tab {name}"),
+                        )
+                    });
+                    if r.clicked() {
+                        out.push(Intent::ActivateTab(id));
+                    }
+                    if x.clicked() {
+                        out.push(Intent::CloseTab(id));
+                    }
+                });
+            if active {
+                let rect = tab.response.rect;
+                ui.painter().hline(
+                    rect.x_range(),
+                    rect.bottom(),
+                    egui::Stroke::new(2.0, super::theme::ACCENT),
+                );
             }
         }
     });
@@ -83,5 +121,130 @@ mod tests {
 
         // Assert
         assert!(h.query_by_label_contains("Data: users").is_some());
+    }
+
+    fn two_tabs() -> crate::state::AppState {
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let object = |n: &str| ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: n.into(),
+            kind: ObjectKind::Table,
+        };
+        let w = s.workspace_mut(ws).unwrap();
+        w.tabs
+            .push(Tab::Table(TableTab::new(TabId(1), object("users"), 100)));
+        w.tabs
+            .push(Tab::Table(TableTab::new(TabId(2), object("orders"), 100)));
+        w.active_tab = Some(TabId(1));
+        s
+    }
+
+    #[test]
+    fn tab_bar_close_button_is_labeled_and_sits_inside_the_tab() {
+        // Arrange
+        let s = two_tabs();
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                got.extend(show(ui, s.workspaces.first().unwrap()));
+            }
+        });
+        h.run();
+        let tab = h.get_by_label_contains("Data: users").rect();
+        let next = h.get_by_label_contains("Data: orders").rect();
+        let close = h.get_by_label("Close tab d.users").rect();
+
+        // Act
+        h.get_by_label("Close tab d.users").click();
+        h.run();
+
+        // Assert
+        assert!(close.left() >= tab.right() - 1.0, "X follows its tab label");
+        assert!(close.right() <= next.left(), "X precedes the next tab");
+        assert!(close.center().y > tab.top() && close.center().y < tab.bottom());
+        drop(h);
+        assert!(got.contains(&Intent::CloseTab(TabId(1))));
+    }
+
+    #[test]
+    fn tab_bar_close_labels_tell_same_named_tables_apart() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let w = s.workspace_mut(ws).unwrap();
+        for (id, schema) in [(1, "public"), (2, "audit")] {
+            let object = ObjectRef {
+                database: "d".into(),
+                schema: Some(schema.into()),
+                name: "users".into(),
+                kind: ObjectKind::Table,
+            };
+            w.tabs
+                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+        }
+        let mut done = false;
+        let mut got = vec![];
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                got.extend(show(ui, s.workspaces.first().unwrap()));
+            }
+        });
+        h.run();
+
+        // Act
+        h.get_by_label("Close tab d.audit.users").click();
+        h.run();
+
+        // Assert
+        h.get_by_label("Close tab d.public.users");
+        drop(h);
+        assert!(got.contains(&Intent::CloseTab(TabId(2))));
+    }
+
+    #[test]
+    fn tab_bar_close_labels_tell_apart_databases_and_same_named_files() {
+        // Arrange
+        let mut s = state(&["alpha"]);
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        let w = s.workspace_mut(ws).unwrap();
+        for (id, db) in [(1, "db1"), (2, "db2")] {
+            let object = ObjectRef {
+                database: db.into(),
+                schema: Some("public".into()),
+                name: "users".into(),
+                kind: ObjectKind::Table,
+            };
+            w.tabs
+                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+        }
+        let mut q1 =
+            crate::state::QueryTab::new(TabId(3), crustdb_core::model::DriverKind::Postgres, None);
+        q1.file = Some("/x/a/q.sql".into());
+        let mut q2 =
+            crate::state::QueryTab::new(TabId(4), crustdb_core::model::DriverKind::Postgres, None);
+        q2.file = Some("/y/a/q.sql".into());
+        w.queries.extend([q1, q2]);
+        let mut done = false;
+        let mut h = Harness::new_ui(|ui| {
+            if crate::ui::home::tests::ready(ui, &mut done) {
+                show(ui, s.workspaces.first().unwrap());
+            }
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        for l in [
+            "Close tab db1.public.users",
+            "Close tab db2.public.users",
+            "Close tab /x/a/q.sql",
+            "Close tab /y/a/q.sql",
+        ] {
+            h.get_by_label(l);
+        }
     }
 }
