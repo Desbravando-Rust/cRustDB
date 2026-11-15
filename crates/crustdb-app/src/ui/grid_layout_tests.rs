@@ -4,7 +4,7 @@ use eframe::egui;
 use egui_kittest::Harness;
 
 use super::grid;
-use crate::ui::grid_layout::{bool_text, column_widths, next_epoch};
+use crate::ui::grid_layout::{bool_text, column_widths, layout, next_epoch};
 use egui_kittest::kittest::Queryable;
 
 fn meta(name: &str, type_name: &str, category: TypeCategory) -> ColumnMeta {
@@ -258,4 +258,49 @@ fn tinyint1_cell_is_green_when_true() {
 
     // Assert
     assert_eq!(color.get(), Some(egui::Color32::from_rgb(90, 190, 110)));
+}
+
+/// State id `layout` returns for `cols`/`rows` under `tab`, per scenario step.
+fn salts(steps: &[(u64, &[ColumnMeta], &[Row])]) -> Vec<egui::Id> {
+    let step = std::cell::Cell::new(0);
+    let out = std::cell::RefCell::new(vec![egui::Id::NULL; steps.len()]);
+    let mut h = Harness::builder().build_ui(|ui| {
+        let (tab, cols, rows) = steps[step.get()];
+        let (salt, _) = ui.push_id(tab, |ui| layout(ui, cols, rows, None)).inner;
+        out.borrow_mut()[step.get()] = salt;
+    });
+    for i in 0..steps.len() {
+        step.set(i);
+        h.run();
+    }
+    drop(h);
+    out.into_inner()
+}
+
+#[test]
+fn switching_between_tabs_keeps_each_tabs_state_id() {
+    // Arrange
+    let a = [meta("a", "text", TypeCategory::Text)];
+    let b = [meta("b", "int", TypeCategory::Integer)];
+    let rows = [text_row(&["x"])];
+
+    // Act
+    let s = salts(&[(1, &a, &rows), (2, &b, &rows), (1, &a, &rows)]);
+
+    // Assert
+    assert_eq!(s[0], s[2]);
+    assert_ne!(s[0], s[1]);
+}
+
+#[test]
+fn refresh_showing_zero_rows_keeps_state_id() {
+    // Arrange
+    let a = [meta("a", "text", TypeCategory::Text)];
+    let rows = [text_row(&["x"])];
+
+    // Act
+    let s = salts(&[(1, &a, &rows), (1, &a, &[]), (1, &a, &rows)]);
+
+    // Assert
+    assert_eq!(s[0], s[2]);
 }

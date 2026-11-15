@@ -357,18 +357,23 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     }
     egui::CentralPanel::default().show(ui, |ui| {
         let mut op = None;
-        let clicked = grid(
-            ui,
-            &tab.columns,
-            &tab.rows,
-            None,
-            &mut tab.selected_row,
-            &mut tab.select_anchor,
-            &tab.sorts,
-            Some((&mut tab.editing, &mut op)),
-            &tab.pending,
-            tab.pending_row,
-        );
+        // Per-tab id: widths and scroll state must not be shared between table tabs.
+        let clicked = ui
+            .push_id(id.0, |ui| {
+                grid(
+                    ui,
+                    &tab.columns,
+                    &tab.rows,
+                    None,
+                    &mut tab.selected_row,
+                    &mut tab.select_anchor,
+                    &tab.sorts,
+                    Some((&mut tab.editing, &mut op)),
+                    &tab.pending,
+                    tab.pending_row,
+                )
+            })
+            .inner;
         match op {
             Some(CellOp::Begin { row, col }) => tab.begin_edit(row, col),
             Some(CellOp::Commit) => out.push(Intent::CommitEdit(id)),

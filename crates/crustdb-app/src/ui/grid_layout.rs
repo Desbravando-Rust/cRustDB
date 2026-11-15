@@ -70,6 +70,7 @@ pub fn column_widths(
 struct Cached {
     sig: u64,
     epoch: u64,
+    /// Rows were seen under this signature; a refresh that shows 0 rows first keeps it.
     had_rows: bool,
     widths: Arc<[f32]>,
 }
@@ -94,7 +95,8 @@ pub fn next_epoch(prev: Option<(u64, u64, bool)>, sig: u64, has_rows: bool) -> (
     }
 }
 
-/// Table state id and initial column widths. One cache entry per grid `ui.scope_id()`.
+/// Table state id and initial column widths. One cache entry per `ui.scope_id()`, so callers
+/// showing several grids must push a distinct id per grid (`show` uses the tab id).
 pub fn layout(
     ui: &mut egui::Ui,
     columns: &[ColumnMeta],
@@ -109,6 +111,8 @@ pub fn layout(
         sig,
         !rows.is_empty(),
     );
+    let kept = !recompute && prev.as_ref().is_some_and(|c| c.had_rows);
+    let had_rows = kept || !rows.is_empty();
     let widths = match prev {
         Some(c) if !recompute => c.widths,
         _ => {
@@ -123,7 +127,7 @@ pub fn layout(
             Cached {
                 sig,
                 epoch,
-                had_rows: !rows.is_empty(),
+                had_rows,
                 widths: widths.clone(),
             },
         );
