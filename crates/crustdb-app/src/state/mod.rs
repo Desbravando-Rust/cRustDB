@@ -22,6 +22,7 @@ mod tree_filter;
 mod tree_home;
 pub mod workspace;
 mod workspace_close;
+mod workspace_export;
 mod workspace_fk;
 mod workspace_rows;
 

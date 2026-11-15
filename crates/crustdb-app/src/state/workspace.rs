@@ -391,24 +391,7 @@ impl AppState {
                     q.apply(&e);
                 }
             }
-            Event::ExportDone { req, result } => {
-                if let Some(t) = self
-                    .workspaces
-                    .iter_mut()
-                    .flat_map(|w| w.tabs.iter_mut())
-                    .map(|Tab::Table(t)| t)
-                    .find(|t| t.export_req == Some(req))
-                {
-                    t.finish_export(req, result);
-                } else if let Some(q) = self
-                    .workspaces
-                    .iter_mut()
-                    .flat_map(|w| w.queries.iter_mut())
-                    .find(|q| q.pane.req == Some(req))
-                {
-                    q.apply(&Event::ExportDone { req, result });
-                }
-            }
+            Event::ExportDone { req, result } => self.export_done(req, result),
             Event::TxChanged { tab, state } => {
                 if let Some(q) = self.query_mut(tab) {
                     q.apply(&e);

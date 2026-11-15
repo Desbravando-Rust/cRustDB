@@ -31,7 +31,7 @@ impl CrustApp {
                 let name = self
                     .state
                     .table_mut(tab)
-                    .map_or_else(|| "table.csv".into(), |t| format!("{}.csv", t.object.name));
+                    .map_or_else(|| "table.csv".into(), |t| export_file_name(&t.object.name));
                 self.picker.start(Pick::ExportTable(tab), &self.ctx, &name)
             }
             Intent::Save(tab) => self.save(tab, false),
@@ -218,10 +218,29 @@ fn note(q: &mut crate::state::QueryTab, text: String) {
     q.pane.push(n, false, text, Duration::ZERO);
 }
 
+/// Suggested file name: the table name with characters that are invalid in file names replaced.
+fn export_file_name(table: &str) -> String {
+    let safe = table.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    format!("{safe}.csv")
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_file_name_replaces_invalid_characters() {
+        // Arrange
+        let table = "a/b\\c:d*e?f\"g<h>i|j";
+
+        // Act
+        let name = export_file_name(table);
+
+        // Assert
+        assert_eq!(name, "a_b_c_d_e_f_g_h_i_j.csv");
+        assert_eq!(export_file_name("users"), "users.csv");
+    }
 
     fn sqlite_form() -> ConnectionForm {
         ConnectionForm::new(DriverKind::Sqlite, false)

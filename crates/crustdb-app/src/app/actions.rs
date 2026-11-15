@@ -144,8 +144,42 @@ impl CrustApp {
             (Action::Save, Some(t)) => vec![Intent::Save(t)],
             (Action::SaveAs, Some(t)) => vec![Intent::SaveAs(t)],
             (Action::History, _) => vec![Intent::ToggleHistory],
-            (Action::ExportCsv, Some(t)) => vec![Intent::ExportResult(t)],
+            (Action::ExportCsv, Some(t)) => {
+                let table = self.state.table_mut(t).map(|t| t.can_export());
+                export_csv_intents(t, table)
+            }
             _ => vec![],
         }
+    }
+}
+
+/// `Action::ExportCsv`: a table tab (`Some`) exports its rows when it can; any other tab
+/// exports its last result.
+fn export_csv_intents(tab: TabId, table_can_export: Option<bool>) -> Vec<Intent> {
+    match table_can_export {
+        Some(true) => vec![Intent::ExportTable(tab)],
+        Some(false) => vec![],
+        None => vec![Intent::ExportResult(tab)],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_csv_shortcut_follows_tab_kind_and_button_conditions() {
+        // Arrange
+        let tab = TabId(3);
+
+        // Act
+        let table = export_csv_intents(tab, Some(true));
+        let blocked = export_csv_intents(tab, Some(false));
+        let query = export_csv_intents(tab, None);
+
+        // Assert
+        assert!(matches!(table[..], [Intent::ExportTable(TabId(3))]));
+        assert!(blocked.is_empty());
+        assert!(matches!(query[..], [Intent::ExportResult(TabId(3))]));
     }
 }

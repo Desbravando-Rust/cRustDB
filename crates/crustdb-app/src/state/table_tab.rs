@@ -153,10 +153,17 @@ impl TableTab {
         self.notice = Some(text);
     }
 
+    /// Rows are loaded and no export is running (the toolbar button and its shortcut).
+    pub fn can_export(&self) -> bool {
+        !self.rows.is_empty() && self.export_req.is_none()
+    }
+
     /// Exports every row matching the tab's filters and sorts. One export at a time; none
     /// without loaded rows.
+    // ponytail: closing the tab mid-export does not cancel it; the file still completes and
+    // its result is dropped. Send `CancelExport` from `close_tab_tx` if that matters.
     pub fn export(&mut self, path: std::path::PathBuf, req: RequestId) -> Option<Command> {
-        if self.export_req.is_some() || self.rows.is_empty() {
+        if !self.can_export() {
             return None;
         }
         self.export_req = Some(req);
