@@ -294,6 +294,11 @@ pub enum Event {
         req: RequestId,
         evaluation: Evaluation,
     },
+    /// An `Evaluate` that could not be answered with `Evaluated`; frees the tab to run again.
+    EvaluateFailed {
+        req: RequestId,
+        text: String,
+    },
     StatementDone {
         req: RequestId,
         index: usize,

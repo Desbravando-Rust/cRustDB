@@ -434,6 +434,11 @@ impl AppState {
                     .on_evaluated(ws, tab, req, exec, evaluation, Instant::now());
                 self.outbox.extend(cmd);
             }
+            Event::EvaluateFailed { req, text } => {
+                if let Some((_, tab)) = self.evaluating.remove(&req) {
+                    self.apply(Event::Notice { tab, text });
+                }
+            }
             Event::HostKeyPrompt {
                 ws,
                 host,

@@ -4,9 +4,9 @@ use std::sync::atomic::Ordering;
 use crustdb_core::safety::{FlagReason, Verdict};
 use crustdb_testkit::fake_driver::FakeScript;
 
-use super::super::tests::{H, harness};
-use super::tests::{evaluate, open, ops, script, settle};
-use crate::runtime::Event;
+use super::super::tests::{H, WS, config, harness};
+use super::tests::{evaluate, open, open_editor, ops, script, settle};
+use crate::runtime::{Command, Event, RequestId, ResolvedSecrets};
 
 async fn evaluated(h: &mut H, sql: &[&str]) -> crustdb_core::safety::Evaluation {
     evaluate(h, 1, sql);
@@ -205,4 +205,33 @@ async fn table_names_match_case_insensitively_and_unknown_invalidates() {
             .iter()
             .any(|f| f.index == 1 && f.reason == FlagReason::UnknownEstimate)
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn evaluate_without_connection_answers_evaluate_failed() {
+    // Arrange: the editor is opened before the workspace finished connecting.
+    let mut h = harness(script(1));
+    assert!(
+        h.actors
+            .dispatch(Command::Connect {
+                ws: WS,
+                config: config(Some("d")),
+                secrets: ResolvedSecrets::default(),
+            })
+            .is_none()
+    );
+    open_editor(&mut h);
+
+    // Act
+    evaluate(&mut h, 3, &["SELECT 1"]);
+    let ev = settle(&h).await;
+
+    // Assert
+    assert!(ev.iter().any(|e| matches!(
+        e,
+        Event::EvaluateFailed {
+            req: RequestId(3),
+            ..
+        }
+    )));
 }
