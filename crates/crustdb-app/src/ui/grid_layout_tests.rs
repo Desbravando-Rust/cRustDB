@@ -4,7 +4,8 @@ use eframe::egui;
 use egui_kittest::Harness;
 
 use super::grid;
-use crate::ui::grid_layout::{bool_text, column_widths};
+use crate::ui::grid_layout::{bool_text, column_widths, next_epoch};
+use egui_kittest::kittest::Queryable;
 
 fn meta(name: &str, type_name: &str, category: TypeCategory) -> ColumnMeta {
     ColumnMeta {
@@ -34,19 +35,6 @@ fn width_fits_full_timestamp() {
 }
 
 #[test]
-fn width_never_below_header_or_minimum() {
-    // Arrange
-    let cols = [meta("a", "int", TypeCategory::Integer)];
-    let rows = [text_row(&["1"])];
-
-    // Act
-    let w = column_widths(&cols, &rows, None, 7.0, 90.0);
-
-    // Assert
-    assert!(w[0] >= 90.0);
-}
-
-#[test]
 fn width_of_long_text_is_capped() {
     // Arrange
     let cols = [meta("t", "text", TypeCategory::Text)];
@@ -68,10 +56,10 @@ fn bool_columns_display_true_false() {
     let int = meta("n", "tinyint(4)", TypeCategory::Integer);
 
     // Act & Assert
-    assert_eq!(bool_text(&pg, "t").as_deref(), Some("true"));
-    assert_eq!(bool_text(&pg, "false").as_deref(), Some("false"));
-    assert_eq!(bool_text(&my, "1").as_deref(), Some("true"));
-    assert_eq!(bool_text(&my, "0").as_deref(), Some("false"));
+    assert_eq!(bool_text(&pg, "t"), Some("true"));
+    assert_eq!(bool_text(&pg, "FALSE"), Some("false"));
+    assert_eq!(bool_text(&my, "1"), Some("true"));
+    assert_eq!(bool_text(&my, "0"), Some("false"));
     assert_eq!(bool_text(&my, "2"), None);
     assert_eq!(bool_text(&int, "1"), None);
 }
@@ -127,4 +115,147 @@ fn grid_does_not_fill_panel_with_dividers_when_few_rows() {
     // Assert
     let height = height.get();
     assert!(height < 120.0, "dividers span {height}px for 2 rows");
+}
+
+#[test]
+fn width_counts_wide_glyphs_as_two_columns() {
+    // Arrange
+    let cols = [meta("t", "text", TypeCategory::Text)];
+    let rows = [text_row(&["日本語日本語"]), text_row(&["🎉🎉🎉🎉🎉🎉"])];
+
+    // Act
+    let w = column_widths(&cols, &rows, None, 7.0, 40.0);
+
+    // Assert
+    assert!(
+        w[0] >= 12.0 * 7.0,
+        "width {} too narrow for 12 columns",
+        w[0]
+    );
+}
+
+#[test]
+fn width_is_capped_for_long_headers_too() {
+    // Arrange
+    let cols = [meta(&"h".repeat(300), "text", TypeCategory::Text)];
+
+    // Act
+    let w = column_widths(&cols, &[], None, 7.0, 60.0);
+
+    // Assert
+    assert!(w[0] <= 480.0);
+}
+
+#[test]
+fn epoch_survives_more_rows_but_resets_on_new_columns_or_first_rows() {
+    // Act & Assert
+    assert_eq!(next_epoch(None, 1, true), (0, true));
+    assert_eq!(
+        next_epoch(Some((1, 0, true)), 1, true),
+        (0, false),
+        "10 -> 20 rows"
+    );
+    assert_eq!(
+        next_epoch(Some((1, 0, true)), 1, false),
+        (0, false),
+        "refresh clears rows"
+    );
+    assert_eq!(
+        next_epoch(Some((1, 0, false)), 1, true),
+        (1, true),
+        "0 -> rows"
+    );
+    assert_eq!(
+        next_epoch(Some((1, 3, true)), 2, true),
+        (4, true),
+        "new columns"
+    );
+}
+
+fn timestamp_harness(rows: Vec<Row>, cols: Vec<ColumnMeta>) -> Harness<'static> {
+    let (mut selected, mut anchor) = (None, None);
+    Harness::builder()
+        .with_size(egui::vec2(800.0, 300.0))
+        .build_ui(move |ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            grid(
+                ui,
+                &cols,
+                &rows,
+                None,
+                &mut selected,
+                &mut anchor,
+                &[],
+                None,
+                &[],
+                None,
+            );
+        })
+}
+
+#[test]
+fn timestamp_cell_is_not_narrower_than_its_text() {
+    // Arrange
+    let text = "2024-01-01 12:00:00.123456";
+    let cols = vec![meta("created_at", "timestamp", TypeCategory::Timestamp)];
+    let mut h = timestamp_harness(vec![text_row(&[text])], cols);
+
+    // Act
+    h.run();
+    h.run();
+
+    // Assert
+    let font = egui::TextStyle::Monospace.resolve(&h.ctx.global_style());
+    let galley = h.ctx.fonts_mut(|f| {
+        f.layout_no_wrap(text.into(), font, egui::Color32::WHITE)
+            .size()
+            .x
+    });
+    let width = h.get_by_label(text).rect().width();
+    assert!(width >= galley - 0.5, "cell {width}px < text {galley}px");
+}
+
+#[test]
+fn tinyint1_cell_is_green_when_true() {
+    // Arrange
+    let cols = [meta("flag", "tinyint(1)", TypeCategory::Integer)];
+    let rows = vec![text_row(&["1"])];
+    let (mut selected, mut anchor) = (None, None);
+    let color = std::cell::Cell::new(None);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(400.0, 200.0))
+        .build_ui(|ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            grid(
+                ui,
+                &cols,
+                &rows,
+                None,
+                &mut selected,
+                &mut anchor,
+                &[],
+                None,
+                &[],
+                None,
+            );
+            ui.ctx().graphics(|g| {
+                for s in g
+                    .get(ui.layer_id())
+                    .into_iter()
+                    .flat_map(|l| l.all_entries())
+                {
+                    if let egui::Shape::Text(t) = &s.shape
+                        && t.galley.text() == "true"
+                    {
+                        color.set(t.galley.job.sections.first().map(|x| x.format.color));
+                    }
+                }
+            });
+        });
+
+    // Act
+    h.run();
+
+    // Assert
+    assert_eq!(color.get(), Some(egui::Color32::from_rgb(90, 190, 110)));
 }

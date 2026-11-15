@@ -5,7 +5,7 @@ use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
-use super::grid_layout::{bool_text, column_widths};
+use super::grid_layout::{bool_text, layout};
 use super::theme::ACCENT;
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
@@ -15,10 +15,6 @@ const ROW_H: f32 = 20.0;
 pub(crate) const INT_COLOR: Color32 = Color32::from_rgb(254, 215, 170);
 const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
 const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
-
-fn is_true(text: &str) -> bool {
-    matches!(text.to_lowercase().as_str(), "true" | "t" | "1")
-}
 
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
@@ -104,27 +100,15 @@ fn table(
     let pos = |i: usize| view.map_or(Some(i), |v| v.iter().position(|&x| x == i));
     let sel = grid_copy::range(selected.and_then(pos), anchor.and_then(pos));
     grid_copy::shortcut(ui, columns, rows, view, sel.clone());
-    // Size to content (dates and timestamps stay whole). Keyed on the column set and row
-    // count so a new result is re-measured while manual resizes survive redraws.
-    let key = egui::Id::unique((
-        "grid_widths",
-        columns.len(),
-        rows.len(),
-        columns.first().map(|c| &c.name),
-    ));
-    let char_w =
-        ui.fonts_mut(|f| f.glyph_width(&egui::TextStyle::Monospace.resolve(ui.style()), '0'));
-    let widths = ui.data_mut(|d| {
-        d.get_temp_mut_or_insert_with(key, || column_widths(columns, rows, view, char_w, 60.0))
-            .clone()
-    });
+    // Size to content (dates and timestamps stay whole); see `grid_layout::layout`.
+    let (salt, widths) = layout(ui, columns, rows, view);
     let mut table = TableBuilder::new(ui)
-        .id_salt(key)
+        .id_salt(salt)
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click());
     table = table.column(Column::auto().at_least(32.0));
-    for w in widths {
+    for &w in widths.iter() {
         table = table.column(Column::initial(w).at_least(60.0).clip(true));
     }
     table
@@ -187,17 +171,17 @@ fn table(
                         }
                         let raw = display_cell(cell, meta, GRID_DISPLAY_CHARS);
                         // Display only: copy, export and edit keep the stored value.
-                        let text = bool_text(meta, &raw).map_or(raw, Into::into);
+                        let flag = bool_text(meta, &raw);
+                        let text = flag.map_or(raw, std::borrow::Cow::Borrowed);
                         if matches!(cell, Cell::Null) {
                             let null = RichText::new(text).italics().color(Color32::GRAY);
                             ui.add(egui::Label::new(null).selectable(false));
                         } else {
-                            let bool_true = is_true(&text);
                             let t = RichText::new(text).monospace();
-                            let t = match meta.category {
-                                TypeCategory::Bool if bool_true => t.color(GREEN),
-                                TypeCategory::Bool => t.color(Color32::GRAY),
-                                TypeCategory::Integer => t.color(INT_COLOR),
+                            let t = match (flag, meta.category) {
+                                (Some("true"), _) => t.color(GREEN),
+                                (Some(_), _) => t.color(Color32::GRAY),
+                                (None, TypeCategory::Integer) => t.color(INT_COLOR),
                                 _ => t,
                             };
                             ui.add(egui::Label::new(t).truncate().selectable(false));
