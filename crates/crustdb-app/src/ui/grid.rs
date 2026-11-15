@@ -5,6 +5,7 @@ use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
+use super::grid_layout::{bool_text, column_widths};
 use super::theme::ACCENT;
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
@@ -62,6 +63,38 @@ pub fn grid(
     selected: &mut Option<usize>,
     anchor: &mut Option<usize>,
     sorts: &[Sort],
+    edit: Option<CellEdit<'_>>,
+    pending: &[(usize, Option<String>)],
+    pending_row: Option<usize>,
+) -> Option<(String, bool)> {
+    // The table paints column dividers down to its parent's bottom edge; a child
+    // ui only extends as far as the content, so the empty area stays clean.
+    ui.scope(|ui| {
+        table(
+            ui,
+            columns,
+            rows,
+            view,
+            selected,
+            anchor,
+            sorts,
+            edit,
+            pending,
+            pending_row,
+        )
+    })
+    .inner
+}
+
+#[allow(clippy::too_many_arguments)]
+fn table(
+    ui: &mut egui::Ui,
+    columns: &[ColumnMeta],
+    rows: &[Row],
+    view: Option<&[usize]>,
+    selected: &mut Option<usize>,
+    anchor: &mut Option<usize>,
+    sorts: &[Sort],
     mut edit: Option<CellEdit<'_>>,
     pending: &[(usize, Option<String>)],
     pending_row: Option<usize>,
@@ -71,13 +104,28 @@ pub fn grid(
     let pos = |i: usize| view.map_or(Some(i), |v| v.iter().position(|&x| x == i));
     let sel = grid_copy::range(selected.and_then(pos), anchor.and_then(pos));
     grid_copy::shortcut(ui, columns, rows, view, sel.clone());
+    // Size to content (dates and timestamps stay whole). Keyed on the column set and row
+    // count so a new result is re-measured while manual resizes survive redraws.
+    let key = egui::Id::unique((
+        "grid_widths",
+        columns.len(),
+        rows.len(),
+        columns.first().map(|c| &c.name),
+    ));
+    let char_w =
+        ui.fonts_mut(|f| f.glyph_width(&egui::TextStyle::Monospace.resolve(ui.style()), '0'));
+    let widths = ui.data_mut(|d| {
+        d.get_temp_mut_or_insert_with(key, || column_widths(columns, rows, view, char_w, 60.0))
+            .clone()
+    });
     let mut table = TableBuilder::new(ui)
+        .id_salt(key)
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click());
     table = table.column(Column::auto().at_least(32.0));
-    for _ in columns {
-        table = table.column(Column::auto().at_least(60.0).clip(true));
+    for w in widths {
+        table = table.column(Column::initial(w).at_least(60.0).clip(true));
     }
     table
         .header(ROW_H, |mut h| {
@@ -137,7 +185,9 @@ pub fn grid(
                             ui.add(egui::Label::new(t).truncate().selectable(false));
                             return;
                         }
-                        let text = display_cell(cell, meta, GRID_DISPLAY_CHARS);
+                        let raw = display_cell(cell, meta, GRID_DISPLAY_CHARS);
+                        // Display only: copy, export and edit keep the stored value.
+                        let text = bool_text(meta, &raw).map_or(raw, Into::into);
                         if matches!(cell, Cell::Null) {
                             let null = RichText::new(text).italics().color(Color32::GRAY);
                             ui.add(egui::Label::new(null).selectable(false));
@@ -415,6 +465,9 @@ pub fn show_tab(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     out
 }
 
+#[cfg(test)]
+#[path = "grid_layout_tests.rs"]
+mod layout_tests;
 #[cfg(test)]
 #[path = "grid_tests.rs"]
 mod tests;
