@@ -177,6 +177,12 @@ fn no_actor(cmd: &Command) -> Event {
             text: "savepoint is not a toolbar action".into(),
         };
     }
+    if let Evaluate { req, .. } = cmd {
+        return Event::EvaluateFailed {
+            req: *req,
+            text: "no actor for this command".into(),
+        };
+    }
     let tab = match cmd {
         OpenTable { tab, .. }
         | FetchPage { tab, .. }
@@ -407,6 +413,28 @@ mod tests {
         assert!(matches!(
             rx.try_recv(),
             Err(mpsc::TryRecvError::Disconnected)
+        ));
+    }
+
+    #[test]
+    fn no_actor_for_evaluate_answers_with_evaluate_failed() {
+        // Arrange
+        let cmd = Command::Evaluate {
+            tab: TabId(1),
+            req: RequestId(7),
+            statements: vec![],
+        };
+
+        // Act
+        let e = no_actor(&cmd);
+
+        // Assert
+        assert!(matches!(
+            e,
+            Event::EvaluateFailed {
+                req: RequestId(7),
+                ..
+            }
         ));
     }
 }

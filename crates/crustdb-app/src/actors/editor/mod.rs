@@ -242,7 +242,10 @@ impl EditorActor {
     async fn evaluate(&mut self, req: RequestId, statements: Vec<String>) {
         self.pending = None;
         let Some(shared) = self.shared.borrow().clone() else {
-            return self.notice("workspace is not connected".into());
+            return self.out.emit(Event::EvaluateFailed {
+                req,
+                text: "workspace is not connected".into(),
+            });
         };
         let kind = shared.driver.kind();
         let classified: Vec<Classified> = statements.iter().map(|s| classify(s, kind)).collect();

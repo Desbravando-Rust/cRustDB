@@ -329,6 +329,31 @@ fn query_tab_opens_and_run_sends_evaluate_only() {
 }
 
 #[test]
+fn evaluate_failed_frees_tab_to_run_again_and_shows_notice() {
+    // Arrange
+    let mut s = state(&["a"]);
+    let ws = s.open_workspace(s.config.connections[0].clone());
+    let Some(Command::OpenEditor { tab, .. }) = s.open_query(ws, None) else {
+        panic!("no OpenEditor");
+    };
+    s.workspace_mut(ws)
+        .unwrap()
+        .active_query_mut()
+        .unwrap()
+        .text = "select 1".into();
+    assert!(s.run_query(tab, 0..0, true, RequestId(5)).is_some());
+
+    // Act
+    s.apply(Event::EvaluateFailed {
+        req: RequestId(5),
+        text: "workspace is not connected".into(),
+    });
+
+    // Assert
+    assert!(s.run_query(tab, 0..0, true, RequestId(6)).is_some());
+}
+
+#[test]
 fn execute_marks_tab_running_and_routes_events_by_req() {
     // Arrange
     let mut s = state(&["a"]);
