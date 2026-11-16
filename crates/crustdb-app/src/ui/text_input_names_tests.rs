@@ -7,8 +7,10 @@ use egui_kittest::kittest::Queryable;
 
 use crate::runtime::{TabId, WorkspaceId};
 use crate::state::QueryTab;
+use crate::state::autocomplete::ColumnCache;
 use crate::state::command_pane::CommandPane;
 use crate::state::keyspace::Keyspace;
+use crate::state::tree::ObjectTree;
 use crate::state::workspace::tests::state;
 use crate::storage::config::Label;
 use crate::ui::home::tests::ready;
@@ -138,4 +140,20 @@ fn label_filter_search_is_named() {
 
     // Assert
     h.get_by_role_and_label(Role::TextInput, "Search labels");
+}
+
+#[test]
+fn sql_editor_is_named() {
+    // Arrange
+    let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+    let mut h = Harness::new_ui(|ui| {
+        let tree = ObjectTree::new(WorkspaceId(1), DriverKind::Postgres);
+        super::editor::show(ui, &mut tab, &tree, &ColumnCache::default());
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_role_and_label(Role::MultilineTextInput, "SQL editor");
 }
