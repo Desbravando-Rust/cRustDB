@@ -256,7 +256,7 @@ impl EditorActor {
             StatementClass::Tx(TxOp::Savepoint) if self.tx == TxState::Aborted => {
                 self.set_tx(TxState::Open);
             }
-            _ if kind == DriverKind::Mysql && c.is_ddl && self.tx == TxState::Open => {
+            _ if kind.ddl_commits_tx() && c.is_ddl && self.tx == TxState::Open => {
                 self.set_tx(TxState::Idle);
                 self.notice("implicit commit: DDL ended the open transaction".into());
             }
@@ -275,7 +275,6 @@ impl EditorActor {
     ) {
         let history = self.history(sql, took, None, Some(e.message.clone()));
         let kind = self.kind();
-        let pg = kind == DriverKind::Postgres;
         let alive = e.kind != ErrorKind::Connect;
         let ends_tx = matches!(c.class, StatementClass::Tx(TxOp::Commit | TxOp::Rollback));
         if alive {
@@ -286,9 +285,12 @@ impl EditorActor {
             self.paused = None;
             if ends_tx {
                 self.set_tx(TxState::Idle); // a failed COMMIT/ROLLBACK leaves no transaction
-            } else if pg && self.tx == TxState::Open && !matches!(c.class, StatementClass::Tx(_)) {
+            } else if kind.error_aborts_tx()
+                && self.tx == TxState::Open
+                && !matches!(c.class, StatementClass::Tx(_))
+            {
                 self.set_tx(TxState::Aborted);
-            } else if kind == DriverKind::Mysql
+            } else if kind.ddl_commits_tx()
                 && c.is_ddl
                 && self.tx == TxState::Open
                 && !parse_error(&e)
@@ -360,7 +362,7 @@ impl EditorActor {
             self.lost();
         } else {
             self.abandon_cursor().await;
-            if self.kind() == DriverKind::Postgres && self.tx == TxState::Open {
+            if self.kind().error_aborts_tx() && self.tx == TxState::Open {
                 self.set_tx(TxState::Aborted);
             }
         }
@@ -455,16 +457,16 @@ impl EditorActor {
 
     pub(super) async fn use_database(&mut self, database: String) {
         self.pending = None; // evaluated against the old database
-        let pg = self.kind() == DriverKind::Postgres;
-        if pg && self.tx != TxState::Idle {
+        let reconnect = self.kind().session_per_database();
+        if reconnect && self.tx != TxState::Idle {
             return self.notice("cannot change database with an open transaction".into());
         }
         if let Err(e) = self.finish_paused().await {
             self.notice(e.message.clone());
             return self.failed(&e);
         }
-        if pg {
-            // A PG session is bound to its database: the next run reconnects.
+        if reconnect {
+            // The next run reconnects.
             if let Some(s) = self.session.take() {
                 s.close().await;
             }

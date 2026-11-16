@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crustdb_core::model::{ConnectionId, DriverKind};
+use crustdb_core::model::ConnectionId;
 
 use super::CrustApp;
 use crate::runtime::{Command, Event, TabId};
@@ -208,7 +208,7 @@ impl CrustApp {
 // ponytail: keyed by the draft's connection id, so reopening the same connection's edit
 // form before the dialog closes still takes the pick; add a form generation if that matters.
 fn apply_sqlite_pick(form: Option<&mut ConnectionForm>, id: ConnectionId, path: &std::path::Path) {
-    if let Some(f) = form.filter(|f| f.draft.id == id && f.draft.driver == DriverKind::Sqlite) {
+    if let Some(f) = form.filter(|f| f.draft.id == id && f.draft.driver.is_file()) {
         f.draft.database = Some(path.to_string_lossy().into_owned());
     }
 }
@@ -228,6 +228,7 @@ fn export_file_name(table: &str) -> String {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crustdb_core::model::DriverKind;
 
     #[test]
     fn export_file_name_replaces_invalid_characters() {

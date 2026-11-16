@@ -1,6 +1,6 @@
 //! ER diagram lookup on the Metadata session.
 use crustdb_core::error::{DriverError, ErrorKind};
-use crustdb_core::model::{DriverKind, ObjectKind};
+use crustdb_core::model::ObjectKind;
 
 use super::{NO_TAB, WorkspaceActor, not_connected};
 use crate::runtime::{DiagramTable, Event, RequestId};
@@ -35,7 +35,7 @@ impl WorkspaceActor {
         let Some(sh) = self.shared.clone() else {
             return Err((String::new(), not_connected()));
         };
-        let key = if sh.driver.kind() == DriverKind::Postgres {
+        let key = if sh.driver.kind().session_per_database() {
             database.to_string()
         } else {
             self.home.clone()

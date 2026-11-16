@@ -192,8 +192,8 @@ impl ConnectionForm {
         let mut c = self.draft.clone();
         c.save_password = self.saves_secrets();
         c.database = c.database.filter(|d| !d.is_empty());
-        if c.driver == DriverKind::Sqlite {
-            // A local file: no tunnel, CA or saved password.
+        if c.driver.is_file() {
+            // No tunnel, CA or saved password.
             c.ssh = None;
             c.tls.ca_path = None;
             c.save_password = false;

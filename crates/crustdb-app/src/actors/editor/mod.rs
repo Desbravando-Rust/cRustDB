@@ -324,26 +324,25 @@ impl EditorActor {
             EstimateNeed::None => return None,
             EstimateNeed::Explain => s.explain_rows(sql).await,
             EstimateNeed::TableRows => {
-                let pg = shared.driver.kind() == DriverKind::Postgres;
+                let schemas = shared.driver.kind().has_schemas();
                 // The classifier keeps only the first table: a list or CASCADE (which reaches
                 // other tables) leaves the total unknown. PG resolves an unqualified name by
                 // search_path/temp tables, which the introspector cannot reproduce.
                 let cascade = sql
                     .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
                     .any(|w| w.eq_ignore_ascii_case("cascade"));
-                let t = c
-                    .target
-                    .as_ref()
-                    .filter(|t| !sql.contains(',') && !cascade && !(pg && t.qualifier.is_none()))?;
+                let t = c.target.as_ref().filter(|t| {
+                    !sql.contains(',') && !cascade && !(schemas && t.qualifier.is_none())
+                })?;
                 let o = ObjectRef {
                     database: t
                         .qualifier
                         .clone()
-                        .filter(|_| !pg)
+                        .filter(|_| !schemas)
                         .or_else(|| self.database.clone())
                         .or_else(|| shared.target.database.clone())
                         .unwrap_or_default(),
-                    schema: t.qualifier.clone().filter(|_| pg),
+                    schema: t.qualifier.clone().filter(|_| schemas),
                     name: t.name.clone(),
                     kind: ObjectKind::Table,
                 };
@@ -354,9 +353,8 @@ impl EditorActor {
             Ok(n) => n,
             Err(e) => {
                 self.failed(&e);
-                // A failed statement aborts an open PG transaction on the server.
                 if e.kind != ErrorKind::Connect
-                    && shared.driver.kind() == DriverKind::Postgres
+                    && shared.driver.kind().error_aborts_tx()
                     && self.tx == TxState::Open
                 {
                     self.set_tx(TxState::Aborted);

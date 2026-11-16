@@ -23,9 +23,9 @@ type Spans = Vec<(Range<usize>, TokenKind)>;
 struct Highlighter;
 
 // `DriverKind` is not `Hash`, so the cache key carries a flag instead.
-impl ComputerMut<(&str, bool), Spans> for Highlighter {
-    fn compute(&mut self, (text, mysql): (&str, bool)) -> Spans {
-        highlight(text, kind(mysql))
+impl ComputerMut<(&str, DriverKind), Spans> for Highlighter {
+    fn compute(&mut self, (text, kind): (&str, DriverKind)) -> Spans {
+        highlight(text, kind)
     }
 }
 
@@ -34,21 +34,13 @@ type HighlightCache = egui::cache::FrameCache<Spans, Highlighter>;
 #[derive(Default)]
 struct Splitter;
 
-impl ComputerMut<(&str, bool), Vec<StatementSpan>> for Splitter {
-    fn compute(&mut self, (text, mysql): (&str, bool)) -> Vec<StatementSpan> {
-        split(text, kind(mysql))
+impl ComputerMut<(&str, DriverKind), Vec<StatementSpan>> for Splitter {
+    fn compute(&mut self, (text, kind): (&str, DriverKind)) -> Vec<StatementSpan> {
+        split(text, kind)
     }
 }
 
 type SplitCache = egui::cache::FrameCache<Vec<StatementSpan>, Splitter>;
-
-fn kind(mysql: bool) -> DriverKind {
-    if mysql {
-        DriverKind::Mysql
-    } else {
-        DriverKind::Postgres
-    }
-}
 
 fn color(k: TokenKind) -> Color32 {
     match k {
@@ -217,7 +209,7 @@ pub fn show(
                 let text = buf.as_str();
                 let j = if highlight_enabled(text) {
                     // Derived from the text the layouter receives: it may already be edited this frame.
-                    let key = (text, driver == DriverKind::Mysql);
+                    let key = (text, driver);
                     let byte = char_to_byte(text, cursor);
                     let (current, spans) = ui.ctx().memory_mut(|m| {
                         let cur = statement_at(m.caches.cache::<SplitCache>().get(key), byte)

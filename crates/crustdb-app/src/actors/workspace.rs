@@ -279,7 +279,7 @@ impl WorkspaceActor {
     async fn load_columns(&mut self, req: RequestId, object: ObjectRef) {
         let r = async {
             let sh = self.shared.clone().ok_or_else(not_connected)?;
-            let key = if sh.driver.kind() == DriverKind::Postgres {
+            let key = if sh.driver.kind().session_per_database() {
                 object.database.clone()
             } else {
                 self.home.clone()
@@ -329,12 +329,12 @@ impl WorkspaceActor {
             return Err((String::new(), not_connected()));
         };
         let listing_dbs = matches!(kind, None | Some(ObjectKind::Database));
-        let key =
-            if sh.driver.kind() == DriverKind::Postgres && !database.is_empty() && !listing_dbs {
-                database.to_string()
-            } else {
-                self.home.clone()
-            };
+        let key = if sh.driver.kind().session_per_database() && !database.is_empty() && !listing_dbs
+        {
+            database.to_string()
+        } else {
+            self.home.clone()
+        };
         self.ensure_metadata(&key)
             .await
             .map_err(|e| (key.clone(), e))?;

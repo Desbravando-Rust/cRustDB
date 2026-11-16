@@ -191,7 +191,7 @@ impl ObjectTree {
     /// (PG schemas and MySQL databases only list the static folders).
     pub(super) fn request(&mut self, node: &NodePath) -> Option<Command> {
         let (cmd, req) = match node {
-            NodePath::Database(d) if self.driver == DriverKind::Postgres => {
+            NodePath::Database(d) if self.driver.has_schemas() => {
                 let (r, c) = self.command(d.clone(), None, ObjectKind::Schema);
                 (c, r)
             }
@@ -290,7 +290,7 @@ impl ObjectTree {
         let mut children = vec![];
         if expanded || filtering {
             match &path {
-                NodePath::Database(d) if self.driver == DriverKind::Postgres => {
+                NodePath::Database(d) if self.driver.has_schemas() => {
                     for s in self.items(&path) {
                         children.extend(self.rows(
                             NodePath::Schema(d.clone(), s.name.clone()),

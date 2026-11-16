@@ -124,6 +124,14 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     super::connection_form_mtls::fields(ui, f);
 }
 
+/// The form names MariaDB too: the MySQL driver serves both.
+fn driver_option(kind: DriverKind) -> &'static str {
+    match kind {
+        DriverKind::Mysql => "MySQL/MariaDB",
+        k => super::home::engine_name(k),
+    }
+}
+
 pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<Intent> {
     let mut out = vec![];
     egui::ScrollArea::vertical()
@@ -160,17 +168,11 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     let driver_label = ui.label("Driver");
                     let mut driver = f.draft.driver;
                     let driver_combo = egui::ComboBox::from_id_salt("driver")
-                        .selected_text(match driver {
-                            DriverKind::Postgres => "PostgreSQL",
-                            DriverKind::Mysql => "MySQL/MariaDB",
-                            DriverKind::Sqlite => "SQLite",
-                            DriverKind::Redis => "Redis",
-                        })
+                        .selected_text(driver_option(driver))
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut driver, DriverKind::Postgres, "PostgreSQL");
-                            ui.selectable_value(&mut driver, DriverKind::Mysql, "MySQL/MariaDB");
-                            ui.selectable_value(&mut driver, DriverKind::Sqlite, "SQLite");
-                            ui.selectable_value(&mut driver, DriverKind::Redis, "Redis");
+                            for k in DriverKind::ALL {
+                                ui.selectable_value(&mut driver, k, driver_option(k));
+                            }
                         });
                     driver_combo.response.labelled_by(driver_label.id);
                     if driver != f.draft.driver {
@@ -178,8 +180,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     }
                     ui.end_row();
 
-                    if f.draft.driver == DriverKind::Sqlite {
-                        // A local file: no server, credentials, TLS or tunnel.
+                    if f.draft.driver.is_file() {
                         let l = ui.label("Database file");
                         ui.horizontal(|ui| {
                             let mut p = f.draft.database.as_ref().map(PathBuf::from);
@@ -217,7 +218,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     ui.end_row();
                 });
 
-            let sqlite = f.draft.driver == DriverKind::Sqlite;
+            let sqlite = f.draft.driver.is_file();
             let mut ssh_on = f.draft.ssh.is_some();
             if !sqlite
                 && ui

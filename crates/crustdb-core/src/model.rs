@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub const CELL_MEMORY_CAP: usize = 1_048_576;
 pub const GRID_DISPLAY_CHARS: usize = 256;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DriverKind {
     Postgres,
@@ -13,6 +13,38 @@ pub enum DriverKind {
 }
 
 impl DriverKind {
+    pub const ALL: [DriverKind; 4] = [
+        DriverKind::Postgres,
+        DriverKind::Mysql,
+        DriverKind::Sqlite,
+        DriverKind::Redis,
+    ];
+
+    /// A local file, not a server: `database` holds its path; no host, TLS or tunnel.
+    pub const fn is_file(self) -> bool {
+        matches!(self, DriverKind::Sqlite)
+    }
+
+    /// Databases hold schemas, so a qualified `a.b` names `schema.object`.
+    pub const fn has_schemas(self) -> bool {
+        matches!(self, DriverKind::Postgres)
+    }
+
+    /// A session is bound to one database: another database needs another connection.
+    pub const fn session_per_database(self) -> bool {
+        matches!(self, DriverKind::Postgres)
+    }
+
+    /// A failed statement aborts the open transaction until it is rolled back.
+    pub const fn error_aborts_tx(self) -> bool {
+        matches!(self, DriverKind::Postgres)
+    }
+
+    /// DDL implicitly commits the open transaction.
+    pub const fn ddl_commits_tx(self) -> bool {
+        matches!(self, DriverKind::Mysql)
+    }
+
     pub const fn data_model(self) -> DataModel {
         match self {
             DriverKind::Postgres | DriverKind::Mysql | DriverKind::Sqlite => DataModel::Relational,

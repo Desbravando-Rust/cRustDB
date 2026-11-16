@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crustdb_core::driver::{ConnectTarget, Driver};
-use crustdb_core::model::{DriverKind, ObjectRef};
+use crustdb_core::model::ObjectRef;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
 
@@ -54,7 +54,7 @@ impl Shared {
     /// (`main`) there, not something to connect to.
     pub(crate) fn target_for(&self, db: &str) -> ConnectTarget {
         let mut t = self.target.clone();
-        if self.driver.kind() != DriverKind::Sqlite {
+        if !self.driver.kind().is_file() {
             t.database = Some(db.to_string());
         }
         t

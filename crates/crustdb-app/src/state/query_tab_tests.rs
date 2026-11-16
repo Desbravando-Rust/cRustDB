@@ -337,6 +337,17 @@ fn db_selector_disabled_with_open_tx_on_pg() {
 }
 
 #[test]
+fn sqlite_switches_database_inside_a_transaction() {
+    // Arrange
+    let mut t = tab("");
+    t.driver = DriverKind::Sqlite;
+    t.tx = TxState::Open;
+
+    // Act & Assert
+    assert!(t.can_switch_db());
+}
+
+#[test]
 fn tx_badge_state_follows_event() {
     // Arrange
     let mut t = tab("");

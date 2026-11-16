@@ -84,9 +84,9 @@ impl QueryTab {
         self.running.is_some()
     }
 
-    /// PG switches database by reconnecting, which an open transaction forbids.
+    /// Switching by reconnecting would drop an open transaction.
     pub fn can_switch_db(&self) -> bool {
-        self.running.is_none() && (self.driver == DriverKind::Mysql || self.tx == TxState::Idle)
+        self.running.is_none() && (!self.driver.session_per_database() || self.tx == TxState::Idle)
     }
 
     fn idle(&mut self) {

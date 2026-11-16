@@ -21,7 +21,7 @@ impl ObjectTree {
         let mut paths = vec![];
         for d in dbs {
             let db = NodePath::Database(d.clone());
-            if self.driver == DriverKind::Postgres {
+            if self.driver.has_schemas() {
                 paths.push(db.clone());
                 let schemas: Vec<_> = self.items(&db).iter().map(|s| s.name.clone()).collect();
                 for s in schemas {
