@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crustdb_core::driver::{ConnectTarget, Driver};
+use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::ObjectRef;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
@@ -38,6 +39,12 @@ mod store_tests;
 mod tests;
 
 use data::DataActor;
+
+pub(crate) const NOT_CONNECTED: &str = "workspace is not connected";
+
+pub(crate) fn not_connected() -> DriverError {
+    DriverError::new(ErrorKind::Connect, NOT_CONNECTED)
+}
 use editor::EditorActor;
 use store::StoreActor;
 use workspace::{WorkspaceActor, WsMsg};
@@ -184,7 +191,7 @@ impl Actors {
                     Some(shared) => self.open_table(ws, tab, object, shared),
                     None => self.out.emit(Event::Notice {
                         tab,
-                        text: "workspace is not connected".into(),
+                        text: crate::actors::NOT_CONNECTED.into(),
                     }),
                 }
                 None
@@ -194,7 +201,7 @@ impl Actors {
                     Some(shared) => self.open_editor(ws, tab, database, shared),
                     None => self.out.emit(Event::Notice {
                         tab,
-                        text: "workspace is not connected".into(),
+                        text: crate::actors::NOT_CONNECTED.into(),
                     }),
                 }
                 None

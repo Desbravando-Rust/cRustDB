@@ -221,7 +221,7 @@ fn no_actor(cmd: &Command) -> Event {
         LoadChildren { req, .. } => {
             return Event::ChildrenFailed {
                 req: *req,
-                error: "workspace is not connected".into(),
+                error: crate::actors::NOT_CONNECTED.into(),
             };
         }
         Disconnect { .. }

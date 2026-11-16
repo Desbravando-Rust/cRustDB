@@ -92,10 +92,10 @@ impl DataActor {
     }
 
     fn shared(&self) -> Result<Arc<Shared>, DriverError> {
-        self.shared.borrow().clone().ok_or_else(|| DriverError {
-            kind: ErrorKind::Connect,
-            message: "workspace is not connected".into(),
-        })
+        self.shared
+            .borrow()
+            .clone()
+            .ok_or_else(crate::actors::not_connected)
     }
 
     async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
@@ -207,12 +207,10 @@ impl DataActor {
     }
 }
 
-/// The session is unusable after this error; the next request reconnects.
+/// The session is unusable after this error; the next request reconnects. A timed-out
+/// write may still be running server-side, so its session is not reused either.
 fn lost(e: &DriverError) -> bool {
-    matches!(
-        e.kind,
-        ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
-    )
+    e.kind.ends_session() || e.kind == ErrorKind::Timeout
 }
 
 fn closed() -> DriverError {

@@ -200,10 +200,11 @@ impl EditorActor {
     }
 
     async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
-        let shared = self.shared.borrow().clone().ok_or_else(|| DriverError {
-            kind: ErrorKind::Connect,
-            message: "workspace is not connected".into(),
-        })?;
+        let shared = self
+            .shared
+            .borrow()
+            .clone()
+            .ok_or_else(crate::actors::not_connected)?;
         if self.session.is_none() {
             let target = match &self.database {
                 Some(db) => shared.target_for(db),
@@ -244,7 +245,7 @@ impl EditorActor {
         let Some(shared) = self.shared.borrow().clone() else {
             return self.out.emit(Event::EvaluateFailed {
                 req,
-                text: "workspace is not connected".into(),
+                text: crate::actors::NOT_CONNECTED.into(),
             });
         };
         let kind = shared.driver.kind();

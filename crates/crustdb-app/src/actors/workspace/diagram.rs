@@ -1,8 +1,9 @@
 //! ER diagram lookup on the Metadata session.
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::model::ObjectKind;
 
-use super::{NO_TAB, WorkspaceActor, not_connected};
+use super::{NO_TAB, WorkspaceActor};
+use crate::actors::not_connected;
 use crate::runtime::{DiagramTable, Event, RequestId};
 
 impl WorkspaceActor {
@@ -16,7 +17,7 @@ impl WorkspaceActor {
         let tables = match self.diagram(&database, schema.as_deref()).await {
             Ok(t) => Some(t),
             Err((key, e)) => {
-                if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
+                if e.kind.ends_session() {
                     self.mark_down(key);
                 }
                 let text = e.message;

@@ -4,7 +4,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crustdb_core::driver::{ConnectTarget, SessionPurpose};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::store::keyspace::EntryKey;
 use crustdb_core::store::{EntryView, ScanRequest, StoreDriver, StoreSession};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -259,7 +259,7 @@ impl StoreActor {
                 Ok(v)
             }
             Some((s, Err(e))) => {
-                if !matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
+                if !e.kind.ends_session() {
                     *self.slot(purpose) = Some(s);
                 }
                 Err(e.message)
@@ -280,7 +280,7 @@ impl StoreActor {
         let target = self
             .target
             .clone()
-            .ok_or_else(|| "workspace is not connected".to_string())?;
+            .ok_or_else(|| crate::actors::NOT_CONNECTED.to_string())?;
         let driver = self.driver.clone();
         let connecting = async move {
             driver

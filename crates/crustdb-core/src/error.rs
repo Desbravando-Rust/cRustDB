@@ -13,6 +13,13 @@ pub enum ErrorKind {
     Protocol,
 }
 
+impl ErrorKind {
+    /// The session's stream is unusable: the next request must reconnect.
+    pub fn ends_session(&self) -> bool {
+        matches!(self, ErrorKind::Connect | ErrorKind::Protocol)
+    }
+}
+
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{message}")]
 pub struct DriverError {

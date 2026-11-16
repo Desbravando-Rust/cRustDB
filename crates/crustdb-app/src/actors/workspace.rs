@@ -11,8 +11,8 @@ use tokio::sync::{Mutex, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at, sleep_until};
 
-use super::Shared;
 use super::tunnel::tunnel_target;
+use super::{Shared, not_connected};
 use crate::net::ssh::Tunnel;
 use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId};
 use crate::storage::config::ConnectionConfig;
@@ -306,7 +306,7 @@ impl WorkspaceActor {
         match self.children(&database, schema.as_deref(), kind).await {
             Ok(items) => self.out.emit(Event::Children { req, items }),
             Err((key, e)) => {
-                if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
+                if e.kind.ends_session() {
                     self.mark_down(key);
                 }
                 tracing::warn!("children load failed: {}", e.message);
@@ -393,13 +393,6 @@ fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>
         },
         message: format!("database \"{home}\" not found on server"),
     })
-}
-
-fn not_connected() -> DriverError {
-    DriverError {
-        kind: ErrorKind::Connect,
-        message: "workspace is not connected".into(),
-    }
 }
 
 async fn open(
