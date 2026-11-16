@@ -17,6 +17,7 @@ use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
 pub const HIGHLIGHT_MAX_BYTES: usize = 1 << 20;
 /// Measured (perf.rs, release): typing stays under 16 ms up to ~750 lines with highlighting on.
 pub const HIGHLIGHT_MAX_LINES: usize = 750;
+pub const HIGHLIGHT_OFF_NOTE: &str = "Highlighting disabled for large files (1 MiB or 750 lines)";
 
 #[derive(Debug)]
 pub struct QueryTab {
