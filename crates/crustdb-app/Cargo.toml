@@ -17,7 +17,7 @@ crustdb-postgres = { version = "0.1.0", path = "../crustdb-postgres" }
 crustdb-redis = { version = "0.1.0", path = "../crustdb-redis" }
 crustdb-sqlite = { version = "0.1.0", path = "../crustdb-sqlite" }
 eframe = { version = "0.37.0", features = ["persistence"] }
-egui-phosphor = "0.14.0"
+egui-phosphor = { version = "0.14.0", features = ["fill"] }
 egui_extras = { version = "0.37.0", features = ["image"] }
 futures-util = "0.3.34"
 image = { version = "0.25.10", default-features = false, features = ["png"] }

@@ -304,3 +304,40 @@ fn refresh_showing_zero_rows_keeps_state_id() {
     // Assert
     assert_eq!(s[0], s[2]);
 }
+
+#[test]
+fn type_label_handles_edge_cases() {
+    // Arrange
+    let cases = [
+        ("int4", Some("INT")),
+        ("int2", Some("SMALLINT")),
+        ("int8", Some("BIGINT")),
+        ("float4", Some("REAL")),
+        ("float8", Some("DOUBLE")),
+        ("double precision", Some("DOUBLE")),
+        ("character varying(40)", Some("VARCHAR")),
+        ("character varying(40)[]", Some("VARCHAR[]")),
+        ("numeric(10,2)", Some("NUMERIC")),
+        ("integer[][]", Some("INT[][]")),
+        ("bigint(20) unsigned", Some("BIGINT UNSIGNED")),
+        ("int unsigned zerofill", Some("INT UNSIGNED ZEROFILL")),
+        ("timestamp without time zone", Some("TIMESTAMP")),
+        ("timestamp with time zone", Some("TIMESTAMPTZ")),
+        ("time with time zone", Some("TIMETZ")),
+        ("time without time zone", Some("TIME")),
+        ("boolean", Some("BOOL")),
+        ("text", Some("TEXT")),
+        ("", None),
+        ("  ", None),
+        ("(10)", None),
+    ];
+
+    // Act & Assert
+    for (name, want) in cases {
+        assert_eq!(
+            crate::ui::grid_layout::type_label(name).as_deref(),
+            want,
+            "{name:?}"
+        );
+    }
+}

@@ -31,6 +31,12 @@ pub struct StatusModel {
     pub latency: Option<Duration>,
     pub proc: Option<ProcStats>,
     pub exports: Vec<(RequestId, u64)>,
+    /// `<label or name>/<active database or schema>` (#245).
+    pub scope: Option<String>,
+    /// Rows on screen and the table estimate of the active table tab.
+    pub grid_rows: Option<(u64, Option<u64>)>,
+    /// A table tab is active: `rows` (last statement of another tab) must not leak into it.
+    pub on_table: bool,
     reconnecting: bool,
     tx_by_tab: HashMap<TabId, TxState>,
     render_from: Option<Instant>,
@@ -52,6 +58,9 @@ impl Default for StatusModel {
             latency: None,
             proc: None,
             exports: vec![],
+            scope: None,
+            grid_rows: None,
+            on_table: false,
             reconnecting: false,
             tx_by_tab: HashMap::new(),
             render_from: None,
@@ -68,6 +77,20 @@ impl StatusModel {
             Status::Online(v) => Some((w.config.name.clone(), v.clone(), !self.reconnecting)),
             _ => None,
         };
+        let table = w.active_tab.and_then(|t| {
+            w.tabs
+                .iter()
+                .map(|super::Tab::Table(t)| t)
+                .find(|x| x.id == t)
+        });
+        self.scope = Some(super::scope::scope_of(w));
+        self.on_table = table.is_some();
+        self.grid_rows = table.filter(|t| !t.rows.is_empty()).map(|t| {
+            (
+                t.rows.len() as u64,
+                t.estimate.filter(|_| t.filters.is_empty()),
+            )
+        });
         self.tls = Some(w.config.tls.mode);
         self.ssh = w.config.ssh.is_some();
         self.threshold = w.config.safety_threshold;
