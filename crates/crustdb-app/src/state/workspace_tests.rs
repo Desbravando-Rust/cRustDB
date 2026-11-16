@@ -394,7 +394,7 @@ fn execute_marks_tab_running_and_routes_events_by_req() {
         tab,
         state: crate::runtime::TxState::Open,
     });
-    s.apply(Event::Notice {
+    s.apply(Event::RunStopped {
         tab,
         text: "Connection lost — open transaction was rolled back by the server".into(),
     });

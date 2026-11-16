@@ -17,7 +17,6 @@ use crate::storage::config::ConnectionConfig;
 
 mod data;
 mod editor;
-pub(crate) use editor::{LOST, STALE_EVALUATION};
 mod export;
 mod store;
 mod tunnel;

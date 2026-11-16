@@ -33,9 +33,8 @@ use crate::storage::history::{HistoryEntry, now_iso8601};
 /// D37: a paused cursor idle for this long is finished.
 const PAUSE_TIMEOUT: Duration = Duration::from_secs(300);
 /// Answer to an `Execute` whose evaluation is unknown or already used.
-pub(crate) const STALE_EVALUATION: &str =
-    "unknown or already used evaluation; nothing was executed";
-pub(crate) const LOST: &str = "Connection lost — open transaction was rolled back by the server";
+const STALE_EVALUATION: &str = "unknown or already used evaluation; nothing was executed";
+const LOST: &str = "Connection lost — open transaction was rolled back by the server";
 
 /// The last statement's cursor, left open for `LoadMore`.
 struct Paused {
@@ -141,7 +140,7 @@ impl EditorActor {
                 req, evaluation, ..
             } => match self.pending.take_if(|(id, _)| *id == evaluation) {
                 Some((_, stmts)) => self.execute(inbox, req, stmts).await,
-                None => self.notice(STALE_EVALUATION.into()),
+                None => self.stopped(STALE_EVALUATION),
             },
             Command::LoadMore { .. } => self.load_more(inbox).await,
             Command::Tx { op, .. } => {
@@ -153,6 +152,13 @@ impl EditorActor {
             _ => {}
         }
         true
+    }
+
+    fn stopped(&self, text: &str) {
+        self.out.emit(Event::RunStopped {
+            tab: self.tab,
+            text: text.into(),
+        });
     }
 
     fn notice(&self, text: String) {
@@ -186,7 +192,7 @@ impl EditorActor {
         self.paused = None;
         self.kept = None;
         self.tx = TxState::Idle;
-        self.notice(LOST.into());
+        self.stopped(LOST);
         self.out.emit(Event::TxChanged {
             tab: self.tab,
             state: TxState::Idle,

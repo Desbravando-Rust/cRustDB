@@ -149,9 +149,9 @@ fn running_spans_the_batch_and_stop_clears_it() {
         text: "implicit commit: x".into(),
     });
     assert!(t.running.is_some());
-    t.apply(&Event::Notice {
+    t.apply(&Event::RunStopped {
         tab: t.id,
-        text: "Connection lost — open transaction was rolled back by the server".into(),
+        text: "lost".into(),
     });
     assert_eq!(t.running, None);
 }
@@ -257,9 +257,9 @@ fn stale_evaluation_notice_clears_running() {
     started(&mut t, 7);
 
     // Act
-    t.apply(&Event::Notice {
+    t.apply(&Event::RunStopped {
         tab: t.id,
-        text: STALE_EVALUATION.into(),
+        text: "stale".into(),
     });
 
     // Assert
@@ -417,9 +417,9 @@ fn actor_crash_and_lost_notice_show_messages_tab() {
 
     // Act
     crashed.apply(&Event::ActorCrashed { tab: crashed.id });
-    lost.apply(&Event::Notice {
+    lost.apply(&Event::RunStopped {
         tab: lost.id,
-        text: STALE_EVALUATION.into(),
+        text: "lost".into(),
     });
 
     // Assert

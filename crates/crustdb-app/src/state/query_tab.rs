@@ -11,7 +11,6 @@ use crustdb_core::sql::{split, statement_at};
 use super::autocomplete::Autocomplete;
 use super::find::Find;
 pub use super::result_pane::{MessageLine, ResultPane, ResultTab};
-use crate::actors::{LOST, STALE_EVALUATION};
 use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
 
 /// Above this the editor skips highlighting (D40).
@@ -185,14 +184,15 @@ impl QueryTab {
             Event::Notice { text, .. } => {
                 let n = self.pane.messages.len();
                 self.pane.push(n, true, text.clone(), Duration::ZERO);
-                // The actor refused an Execute (stale evaluation) or lost the session.
-                let refused = text.starts_with(LOST) || text == STALE_EVALUATION;
-                if refused || self.bg {
-                    if refused {
-                        self.pane.tab = ResultTab::Messages;
-                    }
+                if self.bg {
                     self.idle();
                 }
+            }
+            Event::RunStopped { text, .. } => {
+                let n = self.pane.messages.len();
+                self.pane.push(n, true, text.clone(), Duration::ZERO);
+                self.pane.tab = ResultTab::Messages;
+                self.idle();
             }
             Event::ActorCrashed { .. } => {
                 self.tx = TxState::Idle;

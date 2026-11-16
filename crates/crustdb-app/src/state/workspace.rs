@@ -349,6 +349,12 @@ impl AppState {
                     q.apply(&Event::Notice { tab, text });
                 }
             }
+            Event::RunStopped { tab, .. } => {
+                self.disconnecting.retain(|_, tabs| !tabs.contains(&tab));
+                if let Some(q) = self.query_mut(tab) {
+                    q.apply(&e);
+                }
+            }
             Event::ResultStarted { req, .. }
             | Event::Rows { req, .. }
             | Event::FetchDone { req }

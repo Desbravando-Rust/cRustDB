@@ -352,4 +352,9 @@ pub enum Event {
     ActorCrashed {
         tab: TabId,
     },
+    /// The editor dropped the tab's run: its evaluation went stale or the session was lost.
+    RunStopped {
+        tab: TabId,
+        text: String,
+    },
 }
