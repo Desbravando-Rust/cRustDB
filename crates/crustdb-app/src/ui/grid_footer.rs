@@ -2,8 +2,9 @@
 use eframe::egui::{self, Color32};
 
 use super::Intent;
-use super::grid::{AMBER, read_only_reason, write_block};
+use super::grid::{read_only_reason, write_block};
 use super::theme::ACCENT;
+use super::theme::WARNING;
 use crate::state::TableTab;
 use crustdb_core::model::ObjectKind;
 
@@ -93,7 +94,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
                 ui.colored_label(ui.visuals().error_fg_color, n);
             }
             if tab.unordered() {
-                ui.colored_label(AMBER, "unordered");
+                ui.colored_label(WARNING, "unordered");
             }
         });
     });

@@ -44,7 +44,10 @@ impl AppState {
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
         let is_kv = config.driver.data_model() == DataModel::KeyValue;
-        let db = config.database.clone().unwrap_or_else(|| "0".into());
+        let db = config
+            .database
+            .clone()
+            .unwrap_or_else(|| crate::state::keyspace::DEFAULT_NAMESPACE.into());
         self.workspaces.push(WorkspaceState {
             id,
             tree: ObjectTree::new(id, config.driver),

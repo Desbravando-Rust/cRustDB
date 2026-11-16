@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef};
+use crustdb_core::model::{DriverKind, ObjectRef};
 use crustdb_core::sql::{CompletionContext, Expect, TokenKind, highlight, keywords, rank};
 use eframe::egui::Key;
 
@@ -41,10 +41,7 @@ fn last_part(name: &str) -> &str {
 }
 
 fn is_table(o: &ObjectRef) -> bool {
-    matches!(
-        o.kind,
-        ObjectKind::Table | ObjectKind::View | ObjectKind::MaterializedView
-    )
+    super::tree::open_action(o.kind) == super::tree::OpenAction::Data
 }
 
 fn tables(tree: &ObjectTree) -> impl Iterator<Item = &ObjectRef> {
@@ -213,7 +210,7 @@ impl Autocomplete {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use crustdb_core::model::DriverKind;
+    use crustdb_core::model::{DriverKind, ObjectKind};
     use crustdb_core::sql::completion_context;
 
     use super::*;

@@ -28,6 +28,14 @@ pub enum SecretKind {
     SshPassphrase,
 }
 
+impl SecretKind {
+    pub const ALL: [SecretKind; 3] = [
+        SecretKind::Db,
+        SecretKind::SshPassword,
+        SecretKind::SshPassphrase,
+    ];
+}
+
 pub fn account(id: ConnectionId, kind: SecretKind) -> String {
     let k = match kind {
         SecretKind::Db => "db",

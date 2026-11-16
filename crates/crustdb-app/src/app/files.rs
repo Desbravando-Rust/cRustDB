@@ -9,7 +9,6 @@ use super::CrustApp;
 use crate::runtime::{Command, Event, TabId};
 use crate::state::Dialog;
 use crate::state::connection_form::ConnectionForm;
-use crate::storage::secrets::{SecretKind, account};
 use crate::ui::Intent;
 use crate::ui::history_panel::HistoryPanel;
 use crate::ui::picker::Pick;
@@ -67,15 +66,7 @@ impl CrustApp {
         let labels = self.state.config.labels.clone();
         match self.state.confirm_delete(|rest| store.save(rest, &labels)) {
             Ok(Some(id)) => {
-                for kind in [
-                    SecretKind::Db,
-                    SecretKind::SshPassword,
-                    SecretKind::SshPassphrase,
-                ] {
-                    if let Err(e) = self.secrets.delete(&account(id, kind)) {
-                        tracing::warn!("keyring delete failed: {e}");
-                    }
-                }
+                self.forget_secrets(id);
             }
             Ok(None) => {}
             Err(e) => {

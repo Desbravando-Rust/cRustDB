@@ -7,7 +7,7 @@ use crate::state::home_filter::{UNGROUPED, filter_connections, group_by_label};
 use crate::state::{AppState, Status};
 use crate::storage::config::ConnectionConfig;
 
-const ACTIVE: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
+use super::theme::SUCCESS;
 const POSTGRES_BLUE: egui::Color32 = egui::Color32::from_rgb(80, 140, 210);
 const MYSQL_ORANGE: egui::Color32 = egui::Color32::from_rgb(230, 140, 40);
 const REDIS_RED: egui::Color32 = egui::Color32::from_rgb(210, 60, 50);
@@ -44,7 +44,15 @@ fn search_id() -> egui::Id {
     egui::Id::unique("home_search")
 }
 
-const BOOK_URL: &str = "https://desbravandorust.com.br/";
+pub(super) const BOOK_URL: &str = "https://desbravandorust.com.br/";
+
+pub(super) fn book_cover() -> egui::Image<'static> {
+    egui::Image::new(egui::include_image!(
+        "../../../../assets/imgs/book-cover.png"
+    ))
+    .fit_to_exact_size(egui::vec2(80.0, 122.0))
+    .alt_text("Desbravando Rust book cover")
+}
 
 /// Central-panel empty state: watermark, hint and book banner. The banner
 /// yields first on small windows, then the watermark.
@@ -83,11 +91,7 @@ pub(super) fn book_promo(ui: &mut egui::Ui, news: &crate::news::News) {
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.add(
-                    egui::Image::new(egui::include_image!(
-                        "../../../../assets/imgs/book-cover.png"
-                    ))
-                    .fit_to_exact_size(egui::vec2(80.0, 122.0))
-                    .alt_text("Desbravando Rust book cover"),
+                    book_cover(),
                 );
                 ui.vertical(|ui| {
                     ui.weak(
@@ -181,7 +185,7 @@ fn row(ui: &mut egui::Ui, state: &AppState, c: &ConnectionConfig, out: &mut Vec<
         // Same visual order as #20: Active/Open or Connect, edit, delete.
         ui.horizontal(|ui| {
             if let Some(w) = live.filter(|w| matches!(w.status, Status::Online(_))) {
-                ui.colored_label(ACTIVE, "Active");
+                ui.colored_label(SUCCESS, "Active");
                 if ui.button("Open").clicked() {
                     out.push(Intent::SwitchWorkspace(w.id));
                 }

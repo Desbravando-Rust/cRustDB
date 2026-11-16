@@ -24,11 +24,10 @@ pub(super) fn scope_of(w: &WorkspaceState) -> String {
                 .and_then(|n| n.to_str())
                 .unwrap_or(f)
         }),
-        DriverKind::Redis => Some(
-            w.keyspace
-                .as_ref()
-                .map_or(configured.unwrap_or("0"), |k| k.current.as_str()),
-        ),
+        DriverKind::Redis => Some(w.keyspace.as_ref().map_or(
+            configured.unwrap_or(crate::state::keyspace::DEFAULT_NAMESPACE),
+            |k| k.current.as_str(),
+        )),
     };
     match place {
         Some(p) => format!("{head}/{p}"),

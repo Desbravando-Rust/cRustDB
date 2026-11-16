@@ -14,7 +14,9 @@ use super::Intent;
 use super::autocomplete as popup;
 use crate::state::QueryTab;
 use crate::state::autocomplete::{AutocompleteAction, ColumnCache, in_literal_or_comment};
-use crate::state::query_tab::{char_to_byte, highlight_enabled};
+use crate::state::query_tab::{
+    HIGHLIGHT_MAX_BYTES, HIGHLIGHT_MAX_LINES, char_to_byte, highlight_enabled,
+};
 use crate::state::tree::ObjectTree;
 
 type Spans = Vec<(Range<usize>, TokenKind)>;
@@ -181,7 +183,10 @@ pub fn show(
     let driver = tab.driver;
     let cursor = sel.end;
     if !highlight_enabled(&tab.text) {
-        ui.weak("Highlighting disabled for large files (1 MiB or 750 lines)");
+        ui.weak(format!(
+            "Highlighting disabled for large files ({} MiB or {HIGHLIGHT_MAX_LINES} lines)",
+            HIGHLIGHT_MAX_BYTES >> 20
+        ));
     }
     let lines = tab.text.split('\n').count();
     let err_line = tab.error_marker.as_ref().map(|(l, _)| *l);

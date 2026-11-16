@@ -235,7 +235,10 @@ impl EditorActor {
 
     async fn expire_cursor(&mut self) {
         match self.finish_paused().await {
-            Ok(()) => self.notice("Paused result closed after 5 minutes idle".into()),
+            Ok(()) => self.notice(format!(
+                "Paused result closed after {} minutes idle",
+                PAUSE_TIMEOUT.as_secs() / 60
+            )),
             Err(e) => self.failed(&e),
         }
     }

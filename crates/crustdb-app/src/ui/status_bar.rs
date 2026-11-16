@@ -9,16 +9,15 @@ use egui_phosphor::regular as icon;
 use crate::runtime::TxState;
 use crate::state::status::StatusModel;
 
-const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
-const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
+use super::theme::{SUCCESS, WARNING};
 const RED: Color32 = Color32::from_rgb(220, 90, 90);
 const GRAY: Color32 = Color32::GRAY;
 
 /// Closed lock = verified, amber = `require`/`verify-ca`, open and red = `disable`.
 pub fn tls_icon(mode: TlsMode) -> (&'static str, Color32) {
     match mode {
-        TlsMode::VerifyFull => (icon::LOCK, GREEN),
-        TlsMode::Require | TlsMode::VerifyCa => (icon::LOCK, AMBER),
+        TlsMode::VerifyFull => (icon::LOCK, SUCCESS),
+        TlsMode::Require | TlsMode::VerifyCa => (icon::LOCK, WARNING),
         TlsMode::Disable => (icon::LOCK_OPEN, RED),
     }
 }
@@ -180,9 +179,9 @@ pub fn metrics(ui: &mut egui::Ui, m: &StatusModel) {
         if let Some((_, v, up)) = &m.connection {
             // Different glyph when reconnecting: not colour-only.
             let (g, c) = if *up {
-                (icon::CIRCLE, GREEN)
+                (icon::CIRCLE, SUCCESS)
             } else {
-                (icon::WARNING, AMBER)
+                (icon::WARNING, WARNING)
             };
             put(
                 ui,
@@ -247,7 +246,7 @@ mod tests {
         };
 
         // Act & Assert
-        for c in [GREEN, AMBER, RED, GRAY] {
+        for c in [SUCCESS, WARNING, RED, GRAY] {
             assert!(luma(c) - luma(crate::ui::theme::PANEL_FILL) > 80.0, "{c:?}");
         }
     }

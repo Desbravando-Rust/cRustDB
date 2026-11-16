@@ -12,8 +12,7 @@ use crate::state::{TableTab, TableView};
 const ROW_H: f32 = 20.0;
 /// Integers: light orange, legible on the dark panel and on the `ACCENT` selection fill.
 pub(crate) const INT_COLOR: Color32 = Color32::from_rgb(254, 215, 170);
-const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
-pub(super) const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
+use super::theme::SUCCESS;
 
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
@@ -187,7 +186,7 @@ fn table(
                         } else {
                             let t = RichText::new(text).monospace();
                             let t = match (flag, meta.category) {
-                                (Some("true"), _) => t.color(GREEN),
+                                (Some("true"), _) => t.color(SUCCESS),
                                 (Some(_), _) => t.color(Color32::GRAY),
                                 (None, TypeCategory::Integer) => t.color(INT_COLOR),
                                 _ => t,

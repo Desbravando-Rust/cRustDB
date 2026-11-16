@@ -38,6 +38,8 @@ pub struct ConnectionForm {
     pub url_error: Option<String>,
 }
 
+pub const KEYRING_UNAVAILABLE: &str = "OS keyring unavailable: passwords cannot be saved";
+
 pub fn default_port(driver: DriverKind) -> u16 {
     match driver {
         DriverKind::Postgres => 5432,
@@ -181,7 +183,7 @@ impl ConnectionForm {
     }
 
     pub fn keyring_hint(&self) -> Option<&'static str> {
-        (!self.keyring_available).then_some("OS keyring unavailable: passwords cannot be saved")
+        (!self.keyring_available).then_some(KEYRING_UNAVAILABLE)
     }
 
     fn saves_secrets(&self) -> bool {

@@ -13,6 +13,9 @@ use crate::runtime::{Command, Event, RequestId, WorkspaceId};
 
 const SEP: &str = ":";
 
+/// Namespace a store connection opens when none is configured.
+pub const DEFAULT_NAMESPACE: &str = "0";
+
 /// One visible row of the key tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlatNode {
@@ -287,7 +290,11 @@ impl AppState {
         let Some(w) = self.workspace_mut(ws) else {
             return;
         };
-        let db = w.config.database.clone().unwrap_or_else(|| "0".into());
+        let db = w
+            .config
+            .database
+            .clone()
+            .unwrap_or_else(|| DEFAULT_NAMESPACE.into());
         if let Some(ks) = w.keyspace.as_mut() {
             let epoch = ks.epoch + 1;
             *ks = Keyspace::new(ws, db);
