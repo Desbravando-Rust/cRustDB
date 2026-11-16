@@ -29,6 +29,25 @@ Spec and plan (Portuguese, `§n`/`Dn` refs): `docs/specs/2026-10-17-crustdb-spec
 - A PR that adds a feature or changes anything the README describes (features, supported databases/versions, badges, workspace layout, files on disk, limitations, build steps) updates `README.md` in the same PR.
 - Never push to `main`. Commit/push only with explicit approval. No AI mentions or `Co-Authored-By` in commits/PRs.
 
+## /auto-dev autonomy
+
+This exception applies only while a `/auto-dev` run is in progress, after its ETAPA 1 pause. Outside `/auto-dev`, the approval rules above apply unchanged.
+
+Allowed without asking:
+- `git commit` and `git push` on `feat/*` and `fix/*`, always with `make lint` green first.
+- `gh pr merge <PR> --merge --delete-branch`, after CI is green.
+- `git merge origin/main` on the branches of open PRs.
+- `gh pr edit --base` for stacked PRs.
+- `gh issue create`.
+
+Still forbidden:
+- pushing to `main`;
+- force push, `rebase`, `reset --hard`, `clean -fd`;
+- editing `Cargo.lock` by hand;
+- changing the Ordem column or the I/C/F scores in the ICE table.
+
+`main` has no branch protection (private repo, feature unavailable), so GitHub does not stop a merge with red CI. A merge happens only through the `autodev-clerk` `merge` mode, which requires `fmt`, `clippy`, `deny` and `coverage` to have run and succeeded; a skipped check does not count.
+
 ## Don't read
 
 `target/`, `benchmarks/` (~560 MB competitor installers), `ruvector.db`, `agentdb.rvf*`, `.swarm/`, `.claude-flow/`, `.superpowers/`.
