@@ -198,7 +198,7 @@ mod tests {
         // Assert
         h.get_by_label("DESTAQUE");
         h.get_by_label(crate::ui::data_toolbar::COMMIT_LABEL);
-        h.get_by_label(crate::ui::data_toolbar::FILTER_HINT);
+        h.get_by_label(crate::ui::data_toolbar::FILTERS_LABEL);
         h.get_by_label_contains("Delete rows");
     }
 }

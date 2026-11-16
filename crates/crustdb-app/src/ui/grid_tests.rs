@@ -5,10 +5,9 @@ use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::runtime::TabId;
-use crate::ui::data_toolbar::{COMMIT_LABEL, FILTER_HINT};
-use egui_phosphor::regular as icon;
+use crate::ui::data_toolbar::{ADD_ROW_LABEL, COMMIT_LABEL, RELOAD_LABEL};
 
-fn tab() -> TableTab {
+pub(super) fn tab() -> TableTab {
     let object = ObjectRef {
         database: "d".into(),
         schema: None,
@@ -75,7 +74,7 @@ fn escape_in_cell_editor_cancels() {
     assert!(t.editing.is_none());
 }
 
-fn staged() -> TableTab {
+pub(super) fn staged() -> TableTab {
     let mut t = tab();
     t.editing = None;
     t.pending = vec![(1, Some("new".into()))];
@@ -183,7 +182,7 @@ fn data_view_notice_has_no_duplicate_retry() {
 
     // Assert
     assert!(h.query_by_label("Retry").is_none());
-    assert!(h.query_by_label(icon::ARROW_CLOCKWISE).is_some());
+    assert!(h.query_by_label(RELOAD_LABEL).is_some());
 }
 
 fn disabled(h: &Harness<'_>, label: &str) -> bool {
@@ -208,7 +207,7 @@ fn add_and_delete_disabled_for_view_or_no_pk() {
         h.run();
 
         // Assert
-        assert!(disabled(&h, icon::PLUS));
+        assert!(disabled(&h, ADD_ROW_LABEL));
         assert!(disabled(&h, "Delete rows"));
     }
 }
@@ -225,7 +224,7 @@ fn add_row_button_emits_intent() {
     h.run();
 
     // Act
-    h.get_by_label(icon::PLUS).click();
+    h.get_by_label(ADD_ROW_LABEL).click();
     h.run();
     drop(h);
 
@@ -280,7 +279,7 @@ fn discard_shows_for_empty_insert_row() {
 
     // Assert
     assert!(h.query_by_label("Discard").is_some());
-    assert!(disabled(&h, icon::PLUS));
+    assert!(disabled(&h, ADD_ROW_LABEL));
 }
 
 #[test]
@@ -422,64 +421,4 @@ fn integer_color_is_legible_on_selected_row() {
     // Act & Assert
     assert_ne!(INT_COLOR, selection);
     assert!(luma(INT_COLOR) - luma(selection) > 80.0);
-}
-
-#[test]
-fn toolbar_filter_rows_opens_filter_bar() {
-    // Arrange
-    let mut t = tab();
-    t.editing = None;
-    let mut h = Harness::builder().build_ui(|ui| {
-        crate::ui::theme::install_theme(ui.ctx());
-        drop(show(ui, &mut t));
-    });
-    h.run();
-
-    // Act
-    h.get_by_label(FILTER_HINT).click();
-    h.run();
-    drop(h);
-
-    // Assert
-    assert!(t.filter_open);
-    assert!(!t.drafts.is_empty());
-}
-
-#[test]
-fn toolbar_refresh_emits_retry() {
-    // Arrange
-    let mut t = tab();
-    t.editing = None;
-    let mut out = vec![];
-    let mut h = Harness::new_ui(|ui| {
-        crate::ui::theme::install_theme(ui.ctx());
-        out.extend(show(ui, &mut t));
-    });
-    h.run();
-
-    // Act
-    h.get_by_label(icon::ARROW_CLOCKWISE).click();
-    h.run();
-    drop(h);
-
-    // Assert
-    assert!(out.iter().any(|i| matches!(i, Intent::Retry(TabId(1)))));
-}
-
-#[test]
-fn footer_has_no_save_or_refresh_button() {
-    // Arrange
-    let mut t = staged();
-    let mut h = Harness::new_ui(|ui| {
-        crate::ui::theme::install_theme(ui.ctx());
-        drop(show(ui, &mut t));
-    });
-
-    // Act
-    h.run();
-
-    // Assert
-    assert!(h.query_by_label("Save").is_none());
-    assert!(h.query_by_label("Refresh").is_none());
-    assert!(h.query_by_label("Add row").is_none());
 }
