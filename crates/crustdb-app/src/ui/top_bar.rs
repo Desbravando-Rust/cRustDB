@@ -3,13 +3,14 @@ use eframe::egui;
 
 use crate::state::AppState;
 
-pub fn show(ui: &mut egui::Ui, state: &AppState) {
+pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<super::menu_bar::MenuCmd> {
     ui.horizontal(|ui| {
         ui.add(
             egui::Image::new(egui::include_image!("../../../../assets/imgs/logo2.png"))
                 .fit_to_exact_size(egui::vec2(20.0, 20.0))
                 .alt_text("cRustDB top bar logo"),
         );
+        let cmds = super::menu_bar::show(ui, state);
         if let Some(w) = state.active_online() {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::Frame::new()
@@ -28,7 +29,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) {
                     });
             });
         }
-    });
+        cmds
+    })
+    .inner
 }
 
 #[cfg(test)]

@@ -58,6 +58,14 @@ const TABLE: &[(Modifiers, Key, Action)] = &[
     (CS, Key::E, Action::ExportCsv),
 ];
 
+/// Shortcut bound to `a` in the table (for menu hints); `RowDetail` is context-bound and has none.
+pub fn shortcut(a: Action) -> Option<eframe::egui::KeyboardShortcut> {
+    TABLE
+        .iter()
+        .find(|(_, _, x)| *x == a)
+        .map(|(m, k, _)| eframe::egui::KeyboardShortcut::new(*m, *k))
+}
+
 pub fn keymap(input: &InputState, focus: Focus) -> Option<Action> {
     if focus == Focus::Grid && input.modifiers.is_none() && input.key_pressed(Key::Space) {
         return Some(Action::RowDetail);
