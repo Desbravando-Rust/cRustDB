@@ -19,7 +19,7 @@ impl AppState {
             w.status = Status::Connecting;
             // `Connect` drops this workspace's tab actors; reopen them (queued after it) so the kept
             // tabs and query texts keep working. Evaluations of the dead session never answer.
-            for Tab::Table(t) in &w.tabs {
+            for t in &w.tabs {
                 self.outbox.push(Command::OpenTable {
                     ws: id,
                     tab: t.id,

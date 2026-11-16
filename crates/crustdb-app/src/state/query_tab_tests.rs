@@ -375,15 +375,6 @@ fn highlight_disabled_above_1mib_or_750_lines() {
 }
 
 #[test]
-fn current_statement_range_for_background() {
-    // Arrange
-    let t = tab("select 1;\n  select 2;");
-
-    // Act & Assert
-    assert_eq!(t.current_range(15), Some(12..20));
-}
-
-#[test]
 fn save_clears_dirty_and_sets_title() {
     // Arrange
     let dir = tempfile::tempdir().unwrap();

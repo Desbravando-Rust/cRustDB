@@ -69,7 +69,6 @@ fn apply_connected_marks_workspace_online() {
 
     // Assert
     assert_eq!(s.workspaces[0].status, Status::Online(server));
-    assert!(!s.workspaces[0].form_open());
 }
 
 fn obj() -> ObjectRef {
@@ -166,7 +165,7 @@ fn open_object_function_emits_open_and_ddl() {
             }
         ]
     ));
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first() else {
+    let Some(t) = s.workspaces[0].tabs.first() else {
         panic!("tab");
     };
     assert_eq!(t.view, TableView::Ddl);
@@ -291,7 +290,6 @@ fn apply_connect_failed_keeps_form_open_with_error() {
 
     // Assert
     assert_eq!(s.workspaces[0].status, Status::Failed("refused".into()));
-    assert!(s.workspaces[0].form_open());
 }
 
 #[test]

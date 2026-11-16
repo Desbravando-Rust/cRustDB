@@ -85,7 +85,7 @@ fn catalog_changed_reloads_structure_of_clean_table_tabs_only() {
     s.apply(structure(1));
     s.apply(structure(2));
     s.take_fetches(|| RequestId(3));
-    let Some(Tab::Table(dirty)) = s.workspace_mut(ws).unwrap().tabs.get_mut(1) else {
+    let Some(dirty) = s.workspace_mut(ws).unwrap().tabs.get_mut(1) else {
         panic!("expected a table tab");
     };
     dirty.inserting = true;
@@ -102,7 +102,7 @@ fn catalog_changed_reloads_structure_of_clean_table_tabs_only() {
     let [Command::LoadStructure { tab, .. }] = &cmds[..] else {
         panic!("expected a single LoadStructure, got {cmds:?}");
     };
-    assert_eq!(*tab, s.workspace_mut(ws).unwrap().tabs[0].id());
+    assert_eq!(*tab, s.workspace_mut(ws).unwrap().tabs[0].id);
 }
 
 fn changed_tab_ids(s: &mut AppState, query: TabId) -> Vec<TabId> {
@@ -121,7 +121,7 @@ fn catalog_changed_skips_ddl_view_tabs() {
     // Arrange
     let (mut s, ws, query) = setup();
     s.open_table(ws, table(), RequestId(1));
-    let Some(Tab::Table(t)) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
+    let Some(t) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
         panic!("expected a table tab");
     };
     t.view = TableView::Ddl;
@@ -138,7 +138,7 @@ fn catalog_changed_skips_tabs_with_open_cell_editor() {
     // Arrange
     let (mut s, ws, query) = setup();
     s.open_table(ws, table(), RequestId(1));
-    let Some(Tab::Table(t)) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
+    let Some(t) = s.workspace_mut(ws).unwrap().tabs.get_mut(0) else {
         panic!("expected a table tab");
     };
     t.editing = Some((0, 0, "x".into()));

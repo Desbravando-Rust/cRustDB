@@ -27,7 +27,7 @@ pub struct Autocomplete {
     pub replace: Range<usize>,
 }
 
-/// Column names by table, filled through hidden `OpenTable` + `LoadStructure` round trips.
+/// Column names by table, filled through `LoadColumns` on the metadata session.
 // ponytail: `ObjectRef` is not `Hash`; linear scans are fine for a handful of tables.
 #[derive(Debug, Default)]
 pub struct ColumnCache {

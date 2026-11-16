@@ -6,7 +6,7 @@ use crate::runtime::{Command, TabId, TxState, WorkspaceId};
 
 impl WorkspaceState {
     pub fn tab_ids(&self) -> Vec<TabId> {
-        let tables = self.tabs.iter().map(|t| t.id());
+        let tables = self.tabs.iter().map(|t| t.id);
         tables.chain(self.queries.iter().map(|q| q.id)).collect()
     }
 
@@ -29,7 +29,7 @@ impl WorkspaceState {
         let Some(at) = ids.iter().position(|t| *t == tab) else {
             return;
         };
-        self.tabs.retain(|t| t.id() != tab);
+        self.tabs.retain(|t| t.id != tab);
         self.queries.retain(|q| q.id != tab);
         if self.active_tab == Some(tab) {
             let rest = self.tab_ids();
@@ -117,7 +117,7 @@ mod tests {
     use crustdb_core::model::{ObjectKind, ObjectRef};
 
     use crate::runtime::RequestId;
-    use crate::state::workspace::{Tab, tests::state};
+    use crate::state::workspace::tests::state;
 
     use super::*;
 
@@ -312,7 +312,7 @@ mod tests {
             .unwrap()
             .tabs
             .iter()
-            .map(|Tab::Table(t)| t.object.clone())
+            .map(|t| t.object.clone())
             .next();
         assert!(s.open_table(ws, obj.unwrap(), RequestId(2)).is_empty());
         let w = s.workspace_mut(ws).unwrap();

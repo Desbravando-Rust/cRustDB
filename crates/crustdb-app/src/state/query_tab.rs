@@ -280,12 +280,6 @@ impl QueryTab {
             .collect()
     }
 
-    /// Byte range of the statement under the cursor, for the background tint.
-    pub fn current_range(&self, cursor_byte: usize) -> Option<Range<usize>> {
-        let spans = split(&self.text, self.driver);
-        statement_at(&spans, cursor_byte).map(|s| s.range.clone())
-    }
-
     /// Marks a server error position (1-based chars) and returns nothing if out of range.
     pub fn set_error(&mut self, position: usize) {
         let start = char_to_byte(&self.text, position.saturating_sub(1));

@@ -4,7 +4,7 @@ use crustdb_core::query::{Filter, Operator};
 
 use super::filter_draft::FilterDraft;
 use super::table_tab::TableView;
-use super::workspace::{AppState, Tab};
+use super::workspace::AppState;
 use crate::runtime::{Command, RequestId, TabId, WorkspaceId};
 
 impl AppState {
@@ -22,12 +22,10 @@ impl AppState {
         };
         let mut cmds = self.open_table(ws, object.clone(), req);
         let created = !cmds.is_empty();
-        let Some(t) = self.workspace_mut(ws).and_then(|w| {
-            w.tabs
-                .iter_mut()
-                .map(|Tab::Table(t)| t)
-                .find(|t| t.object == object)
-        }) else {
+        let Some(t) = self
+            .workspace_mut(ws)
+            .and_then(|w| w.tabs.iter_mut().find(|t| t.object == object))
+        else {
             return cmds;
         };
         if !created && t.pending_blocks() {
@@ -60,7 +58,7 @@ impl AppState {
         col: usize,
     ) -> Option<(WorkspaceId, ObjectRef, Vec<FilterDraft>)> {
         let (ws, t) = self.workspaces.iter().find_map(|w| {
-            let t = w.tabs.iter().map(|Tab::Table(t)| t).find(|t| t.id == tab)?;
+            let t = w.tabs.iter().find(|t| t.id == tab)?;
             Some((w.id, t))
         })?;
         let name = &t.columns.get(col)?.name;

@@ -1,5 +1,5 @@
 //! Routing of `ExportDone` to the table tab or query tab that asked for the export.
-use super::workspace::{AppState, Tab};
+use super::workspace::AppState;
 use crate::runtime::{Event, RequestId};
 
 impl AppState {
@@ -8,7 +8,6 @@ impl AppState {
             .workspaces
             .iter_mut()
             .flat_map(|w| w.tabs.iter_mut())
-            .map(|Tab::Table(t)| t)
             .find(|t| t.export_req == Some(req));
         if let Some(t) = table {
             t.finish_export(req, result);

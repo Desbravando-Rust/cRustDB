@@ -27,7 +27,7 @@ pub struct WorkspaceState {
     pub status: Status,
     pub tree: ObjectTree,
     pub columns: ColumnCache,
-    pub tabs: Vec<Tab>,
+    pub tabs: Vec<TableTab>,
     /// Query editor tabs; ids come from the same counter as `tabs`.
     pub queries: Vec<QueryTab>,
     pub active_tab: Option<TabId>,
@@ -36,19 +36,6 @@ pub struct WorkspaceState {
     pub session_password: Option<SecretString>,
     /// Key tree and value viewer; only for key-value data models.
     pub keyspace: Option<super::keyspace::Keyspace>,
-}
-
-#[derive(Debug)]
-pub enum Tab {
-    Table(TableTab),
-}
-
-impl Tab {
-    pub fn id(&self) -> TabId {
-        match self {
-            Tab::Table(t) => t.id,
-        }
-    }
 }
 
 impl WorkspaceState {
@@ -71,7 +58,7 @@ impl WorkspaceState {
         } else {
             tab.load_structure(req)
         };
-        self.tabs.push(Tab::Table(tab));
+        self.tabs.push(tab);
         self.active_tab = Some(id);
         [
             Command::OpenTable {
@@ -85,20 +72,12 @@ impl WorkspaceState {
 
     pub fn active_table_mut(&mut self) -> Option<&mut TableTab> {
         let id = self.active_tab?;
-        self.tabs
-            .iter_mut()
-            .map(|Tab::Table(t)| t)
-            .find(|t| t.id == id)
+        self.tabs.iter_mut().find(|t| t.id == id)
     }
 
     pub fn active_query_mut(&mut self) -> Option<&mut QueryTab> {
         let id = self.active_tab?;
         self.queries.iter_mut().find(|q| q.id == id)
-    }
-
-    /// The connection form stays up until the workspace is online.
-    pub fn form_open(&self) -> bool {
-        !matches!(self.status, Status::Online(_))
     }
 }
 
@@ -161,11 +140,7 @@ impl AppState {
         self.workspace_mut(ws)
             .filter(|w| w.capabilities().table_tab)
             .map(|w| {
-                let open = w
-                    .tabs
-                    .iter()
-                    .map(|Tab::Table(t)| t)
-                    .find(|t| t.object == object);
+                let open = w.tabs.iter().find(|t| t.object == object);
                 match open {
                     Some(t) => {
                         w.active_tab = Some(t.id);
@@ -255,7 +230,6 @@ impl AppState {
         self.workspaces
             .iter_mut()
             .flat_map(|w| w.tabs.iter_mut())
-            .map(|Tab::Table(t)| t)
             .find(|t| t.id == id)
     }
 
@@ -333,7 +307,6 @@ impl AppState {
                     .workspaces
                     .iter_mut()
                     .flat_map(|w| w.tabs.iter_mut())
-                    .map(|Tab::Table(t)| t)
                     .find(|t| t.loading == Some(req));
                 if let Some(t) = tab {
                     // Header columns are display-only; the query schema is the catalog's.
@@ -344,7 +317,7 @@ impl AppState {
                 }
             }
             Event::CellUpdated { req, error } => {
-                for Tab::Table(t) in self.workspaces.iter_mut().flat_map(|w| w.tabs.iter_mut()) {
+                for t in self.workspaces.iter_mut().flat_map(|w| w.tabs.iter_mut()) {
                     t.cell_updated(req, error.clone());
                 }
             }
@@ -358,7 +331,6 @@ impl AppState {
                     .workspaces
                     .iter_mut()
                     .flat_map(|w| w.tabs.iter_mut())
-                    .map(|Tab::Table(t)| t)
                     .find(|t| t.structure_req == Some(req));
                 if let Some(t) = tab {
                     t.apply_structure(Structure {
@@ -406,7 +378,6 @@ impl AppState {
                     .workspaces
                     .iter_mut()
                     .flat_map(|w| w.tabs.iter_mut())
-                    .map(|Tab::Table(t)| t)
                     .find(|t| t.ddl_req == Some(req));
                 if let Some(t) = tab {
                     t.ddl = Some(text);

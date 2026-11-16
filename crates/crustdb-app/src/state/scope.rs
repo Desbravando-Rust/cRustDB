@@ -11,7 +11,6 @@ pub(super) fn scope_of(w: &WorkspaceState) -> String {
     let tab_db = w.active_tab.and_then(|t| {
         w.tabs
             .iter()
-            .map(|super::Tab::Table(t)| t)
             .find(|x| x.id == t)
             .map(|t| &t.object.database)
             .or_else(|| w.queries.iter().find(|q| q.id == t)?.database.as_ref())
@@ -103,7 +102,7 @@ mod tests {
     fn table_tab_database_counts_only_for_postgres_and_mysql() {
         // Arrange
         use crate::runtime::TabId;
-        use crate::state::{Tab, TableTab};
+        use crate::state::TableTab;
         use crustdb_core::model::{ObjectKind, ObjectRef};
         let cases = [
             (DriverKind::Postgres, Some("main"), "alpha/other"),
@@ -125,8 +124,7 @@ mod tests {
                 name: "t".into(),
                 kind: ObjectKind::Table,
             };
-            w.tabs
-                .push(Tab::Table(TableTab::new(TabId(9), object, 300)));
+            w.tabs.push(TableTab::new(TabId(9), object, 300));
             w.active_tab = Some(TabId(9));
             assert_eq!(scope_of(w), want, "{d:?}");
         }

@@ -64,11 +64,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<MenuCmd> {
     let online = state.active_online();
     let on = online.is_some();
     let tab = online.is_some_and(|w| w.active_tab.is_some());
-    let table = online.is_some_and(|w| {
-        w.tabs
-            .iter()
-            .any(|crate::state::Tab::Table(t)| Some(t.id) == w.active_tab)
-    });
+    let table = online.is_some_and(|w| w.tabs.iter().any(|t| Some(t.id) == w.active_tab));
     let sql = online.is_some_and(|w| w.capabilities().sql_editor);
     egui::MenuBar::new().ui(ui, |ui| {
         ui.menu_button("File", |ui| {

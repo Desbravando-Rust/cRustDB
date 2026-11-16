@@ -2,8 +2,8 @@
 use crustdb_core::model::{Cell, ObjectKind, ObjectRef};
 
 use crate::runtime::{Event, RequestId};
+use crate::state::AppState;
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Tab};
 
 /// A table tab (id 1) exporting under req 7 and a query tab (id 2) whose pane is on req 9.
 fn setup() -> AppState {
@@ -18,7 +18,7 @@ fn setup() -> AppState {
     s.open_table(ws, object, RequestId(1));
     s.open_query(ws, None);
     let w = s.workspace_mut(ws).unwrap();
-    let Some(Tab::Table(t)) = w.tabs.first_mut() else {
+    let Some(t) = w.tabs.first_mut() else {
         panic!("no tab");
     };
     t.rows = vec![vec![Cell::Null].into()];
@@ -28,7 +28,7 @@ fn setup() -> AppState {
 }
 
 fn table_notice(s: &mut AppState) -> (Option<String>, bool) {
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first() else {
+    let Some(t) = s.workspaces[0].tabs.first() else {
         panic!("no tab");
     };
     (t.notice.clone(), t.export_req.is_some())

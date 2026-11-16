@@ -77,12 +77,7 @@ impl StatusModel {
             Status::Online(v) => Some((w.config.name.clone(), v.clone(), !self.reconnecting)),
             _ => None,
         };
-        let table = w.active_tab.and_then(|t| {
-            w.tabs
-                .iter()
-                .map(|super::Tab::Table(t)| t)
-                .find(|x| x.id == t)
-        });
+        let table = w.active_tab.and_then(|t| w.tabs.iter().find(|x| x.id == t));
         self.scope = Some(super::scope::scope_of(w));
         self.on_table = table.is_some();
         self.grid_rows = table.filter(|t| !t.rows.is_empty()).map(|t| {
@@ -179,9 +174,7 @@ impl StatusBoard {
             state
                 .workspaces
                 .iter()
-                .find(|w| {
-                    w.tabs.iter().any(|x| x.id() == *t) || w.queries.iter().any(|q| q.id == *t)
-                })
+                .find(|w| w.tabs.iter().any(|x| x.id == *t) || w.queries.iter().any(|q| q.id == *t))
                 .map(|w| w.id)
         };
         let ws = match e {

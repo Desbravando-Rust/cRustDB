@@ -268,10 +268,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                     }
                     (None, Some(object)) => {
                         // ponytail: O(folhas visíveis × abas) por frame; índice por objeto se árvores/abas crescerem
-                        let open = active
-                            .tabs
-                            .iter()
-                            .any(|crate::state::Tab::Table(t)| t.object == *object);
+                        let open = active.tabs.iter().any(|t| t.object == *object);
                         icon(ui, leaf_icon(object.kind));
                         ui.scope(|ui| {
                             super::theme::subtle_selection(ui.visuals_mut());
