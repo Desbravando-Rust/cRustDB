@@ -17,6 +17,7 @@ pub mod history_panel;
 pub mod home;
 pub mod keyspace;
 pub mod labels;
+pub mod menu_bar;
 pub mod picker;
 pub mod results;
 pub mod row_detail;
