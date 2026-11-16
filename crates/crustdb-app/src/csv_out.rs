@@ -14,11 +14,14 @@ impl<W: Write> CsvOut<W> {
     }
 
     pub fn header(&mut self, cols: &[ColumnMeta]) -> io::Result<()> {
-        self.line(cols.iter().map(|c| field(&c.name, false, ',')))
+        self.line(cols.iter().map(|c| field(&defuse(&c.name), false, ',')))
     }
 
     pub fn row(&mut self, cells: &[Cell]) -> io::Result<()> {
-        self.line(cells.iter().map(|c| quoted(c, ',')))
+        self.line(cells.iter().map(|c| match c {
+            Cell::Text { value, .. } if !is_number(value) => field(&defuse(value), true, ','),
+            c => quoted(c, ','),
+        }))
     }
 
     pub fn finish(mut self) -> io::Result<()> {
@@ -60,6 +63,20 @@ pub fn to_tsv<'a>(
         .into_iter()
         .map(|r| line(r.iter().map(|c| quoted(c, '\t')).collect()));
     head.into_iter().chain(body).collect::<Vec<_>>().join("\n")
+}
+
+/// OWASP CSV injection: prefix `'` when a spreadsheet would read the field as a formula.
+fn defuse(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.starts_with(['=', '+', '-', '@', '\t', '\r']) {
+        format!("'{s}").into()
+    } else {
+        s.into()
+    }
+}
+
+/// Plain numbers (`-5`, `+3.2`, `-1e3`) are data, not formulas: keep them as is.
+fn is_number(s: &str) -> bool {
+    s.parse::<f64>().is_ok_and(f64::is_finite)
 }
 
 fn quoted(c: &Cell, sep: char) -> String {
@@ -174,5 +191,51 @@ mod tests {
              0xdead\t\"r\rs\"\tplain"
         );
         assert_eq!(to_tsv(&cols, &[], true), "id\t\"a\tb\"\tc");
+    }
+
+    fn header_out(names: &[&str]) -> String {
+        let mut buf = Vec::new();
+        let mut w = CsvOut::new(&mut buf);
+        let cols: Vec<_> = names.iter().map(|n| col(n)).collect();
+        w.header(&cols).unwrap();
+        w.finish().unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn csv_neutralizes_formula_cells() {
+        // Act & Assert
+        assert_eq!(out(&[text("=1+1")]), "'=1+1\n");
+        assert_eq!(out(&[text("@SUM(A1)")]), "'@SUM(A1)\n");
+        assert_eq!(out(&[text("+cmd")]), "'+cmd\n");
+        assert_eq!(out(&[text("\tx")]), "'\tx\n");
+        assert_eq!(out(&[text("-cmd|' /C calc'!A0")]), "'-cmd|' /C calc'!A0\n");
+        assert_eq!(out(&[text("=a,b")]), "\"'=a,b\"\n");
+        assert_eq!(out(&[text("\rx")]), "\"'\rx\"\n");
+    }
+
+    #[test]
+    fn csv_neutralizes_formula_header_names() {
+        // Act & Assert
+        assert_eq!(header_out(&["=evil", "ok"]), "'=evil,ok\n");
+    }
+
+    #[test]
+    fn csv_keeps_numbers_and_plain_text_untouched() {
+        // Act & Assert
+        assert_eq!(
+            out(&[text("-5"), text("+3.2"), text("-1e3")]),
+            "-5,+3.2,-1e3\n"
+        );
+        assert_eq!(out(&[text("hello"), text("a=b")]), "hello,a=b\n");
+    }
+
+    #[test]
+    fn tsv_does_not_neutralize_formulas() {
+        // Arrange
+        let rows: Vec<Row> = vec![vec![text("=1+1")].into()];
+
+        // Act & Assert
+        assert_eq!(to_tsv(&[col("=h")], &rows, true), "=h\n=1+1");
     }
 }
