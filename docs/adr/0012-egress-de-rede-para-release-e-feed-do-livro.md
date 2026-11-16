@@ -62,7 +62,7 @@ retry, mesmo opt-out `CRUSTDB_OFFLINE`), sem dependência nova. Contrato que o s
   contam como ausentes. Sem datas, vale o primeiro item.
 * Corpo da resposta limitado a 256 KiB; o repaint é pedido após cada resultado.
 * Sem post (offline, opt-out, feed vazio ou inválido): linha estática com link para
-  `https://desbravandorust.com.br/`. O painel só aparece com a área central >= 640 x 520 px.
+  `https://desbravandorust.com.br/`. O painel só aparece com a área central >= 520 x 480 px.
 * Exceção ao "texto de UI em inglês": o cartão do livro ("DESTAQUE", tagline, autor, "SAIBA MAIS") é a
   copy de marketing do próprio livro, em português como no protótipo e no `book_promo` existente.
   O rótulo "From the Blog:" segue em inglês.

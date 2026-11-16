@@ -5,8 +5,10 @@ use crate::news::News;
 use egui_phosphor::regular as icon;
 
 const SITE_URL: &str = "https://desbravandorust.com.br/";
+/// Measured in `ui_smoke`: at a 900x700 window the central area is ~566x563 (sidebar, top bar,
+/// status bar and metrics strip take the rest). The panel is drawn below the grid footer on purpose.
 /// Hide the panel when the central area is too small to leave room for the content above it.
-const MIN_SIZE: egui::Vec2 = egui::vec2(640.0, 520.0);
+const MIN_SIZE: egui::Vec2 = egui::vec2(520.0, 480.0);
 
 pub fn show(ui: &mut egui::Ui, news: &News) {
     if ui.available_width() < MIN_SIZE.x || ui.available_height() < MIN_SIZE.y {
