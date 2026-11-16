@@ -2,7 +2,7 @@
 use eframe::egui::{self, Color32};
 
 use super::Intent;
-use super::grid::{read_only_reason, write_block};
+use super::grid::write_block;
 use super::theme::ACCENT;
 use super::theme::WARNING;
 use crate::state::TableTab;
@@ -67,7 +67,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
             }
             delete_button(ui, tab, &mut out);
             if tab.object.kind == ObjectKind::Table
-                && let Some(why) = read_only_reason(tab)
+                && let Some(why) = tab.read_only_reason()
             {
                 ui.colored_label(
                     Color32::YELLOW,

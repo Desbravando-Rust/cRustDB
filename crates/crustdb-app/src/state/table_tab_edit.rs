@@ -5,14 +5,32 @@ use crustdb_core::model::{Cell, ObjectKind};
 use super::TableTab;
 use crate::runtime::{Command, RequestId};
 
-const PENDING_NOTICE: &str = "Save or discard pending changes";
+pub const PENDING_NOTICE: &str = "Save or discard pending changes";
+const NO_PRIMARY_KEY: &str = "Table has no primary key";
+
+impl TableTab {
+    /// A table with a primary key: rows can be addressed for edits.
+    fn keyed(&self) -> bool {
+        self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key)
+    }
+
+    /// Why the grid can never edit this tab; `None` while the columns are still unknown.
+    pub fn read_only_reason(&self) -> Option<&'static str> {
+        if self.object.kind != ObjectKind::Table {
+            Some("Views are read-only")
+        } else if !self.columns.is_empty() && !self.keyed() {
+            Some(NO_PRIMARY_KEY)
+        } else {
+            None
+        }
+    }
+}
 
 impl TableTab {
     /// Opens the inline editor on a text or NULL cell of a table with a primary key, showing the
     /// staged value if there is one.
     pub fn begin_edit(&mut self, row: usize, col: usize) {
-        let keyed =
-            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
+        let keyed = self.keyed();
         let text = match self.rows.get(row).and_then(|r| r.get(col)) {
             Some(c) if is_opaque(c) => return,
             Some(Cell::Text { value, .. }) => value.to_string(),
@@ -178,13 +196,9 @@ impl TableTab {
     }
 
     pub(crate) fn writable(&mut self) -> bool {
-        let ok =
-            self.object.kind == ObjectKind::Table && self.columns.iter().any(|c| c.is_primary_key);
+        let ok = self.keyed();
         if !ok {
-            self.notice = Some(match self.object.kind {
-                ObjectKind::Table => "Table has no primary key".into(),
-                _ => "Views are read-only".into(),
-            });
+            self.notice = Some(self.read_only_reason().unwrap_or(NO_PRIMARY_KEY).into());
         }
         ok
     }
