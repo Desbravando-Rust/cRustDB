@@ -50,11 +50,19 @@ retry, mesmo opt-out `CRUSTDB_OFFLINE`), sem dependência nova. Contrato que o s
   "summary":"Resumo curto...","date_published":"2026-11-10T12:00:00Z"}]}
 ```
 
-* `title` e `url` obrigatórios; item sem eles, ou com `url` fora de `http://`/`https://`, é descartado
-  (feed remoto não confiável; o egui abriria qualquer esquema).
+* `title` e `url` obrigatórios; item sem eles, ou com `url` fora de `https://` (igual ao `feed.json`),
+  com mais de 2048 bytes ou com espaço/caractere de controle, é descartado (feed remoto não confiável;
+  o egui abriria qualquer esquema).
+* Texto sanitizado: tab/CR/LF viram espaço; demais controles e caracteres bidi (overrides/isolates)
+  são removidos. `title` é cortado em 120 caracteres.
 * `summary` (ou, na falta, `content_text`) é opcional; o app corta em 240 caracteres (limite de caractere,
   nunca no meio de um UTF-8) e acrescenta `…`.
-* Vale o item de maior `date_published` (ISO 8601, comparado como texto); sem datas, o primeiro.
+* Vale o item de maior `date_published` (`YYYY-MM-DDT...`, comparado como texto; sem crate de datas).
+  Teto conhecido: offsets mistos e valores fora de faixa não ordenam certo; datas que não têm esse formato
+  contam como ausentes. Sem datas, vale o primeiro item.
+* Corpo da resposta limitado a 256 KiB; o repaint é pedido após cada resultado.
 * Sem post (offline, opt-out, feed vazio ou inválido): linha estática com link para
-  `https://desbravandorust.com.br/`. O cartão do livro ("DESTAQUE", em português como no protótipo) é estático.
-
+  `https://desbravandorust.com.br/`. O painel só aparece com a área central >= 640 x 520 px.
+* Exceção ao "texto de UI em inglês": o cartão do livro ("DESTAQUE", tagline, autor, "SAIBA MAIS") é a
+  copy de marketing do próprio livro, em português como no protótipo e no `book_promo` existente.
+  O rótulo "From the Blog:" segue em inglês.

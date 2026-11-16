@@ -6,7 +6,7 @@ use egui_phosphor::regular as icon;
 
 const SITE_URL: &str = "https://desbravandorust.com.br/";
 /// Hide the panel when the central area is too small to leave room for the content above it.
-const MIN_SIZE: egui::Vec2 = egui::vec2(640.0, 380.0);
+const MIN_SIZE: egui::Vec2 = egui::vec2(640.0, 520.0);
 
 pub fn show(ui: &mut egui::Ui, news: &News) {
     if ui.available_width() < MIN_SIZE.x || ui.available_height() < MIN_SIZE.y {
@@ -50,7 +50,14 @@ fn book_card(ui: &mut egui::Ui) {
                     .wrap(),
                 );
                 ui.weak("Por: José Luis da Cruz Junior");
-                ui.hyperlink_to(format!("SAIBA MAIS {}", icon::ARROW_RIGHT), SITE_URL);
+                ui.hyperlink_to(format!("SAIBA MAIS {}", icon::ARROW_RIGHT), SITE_URL)
+                    .widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::accesskit::Role::Link,
+                            true,
+                            "Saiba mais sobre o livro Desbravando Rust",
+                        )
+                    });
             });
         });
     });
@@ -62,7 +69,7 @@ fn post(ui: &mut egui::Ui, news: &News) {
         match news.post.get() {
             Some(p) => ui.hyperlink_to(&p.title, &p.url),
             // Offline, opted out or empty feed: static line.
-            None => ui.hyperlink_to("desbravandorust.com.br", SITE_URL),
+            None => ui.hyperlink_to("Visit desbravandorust.com.br", SITE_URL),
         };
     });
     if let Some(p) = news.post.get().filter(|p| !p.excerpt.is_empty()) {
@@ -121,7 +128,11 @@ mod tests {
         // Assert
         h.get_by_label("DESTAQUE");
         h.get_by_label("Desbravando Rust");
-        h.get_by_label(&format!("SAIBA MAIS {}", icon::ARROW_RIGHT));
+        h.get_by_role_and_label(
+            egui::accesskit::Role::Link,
+            "Saiba mais sobre o livro Desbravando Rust",
+        );
+        h.get_by_role_and_label(egui::accesskit::Role::Image, "Desbravando Rust book cover");
         h.get_by_label("From the Blog:");
         h.get_by_role_and_label(egui::accesskit::Role::Link, "Why Indexing Matters");
         h.get_by_label_contains("black boxes");
@@ -136,8 +147,11 @@ mod tests {
         let h = render(&news);
 
         // Assert
-        h.get_by_role_and_label(egui::accesskit::Role::Link, "desbravandorust.com.br");
-        h.get_by_label("DESTAQUE");
+        h.get_by_role_and_label(egui::accesskit::Role::Link, "Visit desbravandorust.com.br");
+        h.get_by_role_and_label(
+            egui::accesskit::Role::Link,
+            "Saiba mais sobre o livro Desbravando Rust",
+        );
     }
 
     #[test]
@@ -153,5 +167,36 @@ mod tests {
 
         // Assert
         assert!(h.query_by_label("DESTAQUE").is_none());
+    }
+
+    #[test]
+    fn leaves_toolbar_grid_and_footer_visible_on_table_tab() {
+        // Arrange
+        let news = News::default();
+        let object = crustdb_core::model::ObjectRef {
+            database: "d".into(),
+            schema: None,
+            name: "t".into(),
+            kind: crustdb_core::model::ObjectKind::Table,
+        };
+        let mut tab = crate::state::TableTab::new(crate::runtime::TabId(1), object, 300);
+        let mut done = false;
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(900.0, 700.0))
+            .build_ui(|ui| {
+                if ready(ui, &mut done) {
+                    show(ui, &news);
+                    crate::ui::grid::show_tab(ui, &mut tab);
+                }
+            });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label("DESTAQUE");
+        h.get_by_label(crate::ui::data_toolbar::COMMIT_LABEL);
+        h.get_by_label(crate::ui::data_toolbar::FILTER_HINT);
+        h.get_by_label_contains("Delete rows");
     }
 }
