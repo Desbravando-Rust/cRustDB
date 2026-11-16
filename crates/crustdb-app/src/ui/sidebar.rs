@@ -31,20 +31,22 @@ fn folder_color(kind: crustdb_core::model::ObjectKind) -> egui::Color32 {
 }
 
 /// Small, grey, letter-spaced section title (`CONNECTIONS`, `EXPLORER`).
-fn section_title(text: &str) -> egui::RichText {
+fn section_title(ui: &egui::Ui, text: &str) -> egui::RichText {
     egui::RichText::new(text)
         .small()
         .strong()
-        .color(egui::Color32::GRAY)
+        .color(ui.visuals().weak_text_color())
         .extra_letter_spacing(1.5)
 }
 
 /// Decorative icon glyph: painted without a widget, so it has no accessible label.
 fn icon(ui: &mut egui::Ui, glyph: &str) {
     let color = ui.visuals().text_color();
-    let galley =
-        ui.painter()
-            .layout_no_wrap(glyph.to_owned(), egui::FontId::proportional(14.0), color);
+    paint_icon(ui, glyph, egui::FontId::proportional(14.0), color);
+}
+
+fn paint_icon(ui: &mut egui::Ui, glyph: &str, font: egui::FontId, color: egui::Color32) {
+    let galley = ui.painter().layout_no_wrap(glyph.to_owned(), font, color);
     let (rect, _) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
     ui.painter().galley(rect.min, galley, color);
 }
@@ -91,7 +93,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     };
     let caps = active.capabilities();
     ui.horizontal(|ui| {
-        ui.label(section_title("CONNECTIONS"));
+        ui.label(section_title(ui, "CONNECTIONS"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let plus = ui.small_button(egui_phosphor::regular::PLUS);
             plus.widget_info(|| {
@@ -189,11 +191,11 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         return out;
     }
     ui.separator();
-    ui.label(section_title("EXPLORER"));
+    ui.label(section_title(ui, "EXPLORER"));
     ui.separator();
     let mut q = active.tree.filter_text().to_owned();
     let edit = egui::Frame::new()
-        .fill(egui::Color32::from_gray(40))
+        .fill(super::theme::INPUT_FILL)
         .inner_margin(4.0)
         .show(ui, |ui| {
             ui.add(egui::TextEdit::singleline(&mut q).hint_text("filter"))
@@ -238,10 +240,11 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                             )
                         });
                         if let NodePath::Folder { kind, .. } = path {
-                            ui.label(
-                                egui::RichText::new(egui_phosphor::fill::FOLDER)
-                                    .family(super::theme::fill_family())
-                                    .color(folder_color(*kind)),
+                            paint_icon(
+                                ui,
+                                egui_phosphor::fill::FOLDER,
+                                egui::FontId::new(14.0, super::theme::fill_family()),
+                                folder_color(*kind),
                             );
                         }
                         let mut r = ui

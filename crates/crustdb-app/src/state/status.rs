@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crustdb_core::driver::TlsMode;
-use crustdb_core::model::ServerVersion;
+use crustdb_core::model::{DriverKind, ServerVersion};
 
 use super::workspace::{AppState, Status, WorkspaceState};
 use crate::metrics::ProcStats;
@@ -35,6 +35,8 @@ pub struct StatusModel {
     pub scope: Option<String>,
     /// Rows on screen and the table estimate of the active table tab.
     pub grid_rows: Option<(u64, Option<u64>)>,
+    /// A table tab is active: `rows` (last statement of another tab) must not leak into it.
+    pub on_table: bool,
     reconnecting: bool,
     tx_by_tab: HashMap<TabId, TxState>,
     render_from: Option<Instant>,
@@ -58,12 +60,47 @@ impl Default for StatusModel {
             exports: vec![],
             scope: None,
             grid_rows: None,
+            on_table: false,
             reconnecting: false,
             tx_by_tab: HashMap::new(),
             render_from: None,
             started: HashMap::new(),
             first_row: HashMap::new(),
         }
+    }
+}
+
+/// `<label or name>/<database>`, one rule per driver so every tab shows the same text:
+/// Postgres/MySQL the database (active tab's, else the configured one), SQLite the file name,
+/// Redis the logical database index.
+fn scope_of(w: &WorkspaceState) -> String {
+    let head = w.config.label.as_deref().unwrap_or(&w.config.name);
+    let tab_db = w.active_tab.and_then(|t| {
+        w.tabs
+            .iter()
+            .map(|super::Tab::Table(t)| t)
+            .find(|x| x.id == t)
+            .map(|t| &t.object.database)
+            .or_else(|| w.queries.iter().find(|q| q.id == t)?.database.as_ref())
+    });
+    let configured = w.config.database.as_deref();
+    let place = match w.config.driver {
+        DriverKind::Postgres | DriverKind::Mysql => tab_db.map(String::as_str).or(configured),
+        DriverKind::Sqlite => configured.map(|f| {
+            std::path::Path::new(f)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(f)
+        }),
+        DriverKind::Redis => Some(
+            w.keyspace
+                .as_ref()
+                .map_or(configured.unwrap_or("0"), |k| k.current.as_str()),
+        ),
+    };
+    match place {
+        Some(p) => format!("{head}/{p}"),
+        None => head.to_owned(),
     }
 }
 
@@ -80,18 +117,8 @@ impl StatusModel {
                 .map(|super::Tab::Table(t)| t)
                 .find(|x| x.id == t)
         });
-        let query = w
-            .active_tab
-            .and_then(|t| w.queries.iter().find(|q| q.id == t));
-        let place = table
-            .map(|t| t.object.schema.as_ref().unwrap_or(&t.object.database))
-            .or(query.and_then(|q| q.database.as_ref()))
-            .or(w.config.database.as_ref());
-        let head = w.config.label.as_deref().unwrap_or(&w.config.name);
-        self.scope = Some(match place {
-            Some(p) => format!("{head}/{p}"),
-            None => head.to_owned(),
-        });
+        self.scope = Some(scope_of(w));
+        self.on_table = table.is_some();
         self.grid_rows = table.filter(|t| !t.rows.is_empty()).map(|t| {
             (
                 t.rows.len() as u64,
@@ -265,24 +292,61 @@ mod tests {
         })
     }
 
+    fn scope(driver: DriverKind, database: Option<&str>, label: Option<&str>) -> String {
+        let mut s = crate::state::workspace::tests::state(&["alpha"]);
+        s.open_workspace(s.config.connections[0].clone());
+        let w = &mut s.workspaces[0];
+        w.config.driver = driver;
+        w.config.database = database.map(Into::into);
+        w.config.label = label.map(Into::into);
+        scope_of(w)
+    }
+
     #[test]
-    fn scope_is_label_or_name_plus_database() {
+    fn scope_follows_one_rule_per_driver() {
+        // Arrange
+        let cases = [
+            (DriverKind::Postgres, Some("main"), "alpha/main"),
+            (DriverKind::Mysql, Some("shop"), "alpha/shop"),
+            (DriverKind::Sqlite, Some("/tmp/dir/app.db"), "alpha/app.db"),
+            (DriverKind::Redis, Some("3"), "alpha/3"),
+            (DriverKind::Redis, None, "alpha/0"),
+            (DriverKind::Postgres, None, "alpha"),
+        ];
+
+        // Act & Assert
+        for (d, db, want) in cases {
+            assert_eq!(scope(d, db, None), want, "{d:?}");
+        }
+    }
+
+    #[test]
+    fn scope_prefers_label_over_name() {
+        // Act & Assert
+        assert_eq!(
+            scope(DriverKind::Postgres, Some("main"), Some("production")),
+            "production/main"
+        );
+    }
+
+    #[test]
+    fn scope_is_the_same_for_table_and_query_tabs() {
         // Arrange
         let mut s = crate::state::workspace::tests::state(&["alpha"]);
-        let id = s.open_workspace(s.config.connections[0].clone());
-        let mut m = StatusModel::default();
+        let ws = s.open_workspace(s.config.connections[0].clone());
+        s.workspaces[0].config.database = Some("main".into());
+        let q = s.open_query(ws, Some("main".into()));
+        let w = &mut s.workspaces[0];
 
         // Act
-        s.workspaces[0].config.database = Some("main".into());
-        m.sync(&s.workspaces[0]);
-        let plain = m.scope.clone();
-        s.workspaces[0].config.label = Some("production".into());
-        m.sync(&s.workspaces[0]);
+        let with_query = scope_of(w);
+        w.active_tab = None;
+        let without_tab = scope_of(w);
 
         // Assert
-        assert_eq!(id, s.workspaces[0].id);
-        assert_eq!(plain.as_deref(), Some("alpha/main"));
-        assert_eq!(m.scope.as_deref(), Some("production/main"));
+        assert!(q.is_some());
+        assert_eq!(with_query, "alpha/main");
+        assert_eq!(with_query, without_tab);
     }
 
     #[test]

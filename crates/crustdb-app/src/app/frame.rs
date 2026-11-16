@@ -58,9 +58,11 @@ impl CrustApp {
             intents.extend(self.on_action(a, focus));
         }
         egui::Panel::top("top_bar").show(ui, |ui| ui::top_bar::show(ui, &self.state));
-        if let Some(m) = self.status.current(&self.state) {
+        // One sync per frame: the metrics row in the central area reuses this model.
+        let status = self.status.current(&self.state);
+        if let Some(m) = status {
             let bar = egui::Frame::new()
-                .fill(ui::theme::ACCENT)
+                .fill(ui::theme::STATUS_BAR_FILL)
                 .inner_margin(egui::Margin::symmetric(8, 2));
             egui::Panel::bottom("status_bar")
                 .frame(bar)
@@ -84,15 +86,15 @@ impl CrustApp {
         if online {
             self.sidebar_rect = Some(r.response.rect);
         }
-        let metrics = self.status.current(&self.state);
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
                 intents.extend(ui::connection_form::show(ui, f, &self.state.config.labels));
                 return;
             }
             // First bottom panel = lowest: the metrics row sits under the grid footer.
-            if let Some(m) = metrics {
-                egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
+            // Online connections only (see `metrics_panel`).
+            if let Some(m) = status {
+                ui::status_bar::metrics_panel(ui, m, online, false);
             }
             if let Some(w) = self.state.active_online() {
                 intents.extend(ui::tab_bar::show(ui, w));

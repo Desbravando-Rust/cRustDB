@@ -39,6 +39,12 @@ fn item(ui: &mut egui::Ui, text: String, tip: &str) {
         .on_hover_text(tip);
 }
 
+/// Warning or error: bold plus a distinct icon, so the signal does not rely on colour.
+fn alert(ui: &mut egui::Ui, text: String, tip: &str) {
+    ui.label(RichText::new(text).color(Color32::WHITE).strong())
+        .on_hover_text(tip);
+}
+
 fn ms(d: Duration) -> String {
     format!("{} ms", d.as_millis())
 }
@@ -59,22 +65,37 @@ fn engine(v: &ServerVersion) -> String {
 }
 
 fn rows_text(m: &StatusModel) -> Option<String> {
-    match (m.grid_rows, m.rows) {
-        (Some((n, Some(total))), _) => Some(format!("Rows: {n} of {}", total.max(n))),
-        (Some((n, None)), _) | (None, Some(n)) => Some(format!("Rows: {n}")),
-        (None, None) => None,
+    // A table tab shows its own rows only; `m.rows` belongs to the last statement of another tab.
+    match (m.on_table, m.grid_rows, m.rows) {
+        (_, Some((n, Some(total))), _) => Some(format!("Rows: {n} of {}", total.max(n))),
+        (_, Some((n, None)), _) | (false, None, Some(n)) => Some(format!("Rows: {n}")),
+        _ => None,
     }
 }
 
-fn mode_text(m: &StatusModel) -> (String, &'static str) {
+/// Text, tooltip and whether it is a warning (bold, own icon).
+fn mode_text(m: &StatusModel) -> (String, &'static str, bool) {
     match &m.connection {
-        Some((_, _, false)) => (format!("{} Reconnecting", icon::PLUGS), "Reconnecting"),
+        Some((_, _, false)) => (
+            format!("{} Reconnecting", icon::ARROWS_CLOCKWISE),
+            "Reconnecting",
+            true,
+        ),
         Some(_) if m.ssh => (
             format!("{} Connected via SSH Tunnel", icon::TERMINAL_WINDOW),
             "SSH tunnel",
+            false,
         ),
-        Some(_) => (format!("{} Connected", icon::PLUGS_CONNECTED), "Connected"),
-        None => (format!("{} Not connected", icon::PLUGS), "Not connected"),
+        Some(_) => (
+            format!("{} Connected", icon::PLUGS_CONNECTED),
+            "Connected",
+            false,
+        ),
+        None => (
+            format!("{} Disconnected", icon::PLUGS),
+            "Not connected",
+            true,
+        ),
     }
 }
 
@@ -97,7 +118,11 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
         match m.tx {
             TxState::Idle => {}
             TxState::Open => item(ui, "TX open".into(), "Transaction open"),
-            TxState::Aborted => item(ui, "TX aborted".into(), "Transaction aborted"),
+            TxState::Aborted => alert(
+                ui,
+                format!("{} TX aborted", icon::WARNING),
+                "Transaction aborted",
+            ),
         }
         for (_, rows) in &m.exports {
             item(
@@ -107,8 +132,12 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
             );
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let (text, tip) = mode_text(m);
-            item(ui, text, tip);
+            let (text, tip, warn) = mode_text(m);
+            if warn {
+                alert(ui, text, tip);
+            } else {
+                item(ui, text, tip);
+            }
             if let Some(q) = m.last_query {
                 let tip = format!(
                     "First row: {}\nFetch total: {}\nRender: {}",
@@ -130,6 +159,15 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
             }
         });
     });
+}
+
+/// Metrics row panel for the central area. Added before the tab content so it is the lowest
+/// bottom panel: under the grid footer, as in the prototype. Only for an online connection and
+/// never over the connection form.
+pub fn metrics_panel(ui: &mut egui::Ui, m: &StatusModel, online: bool, form_open: bool) {
+    if online && !form_open {
+        egui::Panel::bottom("metrics_strip").show(ui, |ui| metrics(ui, m));
+    }
 }
 
 /// Metrics row under the grid footer: engine version, TLS, safety rules, process CPU and memory.
@@ -180,8 +218,6 @@ pub fn metrics(ui: &mut egui::Ui, m: &StatusModel) {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    /// Panel fill behind the metrics row.
-    const PANEL: Color32 = Color32::from_rgb(22, 26, 36);
     use egui_kittest::kittest::Queryable;
 
     #[test]
@@ -207,7 +243,7 @@ mod tests {
 
         // Act & Assert
         for c in [GREEN, AMBER, RED, GRAY] {
-            assert!(luma(c) - luma(PANEL) > 80.0, "{c:?}");
+            assert!(luma(c) - luma(crate::ui::theme::PANEL_FILL) > 80.0, "{c:?}");
         }
     }
 
@@ -304,5 +340,73 @@ mod tests {
         for gone in [icon::LOCK, icon::SHIELD_CHECK, icon::CPU, icon::MEMORY] {
             assert!(h.query_by_label_contains(gone).is_none(), "{gone}");
         }
+    }
+
+    #[test]
+    fn table_tab_never_shows_rows_of_another_tab() {
+        // Arrange
+        let mut m = StatusModel::default();
+        m.rows = Some(99);
+
+        // Act
+        m.on_table = true;
+        let on_table = rows_text(&m);
+        m.on_table = false;
+
+        // Assert
+        assert_eq!(on_table, None);
+        assert_eq!(rows_text(&m).as_deref(), Some("Rows: 99"));
+    }
+
+    fn panel_harness<'a>(
+        m: &'a StatusModel,
+        online: bool,
+        form: bool,
+    ) -> egui_kittest::Harness<'a> {
+        egui_kittest::Harness::new_ui(move |ui| {
+            crate::ui::theme::install_theme(ui.ctx());
+            egui::CentralPanel::default().show(ui, |ui| {
+                metrics_panel(ui, m, online, form);
+                egui::Panel::bottom("footer").show(ui, |ui| ui.label("grid footer"));
+            });
+        })
+    }
+
+    #[test]
+    fn metrics_panel_sits_under_footer_and_hides_on_form_or_offline() {
+        // Arrange
+        let m = model();
+        let mut shown = panel_harness(&m, true, false);
+        let mut on_form = panel_harness(&m, true, true);
+        let mut offline = panel_harness(&m, false, false);
+
+        // Act
+        shown.run();
+        on_form.run();
+        offline.run();
+
+        // Assert
+        let footer = shown.get_by_label("grid footer").rect();
+        let metric = shown
+            .get_by_label(&format!("{} 1000", icon::SHIELD_CHECK))
+            .rect();
+        assert!(metric.top() >= footer.bottom());
+        for h in [&on_form, &offline] {
+            assert!(h.query_by_label_contains(icon::SHIELD_CHECK).is_none());
+        }
+    }
+
+    #[test]
+    fn warnings_carry_a_distinct_icon() {
+        // Arrange
+        let mut m = model();
+        m.connection = None;
+        let mut h = harness(&m, false);
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_label(&format!("{} Disconnected", icon::PLUGS));
     }
 }

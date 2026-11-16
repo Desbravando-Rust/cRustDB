@@ -306,18 +306,34 @@ fn refresh_showing_zero_rows_keeps_state_id() {
 }
 
 #[test]
-fn type_label_is_short_and_uppercase() {
+fn type_label_handles_edge_cases() {
     // Arrange
-    let names = [
-        "int4",
-        "character varying(40)",
-        "timestamp without time zone",
-        "boolean",
+    let cases = [
+        ("int4", Some("INT")),
+        ("int2", Some("SMALLINT")),
+        ("int8", Some("BIGINT")),
+        ("float4", Some("REAL")),
+        ("float8", Some("DOUBLE")),
+        ("double precision", Some("DOUBLE")),
+        ("character varying(40)", Some("VARCHAR")),
+        ("character varying(40)[]", Some("VARCHAR[]")),
+        ("numeric(10,2)", Some("NUMERIC")),
+        ("integer[][]", Some("INT[][]")),
+        ("bigint(20) unsigned", Some("BIGINT UNSIGNED")),
+        ("int unsigned zerofill", Some("INT UNSIGNED ZEROFILL")),
+        ("timestamp without time zone", Some("TIMESTAMP")),
+        ("timestamp with time zone", Some("TIMESTAMPTZ")),
+        ("time with time zone", Some("TIMETZ")),
+        ("time without time zone", Some("TIME")),
+        ("boolean", Some("BOOL")),
+        ("text", Some("TEXT")),
+        ("", None),
+        ("  ", None),
+        ("(10)", None),
     ];
 
-    // Act
-    let got: Vec<_> = names.iter().map(|n| super::type_label(n)).collect();
-
-    // Assert
-    assert_eq!(got, ["INT4", "VARCHAR", "TIMESTAMP", "BOOL"]);
+    // Act & Assert
+    for (name, want) in cases {
+        assert_eq!(super::type_label(name).as_deref(), want, "{name:?}");
+    }
 }
