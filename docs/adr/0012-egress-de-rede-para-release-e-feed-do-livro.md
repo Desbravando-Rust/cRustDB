@@ -38,3 +38,23 @@ Escolhemos a **Opção 1** porque `ureq` não adiciona árvore nova (já está n
 * Egress por padrão no startup (opt-out, não opt-in); um toggle na UI fica para quando pedirem.
 * Sem cache: uma requisição por abertura do app; rate limit anônimo do GitHub (60/h por IP) basta.
 * `ureq` vira dependência direta e precisa acompanhar a versão usada pelo `sentry`.
+
+## Adendo (#244): feed do blog
+
+O painel "From the Blog" mostra o post mais recente. Mesma thread, uma terceira GET (mesmo timeout, sem
+retry, mesmo opt-out `CRUSTDB_OFFLINE`), sem dependência nova. Contrato que o site publica em
+`https://desbravandorust.com.br/blog.json` (subconjunto de JSON Feed 1.1):
+
+```json
+{"items":[{"title":"Why Indexing Matters","url":"https://desbravandorust.com.br/blog/indexing",
+  "summary":"Resumo curto...","date_published":"2026-11-10T12:00:00Z"}]}
+```
+
+* `title` e `url` obrigatórios; item sem eles, ou com `url` fora de `http://`/`https://`, é descartado
+  (feed remoto não confiável; o egui abriria qualquer esquema).
+* `summary` (ou, na falta, `content_text`) é opcional; o app corta em 240 caracteres (limite de caractere,
+  nunca no meio de um UTF-8) e acrescenta `…`.
+* Vale o item de maior `date_published` (ISO 8601, comparado como texto); sem datas, o primeiro.
+* Sem post (offline, opt-out, feed vazio ou inválido): linha estática com link para
+  `https://desbravandorust.com.br/`. O cartão do livro ("DESTAQUE", em português como no protótipo) é estático.
+

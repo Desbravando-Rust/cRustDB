@@ -1,5 +1,6 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
 pub mod autocomplete;
+pub mod blog_panel;
 pub mod command_pane;
 pub mod confirm_dialog;
 pub mod connection_form;

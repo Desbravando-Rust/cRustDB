@@ -1,4 +1,4 @@
-//! Opt-out network egress (ADR 0012): latest release tag and book feed.
+//! Opt-out network egress (ADR 0012): latest release tag, book feed and blog feed.
 
 use std::sync::{Arc, OnceLock};
 
@@ -9,7 +9,18 @@ pub const RELEASES_URL: &str = "https://github.com/Desbravando-Rust/cRustDB/rele
 pub struct News {
     pub latest: OnceLock<String>,
     pub chapter: OnceLock<Chapter>,
+    pub post: OnceLock<Post>,
 }
+
+/// Latest blog post (ADR 0012 addendum); `excerpt` is empty when the feed has none.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Post {
+    pub title: String,
+    pub url: String,
+    pub excerpt: String,
+}
+
+const EXCERPT_MAX: usize = 240;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Chapter {
@@ -55,6 +66,45 @@ pub fn parse_feed(body: &str) -> Vec<Chapter> {
         .collect()
 }
 
+/// Blog JSON Feed: newest item by `date_published` (first on ties) with a title and an
+/// http(s) `url`; excerpt = `summary` or `content_text`, cut to 240 chars.
+pub fn parse_blog(body: &str) -> Option<Post> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let str_of =
+        |i: &serde_json::Value, k: &str| i.get(k).and_then(|s| s.as_str()).map(str::to_owned);
+    v.get("items")?
+        .as_array()?
+        .iter()
+        .filter_map(|i| {
+            let (title, url) = (str_of(i, "title")?, str_of(i, "url")?);
+            // Untrusted remote feed: egui would open any scheme.
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                return None;
+            }
+            let text = str_of(i, "summary")
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| str_of(i, "content_text"))
+                .unwrap_or_default();
+            let text = text.trim();
+            let excerpt = match text.char_indices().nth(EXCERPT_MAX) {
+                Some((end, _)) => format!("{}…", text[..end].trim_end()),
+                None => text.to_owned(),
+            };
+            Some((
+                str_of(i, "date_published"),
+                Post {
+                    title,
+                    url,
+                    excerpt,
+                },
+            ))
+        })
+        .rev() // max_by_key keeps the last max: reversed, ties favor the first item
+        .max_by_key(|(date, _)| date.clone())
+        .map(|(_, p)| p)
+}
+
+const BLOG_URL: &str = "https://desbravandorust.com.br/blog.json";
 const RELEASE_API: &str = "https://api.github.com/repos/Desbravando-Rust/cRustDB/releases/latest";
 const FEED_URL: &str = "https://desbravandorust.com.br/feed.json";
 
@@ -100,6 +150,9 @@ pub fn spawn(news: Arc<News>, repaint: impl Fn() + Send + 'static) {
             let pick = nanos.checked_rem(chapters.len()).unwrap_or(0);
             if let Some(c) = chapters.into_iter().nth(pick) {
                 let _ = news.chapter.set(c);
+            }
+            if let Some(p) = fetch(&agent, BLOG_URL).and_then(|b| parse_blog(&b)) {
+                let _ = news.post.set(p);
             }
             repaint();
         });
@@ -159,5 +212,69 @@ mod tests {
             }]
         );
         assert!(parse_feed(r#"{"items":[]}"#).is_empty());
+    }
+
+    #[test]
+    fn parse_blog_picks_newest_with_excerpt() {
+        // Arrange
+        let body = r#"{"items":[
+            {"title":"Old","url":"https://x/old","summary":"s","date_published":"2026-01-01T00:00:00Z"},
+            {"title":"New","url":"http://x/new","content_text":"  body  ","date_published":"2026-02-01T00:00:00Z"}]}"#;
+
+        // Act
+        let post = parse_blog(body);
+
+        // Assert
+        assert_eq!(
+            post,
+            Some(Post {
+                title: "New".into(),
+                url: "http://x/new".into(),
+                excerpt: "body".into()
+            })
+        );
+    }
+
+    #[test]
+    fn parse_blog_tolerates_missing_fields_and_first_wins_without_dates() {
+        // Arrange
+        let body = r#"{"items":[{"url":"https://x/0"},{"title":"A","url":"https://x/a"},{"title":"B","url":"https://x/b"}]}"#;
+
+        // Act
+        let post = parse_blog(body).unwrap();
+
+        // Assert
+        assert_eq!((post.title.as_str(), post.excerpt.as_str()), ("A", ""));
+    }
+
+    #[test]
+    fn parse_blog_drops_bad_scheme() {
+        // Arrange
+        let body = r#"{"items":[{"title":"X","url":"javascript:alert(1)"},{"title":"Y","url":"file:///etc/passwd"}]}"#;
+
+        // Act & Assert
+        assert_eq!(parse_blog(body), None);
+    }
+
+    #[test]
+    fn parse_blog_truncates_on_char_boundary() {
+        // Arrange
+        let long = "é".repeat(300);
+        let body = format!(r#"{{"items":[{{"title":"T","url":"https://x","summary":"{long}"}}]}}"#);
+
+        // Act
+        let post = parse_blog(&body).unwrap();
+
+        // Assert
+        assert_eq!(post.excerpt.chars().count(), EXCERPT_MAX + 1);
+        assert!(post.excerpt.ends_with('…'));
+    }
+
+    #[test]
+    fn parse_blog_empty_or_invalid_is_none() {
+        // Act & Assert
+        assert_eq!(parse_blog(r#"{"items":[]}"#), None);
+        assert_eq!(parse_blog("not json"), None);
+        assert_eq!(parse_blog("{}"), None);
     }
 }
