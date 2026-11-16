@@ -266,12 +266,6 @@ fn flatten(
 }
 
 impl AppState {
-    /// Request id for commands issued from `apply`, which has no runtime to ask.
-    pub(super) fn internal_req(&mut self) -> RequestId {
-        self.next_exec += 1;
-        RequestId(self.next_exec)
-    }
-
     /// Entry point for `Intent::SelectNamespace`; refused while a command runs or awaits approval.
     pub fn select_namespace(&mut self, ws: WorkspaceId, ns: &str) -> Vec<Command> {
         let req = self.internal_req();

@@ -6,10 +6,6 @@ use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef};
 
 use crate::runtime::{Command, RequestId, WorkspaceId};
 
-/// Request ids minted here live above the runtime's counter and are seeded per workspace, since
-/// `Event::Children` carries no workspace and is offered to every tree.
-const REQ_BASE: u64 = 1 << 63;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodePath {
     Database(String),
@@ -118,8 +114,7 @@ impl ObjectTree {
             entries: HashMap::new(),
             filter: String::new(),
             selected: None,
-            // ponytail: 32 bits of counter per workspace and ws ids below 2^31; widen if ever hit.
-            next_req: REQ_BASE | (ws.0 << 32),
+            next_req: RequestId::tree_base(ws),
         }
     }
 

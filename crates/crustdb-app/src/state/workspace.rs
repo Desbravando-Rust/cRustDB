@@ -90,13 +90,19 @@ pub struct AppState {
     next_ws: u64,
     next_tab: u64,
     pub(super) evaluating: HashMap<RequestId, (WorkspaceId, TabId)>,
-    pub(super) next_exec: u64,
+    next_exec: u64,
     pub(super) outbox: Vec<Command>,
     /// Workspaces waiting for their editors' COMMIT/ROLLBACK before the real `Disconnect`.
     pub(super) disconnecting: HashMap<WorkspaceId, HashSet<TabId>>,
 }
 
 impl AppState {
+    /// Request id for commands issued from `apply`, which has no runtime to ask.
+    pub(super) fn internal_req(&mut self) -> RequestId {
+        self.next_exec += 1;
+        RequestId(self.next_exec)
+    }
+
     pub fn new(config: LoadedConfig) -> Self {
         Self {
             config,
@@ -108,8 +114,7 @@ impl AppState {
             next_ws: 1,
             next_tab: 1,
             evaluating: HashMap::new(),
-            // High range so these ids cannot collide with the tabs' own counters.
-            next_exec: 1 << 62,
+            next_exec: RequestId::STATE_BASE,
             outbox: vec![],
             disconnecting: HashMap::new(),
         }
@@ -404,8 +409,7 @@ impl AppState {
                 let Some((ws, tab)) = self.evaluating.remove(&req) else {
                     return;
                 };
-                let exec = RequestId(self.next_exec);
-                self.next_exec += 1;
+                let exec = self.internal_req();
                 let cmd = self
                     .dialogs
                     .on_evaluated(ws, tab, req, exec, evaluation, Instant::now());
