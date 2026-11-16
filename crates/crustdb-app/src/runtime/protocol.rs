@@ -240,7 +240,7 @@ pub enum Event {
     /// `None` when the lookup failed.
     Diagram {
         req: RequestId,
-        tables: Option<Vec<DiagramTable>>,
+        tables: Result<Vec<DiagramTable>, String>,
     },
     Namespaces {
         req: RequestId,

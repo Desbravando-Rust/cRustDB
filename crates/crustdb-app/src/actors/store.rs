@@ -14,12 +14,9 @@ use super::tunnel::tunnel_target;
 use super::workspace::WsMsg;
 use crate::net::ssh::Tunnel;
 use crate::runtime::{
-    Command, Emitter, Event, ROWS_BATCH, RequestId, ResolvedSecrets, TabId, WorkspaceId,
+    Command, Emitter, Event, ROWS_BATCH, RequestId, ResolvedSecrets, WorkspaceId,
 };
 use crate::storage::config::ConnectionConfig;
-
-/// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
-const NO_TAB: TabId = TabId(0);
 
 type Rx = UnboundedReceiver<WsMsg>;
 type Session = Box<dyn StoreSession>;
@@ -164,18 +161,19 @@ impl StoreActor {
                 }
             }
             WsMsg::Cmd(Command::LoadChildren { req, .. }) => {
-                self.out.emit(Event::Notice {
-                    tab: NO_TAB,
-                    text: "object tree is not available for this connection".into(),
+                self.out.emit(Event::ChildrenFailed {
+                    req,
+                    error: "object tree is not available for this connection".into(),
                 });
-                // The sidebar leaves its pending state on any answer.
-                self.out.emit(Event::Children { req, items: vec![] });
             }
             WsMsg::Cmd(Command::LoadColumns { req, .. }) => {
                 self.out.emit(Event::Columns { req, columns: None });
             }
             WsMsg::Cmd(Command::LoadDiagram { req, .. }) => {
-                self.out.emit(Event::Diagram { req, tables: None });
+                self.out.emit(Event::Diagram {
+                    req,
+                    tables: Err("ER diagram is not available for this connection".into()),
+                });
             }
             WsMsg::Cmd(Command::HostKeyDecision { accept, .. }) => self.decide(accept),
             WsMsg::AskHostKey(tx) => self.decision = Some(tx),

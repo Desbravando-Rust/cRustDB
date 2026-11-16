@@ -367,7 +367,7 @@ pub(in crate::actors) mod store {
     }
 
     #[tokio::test]
-    async fn sql_commands_on_store_workspace_get_empty_answer() {
+    async fn tree_load_on_store_workspace_fails_its_request() {
         // Arrange
         let mut h = harness(FakeStore::new(DriverKind::Redis));
         connect(&mut h).await;
@@ -383,12 +383,16 @@ pub(in crate::actors) mod store {
                 kind: Some(ObjectKind::Table),
             },
         );
-        let first = next(&h.rx).await;
-        let second = next(&h.rx).await;
+        let ev = next(&h.rx).await;
 
         // Assert
-        assert!(matches!(first, Event::Notice { .. }));
-        assert!(matches!(second, Event::Children { req: RequestId(7), items } if items.is_empty()));
+        assert!(matches!(
+            ev,
+            Event::ChildrenFailed {
+                req: RequestId(7),
+                ..
+            }
+        ));
     }
 
     fn assess(req: u64, argv: &[Vec<u8>]) -> Command {

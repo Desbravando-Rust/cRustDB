@@ -73,7 +73,9 @@ pub(crate) type SharedRx = watch::Receiver<Option<Arc<Shared>>>;
 
 /// Runs an actor under a supervisor: a panic emits `ActorCrashed` and restarts it with a fresh
 /// state on the same mailbox (the message being handled is lost). Ends when the mailbox closes.
-fn supervise<M, F, Fut>(tab: TabId, out: Emitter, rx: UnboundedReceiver<M>, mk: F)
+/// A tab actor's crash is reported on its tab; a workspace actor (`tab: None`) reports its
+/// own restart.
+fn supervise<M, F, Fut>(tab: Option<TabId>, out: Emitter, rx: UnboundedReceiver<M>, mk: F)
 where
     M: Send + 'static,
     F: Fn(Arc<Mutex<UnboundedReceiver<M>>>) -> Fut + Send + 'static,
@@ -85,7 +87,9 @@ where
             if !e.is_panic() {
                 break;
             }
-            out.emit(Event::ActorCrashed { tab });
+            if let Some(tab) = tab {
+                out.emit(Event::ActorCrashed { tab });
+            }
         }
     });
 }
@@ -297,7 +301,7 @@ impl Actors {
             Backend::Sql(driver) => {
                 let (shared_tx, shared) = watch::channel(None);
                 let shared_tx = Arc::new(shared_tx);
-                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                supervise(None, self.out.clone(), rx, move |rx| {
                     if !first_run.swap(false, Ordering::SeqCst) {
                         // Restarted after a panic: the old connection state is gone.
                         shared_tx.send_replace(None);
@@ -315,7 +319,7 @@ impl Actors {
                 shared
             }
             Backend::Store(driver) => {
-                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                supervise(None, self.out.clone(), rx, move |rx| {
                     if !first_run.swap(false, Ordering::SeqCst) {
                         out.emit(crashed(ws));
                     }
@@ -353,7 +357,7 @@ impl Actors {
     fn open_table(&mut self, ws: WorkspaceId, tab: TabId, object: ObjectRef, shared: SharedRx) {
         let (tx, rx) = unbounded_channel();
         let out = self.out.clone();
-        supervise(tab, self.out.clone(), rx, move |rx| {
+        supervise(Some(tab), self.out.clone(), rx, move |rx| {
             DataActor::new(tab, object.clone(), shared.clone(), out.clone()).run(rx)
         });
         self.tabs.insert(
@@ -375,7 +379,7 @@ impl Actors {
     ) {
         let (tx, rx) = unbounded_channel();
         let out = self.out.clone();
-        supervise(tab, self.out.clone(), rx, move |rx| {
+        supervise(Some(tab), self.out.clone(), rx, move |rx| {
             EditorActor::new(tab, database.clone(), shared.clone(), out.clone()).run(rx)
         });
         self.tabs.insert(

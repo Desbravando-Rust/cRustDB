@@ -2,7 +2,7 @@
 use crustdb_core::error::DriverError;
 use crustdb_core::model::ObjectKind;
 
-use super::{NO_TAB, WorkspaceActor};
+use super::WorkspaceActor;
 use crate::actors::not_connected;
 use crate::runtime::{DiagramTable, Event, RequestId};
 
@@ -14,17 +14,15 @@ impl WorkspaceActor {
         database: String,
         schema: Option<String>,
     ) {
-        let tables = match self.diagram(&database, schema.as_deref()).await {
-            Ok(t) => Some(t),
-            Err((key, e)) => {
+        let tables = self
+            .diagram(&database, schema.as_deref())
+            .await
+            .map_err(|(key, e)| {
                 if e.kind.ends_session() {
                     self.mark_down(key);
                 }
-                let text = e.message;
-                self.out.emit(Event::Notice { tab: NO_TAB, text });
-                None
-            }
-        };
+                e.message
+            });
         self.out.emit(Event::Diagram { req, tables });
     }
 

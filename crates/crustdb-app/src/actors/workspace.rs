@@ -14,14 +14,12 @@ use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at, sleep_unti
 use super::tunnel::tunnel_target;
 use super::{Shared, not_connected};
 use crate::net::ssh::Tunnel;
-use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId};
+use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, WorkspaceId};
 use crate::storage::config::ConnectionConfig;
 
 mod diagram;
 
 const PING_EVERY: Duration = Duration::from_secs(60);
-/// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
-const NO_TAB: TabId = TabId(0);
 
 /// Wait before reconnect attempt `attempt` (0-based): 1, 2, 4, 8 s ... capped at 30 s.
 pub(crate) fn backoff(attempt: u32) -> Duration {

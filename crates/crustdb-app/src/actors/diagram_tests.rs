@@ -28,7 +28,7 @@ async fn load_diagram_answers_with_the_schema_tables() {
     // Assert
     assert!(matches!(
         next(&h.rx).await,
-        Event::Diagram { req: RequestId(9), tables: Some(t) } if t.is_empty()
+        Event::Diagram { req: RequestId(9), tables: Ok(t) } if t.is_empty()
     ));
 }
 
@@ -51,10 +51,7 @@ async fn load_diagram_fetches_columns_of_each_table() {
     load(&mut h, 11, "a");
 
     // Assert
-    let Event::Diagram {
-        tables: Some(t), ..
-    } = next(&h.rx).await
-    else {
+    let Event::Diagram { tables: Ok(t), .. } = next(&h.rx).await else {
         panic!("expected a loaded diagram");
     };
     assert_eq!(t.len(), 1);
@@ -63,26 +60,21 @@ async fn load_diagram_fetches_columns_of_each_table() {
 }
 
 #[tokio::test]
-async fn load_diagram_failure_answers_none_with_notice() {
+async fn load_diagram_failure_answers_with_the_error() {
     // Arrange
     let mut h = harness(FakeScript::default());
     connect(&mut h, Some("a")).await;
     h.drv.log.fail_connects.store(1, Ordering::SeqCst);
     load(&mut h, 10, "b");
-    let mut seen = vec![];
 
     // Act
     let tables = loop {
-        match next(&h.rx).await {
-            Event::Diagram { req, tables } => {
-                assert_eq!(req, RequestId(10));
-                break tables;
-            }
-            e => seen.push(e),
+        if let Event::Diagram { req, tables } = next(&h.rx).await {
+            assert_eq!(req, RequestId(10));
+            break tables;
         }
     };
 
     // Assert
-    assert!(tables.is_none());
-    assert!(seen.iter().any(|e| matches!(e, Event::Notice { .. })));
+    assert!(tables.is_err_and(|e| !e.is_empty()));
 }

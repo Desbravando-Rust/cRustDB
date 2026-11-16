@@ -460,10 +460,7 @@ async fn workspace_actor_panic_resets_connection_state() {
     // Act & Assert
     tokio::time::sleep(Duration::from_secs(61)).await;
     let evs = drain(&h.rx);
-    assert!(
-        evs.iter()
-            .any(|e| matches!(e, Event::ActorCrashed { tab: TabId(0) }))
-    );
+    assert!(!evs.iter().any(|e| matches!(e, Event::ActorCrashed { .. })));
     assert!(
         evs.iter().any(
             |e| matches!(e, Event::ConnectFailed { ws: WS, error } if error.contains("crashed"))
