@@ -1,0 +1,1 @@
+- CSV export no longer lets spreadsheets run cell text as formulas: text cells and headers starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'`; plain numbers are unchanged
