@@ -334,6 +334,10 @@ fn type_label_handles_edge_cases() {
 
     // Act & Assert
     for (name, want) in cases {
-        assert_eq!(super::type_label(name).as_deref(), want, "{name:?}");
+        assert_eq!(
+            crate::ui::grid_layout::type_label(name).as_deref(),
+            want,
+            "{name:?}"
+        );
     }
 }

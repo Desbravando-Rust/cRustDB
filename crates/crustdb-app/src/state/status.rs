@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crustdb_core::driver::TlsMode;
-use crustdb_core::model::{DriverKind, ServerVersion};
+use crustdb_core::model::ServerVersion;
 
 use super::workspace::{AppState, Status, WorkspaceState};
 use crate::metrics::ProcStats;
@@ -70,40 +70,6 @@ impl Default for StatusModel {
     }
 }
 
-/// `<label or name>/<database>`, one rule per driver so every tab shows the same text:
-/// Postgres/MySQL the database (active tab's, else the configured one), SQLite the file name,
-/// Redis the logical database index.
-fn scope_of(w: &WorkspaceState) -> String {
-    let head = w.config.label.as_deref().unwrap_or(&w.config.name);
-    let tab_db = w.active_tab.and_then(|t| {
-        w.tabs
-            .iter()
-            .map(|super::Tab::Table(t)| t)
-            .find(|x| x.id == t)
-            .map(|t| &t.object.database)
-            .or_else(|| w.queries.iter().find(|q| q.id == t)?.database.as_ref())
-    });
-    let configured = w.config.database.as_deref();
-    let place = match w.config.driver {
-        DriverKind::Postgres | DriverKind::Mysql => tab_db.map(String::as_str).or(configured),
-        DriverKind::Sqlite => configured.map(|f| {
-            std::path::Path::new(f)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(f)
-        }),
-        DriverKind::Redis => Some(
-            w.keyspace
-                .as_ref()
-                .map_or(configured.unwrap_or("0"), |k| k.current.as_str()),
-        ),
-    };
-    match place {
-        Some(p) => format!("{head}/{p}"),
-        None => head.to_owned(),
-    }
-}
-
 impl StatusModel {
     /// Fields that mirror the workspace; cheap enough to refresh every frame.
     pub fn sync(&mut self, w: &WorkspaceState) {
@@ -117,7 +83,7 @@ impl StatusModel {
                 .map(|super::Tab::Table(t)| t)
                 .find(|x| x.id == t)
         });
-        self.scope = Some(scope_of(w));
+        self.scope = Some(super::scope::scope_of(w));
         self.on_table = table.is_some();
         self.grid_rows = table.filter(|t| !t.rows.is_empty()).map(|t| {
             (
@@ -290,63 +256,6 @@ mod tests {
             cpu_percent: 1.0,
             rss_bytes: 1,
         })
-    }
-
-    fn scope(driver: DriverKind, database: Option<&str>, label: Option<&str>) -> String {
-        let mut s = crate::state::workspace::tests::state(&["alpha"]);
-        s.open_workspace(s.config.connections[0].clone());
-        let w = &mut s.workspaces[0];
-        w.config.driver = driver;
-        w.config.database = database.map(Into::into);
-        w.config.label = label.map(Into::into);
-        scope_of(w)
-    }
-
-    #[test]
-    fn scope_follows_one_rule_per_driver() {
-        // Arrange
-        let cases = [
-            (DriverKind::Postgres, Some("main"), "alpha/main"),
-            (DriverKind::Mysql, Some("shop"), "alpha/shop"),
-            (DriverKind::Sqlite, Some("/tmp/dir/app.db"), "alpha/app.db"),
-            (DriverKind::Redis, Some("3"), "alpha/3"),
-            (DriverKind::Redis, None, "alpha/0"),
-            (DriverKind::Postgres, None, "alpha"),
-        ];
-
-        // Act & Assert
-        for (d, db, want) in cases {
-            assert_eq!(scope(d, db, None), want, "{d:?}");
-        }
-    }
-
-    #[test]
-    fn scope_prefers_label_over_name() {
-        // Act & Assert
-        assert_eq!(
-            scope(DriverKind::Postgres, Some("main"), Some("production")),
-            "production/main"
-        );
-    }
-
-    #[test]
-    fn scope_is_the_same_for_table_and_query_tabs() {
-        // Arrange
-        let mut s = crate::state::workspace::tests::state(&["alpha"]);
-        let ws = s.open_workspace(s.config.connections[0].clone());
-        s.workspaces[0].config.database = Some("main".into());
-        let q = s.open_query(ws, Some("main".into()));
-        let w = &mut s.workspaces[0];
-
-        // Act
-        let with_query = scope_of(w);
-        w.active_tab = None;
-        let without_tab = scope_of(w);
-
-        // Assert
-        assert!(q.is_some());
-        assert_eq!(with_query, "alpha/main");
-        assert_eq!(with_query, without_tab);
     }
 
     #[test]

@@ -5,7 +5,7 @@ use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
-use super::grid_layout::{bool_text, layout};
+use super::grid_layout::{bool_text, layout, type_label};
 use super::theme::ACCENT;
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
@@ -286,66 +286,6 @@ fn delete_button(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
     if r.clicked() {
         out.push(Intent::DeleteRows(tab.id));
     }
-}
-
-/// Short uppercase type tag of a column header (`character varying(40)[]` -> `VARCHAR[]`).
-/// Drops `(...)` arguments, keeps `[]` and `unsigned`, folds aliases; `None` for an empty name.
-pub(crate) fn type_label(type_name: &str) -> Option<String> {
-    let mut depth = 0usize;
-    let bare: String = type_name
-        .chars()
-        .filter(|&c| match c {
-            '(' => {
-                depth += 1;
-                false
-            }
-            ')' => {
-                depth = depth.saturating_sub(1);
-                false
-            }
-            _ => depth == 0,
-        })
-        .collect();
-    let lower = bare.to_lowercase();
-    let mut t = lower
-        .replace(" without time zone", "")
-        .replace(" with time zone", "tz");
-    let mut arrays = String::new();
-    while let Some(rest) = t.trim_end().strip_suffix("[]") {
-        arrays.push_str("[]");
-        t = rest.to_owned();
-    }
-    let mut words: Vec<&str> = t.split_whitespace().collect();
-    let mut flags = vec![];
-    while let Some(&w) = words
-        .last()
-        .filter(|w| matches!(**w, "unsigned" | "zerofill"))
-    {
-        flags.insert(0, w);
-        words.pop();
-    }
-    let base = words.join(" ");
-    let base = match base.as_str() {
-        "character varying" => "varchar",
-        "character" => "char",
-        "integer" | "int4" => "int",
-        "int2" => "smallint",
-        "int8" => "bigint",
-        "float4" => "real",
-        "float8" | "double precision" => "double",
-        "boolean" => "bool",
-        b => b,
-    };
-    if base.is_empty() {
-        return None;
-    }
-    let mut out = base.to_owned();
-    for f in flags {
-        out.push(' ');
-        out.push_str(f);
-    }
-    out.push_str(&arrays);
-    Some(out.to_uppercase())
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {

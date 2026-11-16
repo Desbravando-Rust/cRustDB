@@ -15,6 +15,7 @@ pub mod key_scan;
 pub mod keyspace;
 pub mod query_tab;
 pub mod result_pane;
+mod scope;
 pub mod status;
 pub mod tabs;
 pub mod tree;
