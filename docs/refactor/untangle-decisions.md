@@ -50,8 +50,18 @@ problems it solves. Additions chosen: comments, tests.
 - TLS verifier/roots copies in pg and redis: tracked in #172 (core takes no rustls dependency).
 - `only_home` MySQL case folding, MySQL `DELIMITER`, sidebar ER-diagram rule (#288).
 
+## Not changed (with reason)
+
+- `TableTab::new` defaults the driver; its one production caller sets it next line.
+- New-label grey in `app/form.rs` vs `ui/labels.rs`, picker export extensions vs
+  `Format::from_path`, the two token colour tables (editor vs grid use different palettes on
+  purpose until a design decision), `runtime::no_actor` vs `Actors::dispatch` (#291).
+- Doc comments (`///`) were not audited; only `//` comments were.
+- Tests: about 700 of ~1,100 audited. `recreating_the_keyspace_bumps_the_epoch...` still
+  asserts an internal id salt; rewriting it needs a UI harness and was left as is.
+
 ## Follow-up issues
 
 #285 key_separator ignored, #286 config save side effect, #287 autocomplete dedup,
 #288 SQLite ER diagram, #289 editor Protocol errors, #290 Redis db index rules,
-#291 workspace commands without actor hang.
+#291 workspace commands without actor hang, #292 SSH error causes, #293 news sanitizing.
