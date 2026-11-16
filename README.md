@@ -40,6 +40,7 @@
 - **Object tree**: databases, schemas, tables, views, materialized views, functions, procedures, triggers, sequences and types, loaded lazily. When the connection sets a database (PostgreSQL, MySQL), only that database is listed; if the server has no such database, the tree shows an error. DDL run in a query tab (once committed) refreshes the tree, the home table list and open table tabs on its own. The sidebar lists the open connections (active one highlighted, `+` for a new one) above the tree, and shows the product name and app version at the bottom. Section titles (`CONNECTIONS`, `EXPLORER`) are small and letter-spaced, and the tree folders are filled icons coloured by kind. A top bar shows the logo, a menu bar (File, Edit, View, Tools, Help; each item lists its shortcut and is disabled when it does not apply, e.g. no connection) and a "Connected: <name>" badge. New query and Disconnect live in the File menu.
 - **Table tab**: virtualized grid, keyset pagination (falls back to `LIMIT/OFFSET` when the sort key does not allow it), multi-column sort, typed filters (always bound as parameters), structure (columns, indexes, foreign keys), DDL and a row detail panel. Row counts are estimates only, never `COUNT(*)`.
 - **Data toolbar**: a **Filters** button (Ctrl+F) sits on the left above the grid; round add-row, reload (F5) and export buttons sit next to **Commit Changes** on the right. The footer has the pager, the row range, **Refresh**, **Add row**, **Delete rows** and the pending-changes chip. The metrics row appears at the bottom of the main area, under the grid footer, only while a connection is online (never over the connection form); it shows the server version, TLS mode, safety threshold, process CPU and memory.
+- **From the Blog**: a panel under the table grid shows the latest blog post (title link and excerpt) next to a featured book card; it is hidden in windows smaller than 520 x 480 px, and offline it keeps a link to the site (see [Network access](#network-access)).
 - **Data editing**: edit cells inline, insert and delete rows in tables with a primary key; edits to a row are saved as one `UPDATE` (Commit Changes), deletes ask for confirmation. Tables without a primary key are read-only and the grid says so.
 - **Foreign keys**: Ctrl+click a foreign key cell to open the referenced table filtered to the matching row.
 - **ER diagram**: read-only diagram of a schema or database, opened from the sidebar context menu.
@@ -147,12 +148,13 @@ On macOS the XDG variables still take precedence when set.
 
 ## Network access
 
-At startup cRustDB makes two read-only GET requests (5 s timeout, no retry, failures ignored):
+At startup cRustDB makes three read-only GET requests (5 s timeout, no retry, failures ignored):
 
 - `https://api.github.com/repos/Desbravando-Rust/cRustDB/releases/latest`: shows an "Update available" link in the sidebar when a newer release exists.
 - `https://desbravandorust.com.br/feed.json`: picks a book chapter for the home banner (falls back to a static text).
+- `https://desbravandorust.com.br/blog.json`: latest post (title, link, excerpt) for the "From the Blog" panel under the data grid; only `https://` links are accepted, and the panel is hidden when the central area is smaller than 520 x 480 px. Falls back to a link to the site. Format: [ADR 0012](docs/adr/0012-egress-de-rede-para-release-e-feed-do-livro.md).
 
-No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTDB_OFFLINE=1` to disable both requests (empty or `0` leaves them enabled).
+No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTDB_OFFLINE=1` to disable all requests (empty or `0` leaves them enabled).
 
 ## Performance
 

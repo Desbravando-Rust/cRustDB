@@ -152,13 +152,17 @@ impl CrustApp {
                 intents.extend(ui::keyspace::value_panel(ui, ks));
                 return;
             }
+            let news = self.state.news.clone();
             let tab = self
                 .state
                 .active
                 .and_then(|ws| self.state.workspace_mut(ws))
                 .and_then(|w| w.active_table_mut());
             match tab {
-                Some(t) => intents.extend(ui::grid::show_tab(ui, t)),
+                Some(t) => {
+                    ui::blog_panel::show(ui, &news);
+                    intents.extend(ui::grid::show_tab(ui, t));
+                }
                 None => match self.state.active_online() {
                     Some(w) if w.config.database.is_some() => {
                         intents.extend(ui::workspace_home::show(ui, w, &self.state.news));

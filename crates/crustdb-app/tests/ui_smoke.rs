@@ -15,6 +15,7 @@ use crustdb_core::model::{
     Cell, ColumnMeta, ConnectionId, DriverKind, ObjectKind, ObjectRef, TypeCategory,
 };
 use crustdb_testkit::fake_driver::{FakeDriver, FakeScript};
+use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 
@@ -47,6 +48,10 @@ type Started = (
 );
 
 fn start() -> Started {
+    start_at(egui::vec2(800.0, 600.0))
+}
+
+fn start_at(size: egui::Vec2) -> Started {
     let dir = tempfile::tempdir().unwrap();
     let driver = fake();
     let config = LoadedConfig {
@@ -84,6 +89,7 @@ fn start() -> Started {
     let slot = app.clone();
     let driver_in = driver.clone();
     let h = Harness::builder()
+        .with_size(size)
         // the sidebar arrows (U+25B8) are not in the installed fonts
         .allow_missing_glyphs()
         .build_ui(move |ui| {
@@ -281,4 +287,60 @@ fn server_level_connection_keeps_saved_list_in_center() {
     // Assert
     assert!(h.query_by_label("Select a connection").is_none());
     h.get_by_label("Active");
+}
+
+fn open_users(size: egui::Vec2) -> (Harness<'static>, tempfile::TempDir) {
+    let (mut h, app, dir, _) = start_at(size);
+    h.run();
+    h.get_by_label("Connect").click();
+    wait_for(&mut h, "EXPLORER");
+    let object = ObjectRef {
+        database: "fake".into(),
+        schema: Some("public".into()),
+        name: "users".into(),
+        kind: ObjectKind::Table,
+    };
+    app.borrow_mut()
+        .as_mut()
+        .unwrap()
+        .handle(Intent::OpenObject { object });
+    wait_for(&mut h, "alice@example.com");
+    (h, dir)
+}
+
+#[test]
+fn blog_panel_shares_the_table_tab_with_the_grid_at_900x700() {
+    // Arrange & Act
+    let (h, _dir) = open_users(egui::vec2(900.0, 700.0));
+
+    // Assert
+    h.get_by_label("DESTAQUE");
+    h.get_by_label("Data");
+    h.get_by_label("alice@example.com");
+    h.get_by_label("Delete rows"); // grid footer stays visible
+}
+
+#[test]
+fn blog_panel_sits_below_the_grid_footer() {
+    // Arrange & Act
+    let (h, _dir) = open_users(egui::vec2(900.0, 700.0));
+
+    // Assert
+    // Intended: the panel is the bottom-most strip, under the grid footer.
+    let footer = h.get_by_label("Delete rows").rect().max.y;
+    let panel = h.get_by_label("DESTAQUE").rect().min.y;
+    assert!(
+        panel > footer,
+        "panel {panel} should be below footer {footer}"
+    );
+}
+
+#[test]
+fn blog_panel_hides_but_grid_stays_at_default_smoke_size() {
+    // Arrange & Act
+    let (h, _dir) = open_users(egui::vec2(800.0, 600.0));
+
+    // Assert
+    h.get_by_label("alice@example.com");
+    assert!(h.query_by_label("DESTAQUE").is_none());
 }
