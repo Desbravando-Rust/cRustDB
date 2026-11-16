@@ -1,4 +1,5 @@
 //! Bridge between the egui thread and the tokio runtime: `Command` in, `Event` out.
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
@@ -33,8 +34,7 @@ impl Backend {
 }
 
 #[derive(Default)]
-// `DriverKind` has no `Hash`; a few entries at most, so a Vec lookup is enough.
-pub struct DriverRegistry(Vec<Backend>);
+pub struct DriverRegistry(HashMap<DriverKind, Backend>);
 
 impl DriverRegistry {
     pub fn with(self, driver: Arc<dyn Driver>) -> Self {
@@ -46,13 +46,12 @@ impl DriverRegistry {
     }
 
     fn backend(mut self, b: Backend) -> Self {
-        self.0.retain(|d| d.kind() != b.kind());
-        self.0.push(b);
+        self.0.insert(b.kind(), b);
         self
     }
 
     pub fn get(&self, kind: DriverKind) -> Option<Backend> {
-        self.0.iter().find(|d| d.kind() == kind).cloned()
+        self.0.get(&kind).cloned()
     }
 }
 

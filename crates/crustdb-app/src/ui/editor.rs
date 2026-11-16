@@ -24,7 +24,6 @@ type Spans = Vec<(Range<usize>, TokenKind)>;
 #[derive(Default)]
 struct Highlighter;
 
-// `DriverKind` is not `Hash`, so the cache key carries a flag instead.
 impl ComputerMut<(&str, DriverKind), Spans> for Highlighter {
     fn compute(&mut self, (text, kind): (&str, DriverKind)) -> Spans {
         highlight(text, kind)

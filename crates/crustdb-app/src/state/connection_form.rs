@@ -195,7 +195,6 @@ impl ConnectionForm {
         c.save_password = self.saves_secrets();
         c.database = c.database.filter(|d| !d.is_empty());
         if c.driver.is_file() {
-            // No tunnel, CA or saved password.
             c.ssh = None;
             c.tls.ca_path = None;
             c.save_password = false;
