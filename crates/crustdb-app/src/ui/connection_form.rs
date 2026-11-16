@@ -11,22 +11,23 @@ use super::Intent;
 use crate::state::connection_form::{ConnectionForm, TestResult};
 use crate::storage::config::{Label, SshAuth};
 
-fn secret_edit(ui: &mut egui::Ui, v: &mut SecretString) {
+fn secret_edit(ui: &mut egui::Ui, v: &mut SecretString, label: egui::Id) {
     let mut s = Zeroizing::new(v.expose_secret().to_owned());
-    if ui
+    let r = ui
         .add(egui::TextEdit::singleline(&mut *s).password(true))
-        .changed()
-    {
+        .labelled_by(label);
+    if r.changed() {
         *v = SecretString::from(s.as_str());
     }
 }
 
-pub(super) fn path_edit(ui: &mut egui::Ui, p: &mut Option<PathBuf>) {
+pub(super) fn path_edit(ui: &mut egui::Ui, p: &mut Option<PathBuf>, label: egui::Id) {
     let mut s = p
         .as_ref()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
-    if ui.text_edit_singleline(&mut s).changed() {
+    let r = ui.text_edit_singleline(&mut s).labelled_by(label);
+    if r.changed() {
         *p = (!s.is_empty()).then(|| PathBuf::from(s));
     }
 }
@@ -39,24 +40,25 @@ pub(super) fn error_for(ui: &mut egui::Ui, f: &ConnectionForm, field: &str) {
 
 /// Server fields; SQLite has none of these.
 fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
-    ui.label("Host");
-    ui.text_edit_singleline(&mut f.draft.host);
+    let l = ui.label("Host");
+    ui.text_edit_singleline(&mut f.draft.host).labelled_by(l.id);
     ui.end_row();
     error_for(ui, f, "host");
     ui.end_row();
 
-    ui.label("Port");
-    ui.add(egui::DragValue::new(&mut f.draft.port));
+    let l = ui.label("Port");
+    ui.add(egui::DragValue::new(&mut f.draft.port))
+        .labelled_by(l.id);
     ui.end_row();
     error_for(ui, f, "port");
     ui.end_row();
 
-    ui.label("User");
-    ui.text_edit_singleline(&mut f.draft.user);
+    let l = ui.label("User");
+    ui.text_edit_singleline(&mut f.draft.user).labelled_by(l.id);
     ui.end_row();
 
-    ui.label("Password");
-    secret_edit(ui, &mut f.password);
+    let l = ui.label("Password");
+    secret_edit(ui, &mut f.password, l.id);
     ui.end_row();
 
     ui.label("");
@@ -74,9 +76,10 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     if f.draft.driver == DriverKind::Redis {
         super::connection_form_redis::fields(ui, f);
     } else {
-        ui.label("Database");
+        let l = ui.label("Database");
         let mut db = f.draft.database.clone().unwrap_or_default();
-        if ui.text_edit_singleline(&mut db).changed() {
+        let r = ui.text_edit_singleline(&mut db).labelled_by(l.id);
+        if r.changed() {
             f.draft.database = (!db.is_empty()).then_some(db);
         }
         ui.end_row();
@@ -108,10 +111,10 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    ui.label("CA file").on_hover_text(
+    let l = ui.label("CA file").on_hover_text(
         "PEM file with the CA certificate used to verify the server (VerifyCa/VerifyFull). Empty = system roots.",
     );
-    path_edit(ui, &mut f.draft.tls.ca_path);
+    path_edit(ui, &mut f.draft.tls.ca_path, l.id);
     ui.end_row();
     ui.label("");
     ui.weak("Empty = system roots");
@@ -129,7 +132,10 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
             ui.heading("Connection");
             if f.show_url {
                 ui.horizontal(|ui| {
-                    ui.text_edit_singleline(&mut *f.url_input);
+                    ui.text_edit_singleline(&mut *f.url_input)
+                        .widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Connection URL")
+                        });
                     if ui.button("Import").clicked() {
                         out.push(Intent::FormImportUrl);
                     }
@@ -145,8 +151,8 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
             egui::Grid::new("connection_form")
                 .num_columns(2)
                 .show(ui, |ui| {
-                    ui.label("Name");
-                    ui.text_edit_singleline(&mut f.draft.name);
+                    let l = ui.label("Name");
+                    ui.text_edit_singleline(&mut f.draft.name).labelled_by(l.id);
                     ui.end_row();
                     error_for(ui, f, "name");
                     ui.end_row();
@@ -174,10 +180,10 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
 
                     if f.draft.driver == DriverKind::Sqlite {
                         // A local file: no server, credentials, TLS or tunnel.
-                        ui.label("Database file");
+                        let l = ui.label("Database file");
                         ui.horizontal(|ui| {
                             let mut p = f.draft.database.as_ref().map(PathBuf::from);
-                            path_edit(ui, &mut p);
+                            path_edit(ui, &mut p, l.id);
                             f.draft.database = p.map(|p| p.to_string_lossy().into_owned());
                             if ui.button("Browse…").clicked() {
                                 out.push(Intent::FormBrowseSqlite);
@@ -190,22 +196,22 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                         network_fields(ui, f);
                     }
 
-                    ui.label("Page size")
+                    let l = ui.label("Page size")
                         .on_hover_text("Rows fetched per page when browsing table data.");
-                    ui.add(egui::DragValue::new(&mut f.draft.page_size));
+                    ui.add(egui::DragValue::new(&mut f.draft.page_size)).labelled_by(l.id);
                     ui.end_row();
                     error_for(ui, f, "page_size");
                     ui.end_row();
-                    ui.label("Editor row limit")
+                    let l = ui.label("Editor row limit")
                         .on_hover_text("Rows fetched per batch for SQL editor queries; use Load more to fetch the next batch.");
-                    ui.add(egui::DragValue::new(&mut f.draft.editor_row_limit));
+                    ui.add(egui::DragValue::new(&mut f.draft.editor_row_limit)).labelled_by(l.id);
                     ui.end_row();
                     error_for(ui, f, "editor_row_limit");
                     ui.end_row();
-                    ui.label("Safety threshold").on_hover_text(
+                    let l = ui.label("Safety threshold").on_hover_text(
                         "Estimated affected rows above which DML, TRUNCATE or DROP TABLE require password confirmation.",
                     );
-                    ui.add(egui::DragValue::new(&mut f.draft.safety_threshold));
+                    ui.add(egui::DragValue::new(&mut f.draft.safety_threshold)).labelled_by(l.id);
                     ui.end_row();
                     error_for(ui, f, "safety_threshold");
                     ui.end_row();
@@ -225,14 +231,14 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
             }
             if let Some(ssh) = f.draft.ssh.as_mut().filter(|_| !sqlite) {
                 egui::Grid::new("ssh_form").num_columns(2).show(ui, |ui| {
-                    ui.label("SSH host");
-                    ui.text_edit_singleline(&mut ssh.host);
+                    let l = ui.label("SSH host");
+                    ui.text_edit_singleline(&mut ssh.host).labelled_by(l.id);
                     ui.end_row();
-                    ui.label("SSH port");
-                    ui.add(egui::DragValue::new(&mut ssh.port));
+                    let l = ui.label("SSH port");
+                    ui.add(egui::DragValue::new(&mut ssh.port)).labelled_by(l.id);
                     ui.end_row();
-                    ui.label("SSH user");
-                    ui.text_edit_singleline(&mut ssh.user);
+                    let l = ui.label("SSH user");
+                    ui.text_edit_singleline(&mut ssh.user).labelled_by(l.id);
                     ui.end_row();
                     let auth_label = ui.label("Auth");
                     let cur = match ssh.auth {
@@ -261,21 +267,21 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
                     ui.end_row();
                     match &mut ssh.auth {
                         SshAuth::Password => {
-                            ui.label("SSH password");
-                            secret_edit(ui, &mut f.ssh_password);
+                            let l = ui.label("SSH password");
+                            secret_edit(ui, &mut f.ssh_password, l.id);
                             ui.end_row();
                         }
                         SshAuth::Key { key_path } => {
-                            ui.label("Key file");
+                            let l = ui.label("Key file");
                             let mut p = Some(std::mem::take(key_path));
-                            path_edit(ui, &mut p);
+                            path_edit(ui, &mut p, l.id);
                             *key_path = p.unwrap_or_default();
                             ui.end_row();
                             ui.label("");
                             ui.weak("ed25519 or ecdsa keys only (RSA is not supported)");
                             ui.end_row();
-                            ui.label("Passphrase");
-                            secret_edit(ui, &mut f.ssh_passphrase);
+                            let l = ui.label("Passphrase");
+                            secret_edit(ui, &mut f.ssh_passphrase, l.id);
                             ui.end_row();
                         }
                         SshAuth::Agent => {}
@@ -322,3 +328,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
 #[cfg(test)]
 #[path = "connection_form_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "connection_form_a11y_tests.rs"]
+mod a11y_tests;

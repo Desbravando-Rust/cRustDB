@@ -11,17 +11,18 @@ pub fn fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
     if f.draft.driver == DriverKind::Redis || f.draft.tls.mode == TlsMode::Disable {
         return;
     }
-    ui.label("Client certificate").on_hover_text(
+    let l = ui.label("Client certificate").on_hover_text(
         "PEM file with the client certificate chain, for servers that require mTLS. Empty = none.",
     );
-    path_edit(ui, &mut f.draft.tls.client_cert_path);
+    path_edit(ui, &mut f.draft.tls.client_cert_path, l.id);
     ui.end_row();
     error_for(ui, f, "client_cert");
     ui.end_row();
 
-    ui.label("Client key")
+    let l = ui
+        .label("Client key")
         .on_hover_text("PEM file with the unencrypted private key of the client certificate.");
-    path_edit(ui, &mut f.draft.tls.client_key_path);
+    path_edit(ui, &mut f.draft.tls.client_key_path, l.id);
     ui.end_row();
     error_for(ui, f, "client_key");
     ui.end_row();
@@ -40,9 +41,7 @@ mod tests {
         // Arrange
         let mut f = ConnectionForm::new(DriverKind::Postgres, false);
         f.draft.tls.mode = TlsMode::Require;
-        let mut h = Harness::builder()
-            .with_accessibility_check(false)
-            .build_ui(|ui| fields(ui, &mut f));
+        let mut h = Harness::builder().build_ui(|ui| fields(ui, &mut f));
 
         // Act
         h.run();
