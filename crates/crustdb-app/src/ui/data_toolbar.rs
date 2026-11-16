@@ -9,7 +9,7 @@ use crate::state::TableTab;
 
 pub const FILTERS_LABEL: &str = "Filters";
 pub const RELOAD_LABEL: &str = "Reload page";
-pub const ADD_ROW_LABEL: &str = "Add row (toolbar)";
+pub const ADD_ROW_LABEL: &str = "Insert new row";
 pub const EXPORT_LABEL: &str = "Export filtered rows...";
 pub const COMMIT_LABEL: &str = "Commit Changes";
 

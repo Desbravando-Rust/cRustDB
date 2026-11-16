@@ -1,1 +1,1 @@
-- [#259](https://github.com/Desbravando-Rust/cRustDB/issues/259) — Data toolbar and grid footer follow the prototype: search-icon filter with an Advanced button, round add/reload/export actions beside Commit Changes, and Refresh / Add row / Delete rows text buttons in the footer.
+- [#259](https://github.com/Desbravando-Rust/cRustDB/issues/259) — Data toolbar and grid footer follow the prototype: a Filters button on the left, round add/reload/export actions beside Commit Changes, and Refresh / Add row / Delete rows text buttons in the footer.
