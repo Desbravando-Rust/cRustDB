@@ -157,17 +157,18 @@ No user data is sent, only a `User-Agent: cRustDB/<version>` header. Set `CRUSTD
 ## Performance
 
 Release build, Linux x86_64. Reproduce: `cargo test --release -p crustdb-app --test perf -- --include-ignored --test-threads=1 --nocapture`.
+Server-side rows (first rows, export) come from `--test perf_server`, which starts PostgreSQL and MySQL containers (Docker) and runs the same command. Idle CPU: `packaging/idle-cpu.sh` (Xvfb, one SQLite connection opened by a click, `pidstat` for 30 s). "First rows" is measured from the driver's first row, not from a server-side clock; the first-row time itself is 1.6 ms (PostgreSQL) and 0.5 ms (MySQL).
 Frame times come from `egui_kittest` (layout and tessellation on the CPU, no GPU rasterization), so they exclude the GPU.
 
 | Metric | Target | Measured | Status |
 |---|---|---|---|
 | Start to first frame | ≤ 300 ms | 117 ms (median of 5, Xvfb) | met |
-| Idle CPU, 1 connection open | < 1% | 0.0% on the home screen (real display, 1 frame/s); 3.3% under Xvfb software rendering; not measured with a connection open | partial |
+| Idle CPU, 1 connection open | < 1% | 6.2% with a SQLite connection open under Xvfb software rendering (median of 3, 30 s each), the same as the home screen (6.2%); 0.0% on the home screen of a real display. Not measured with a connection open on a real display | partial |
 | Decode and render 1,000 × 20 cells | ≤ 20 ms | 16.2 ms (8.0 build + format, 8.2 frame) | met |
-| First rows visible after the server's first row | ≤ 50 ms | not measured | open |
+| First rows visible after the server's first row | ≤ 50 ms | PostgreSQL 6.4 ms, MySQL 11.0 ms (median of 3 runs of 5) from the driver's first row to the first `Rows` event of a 1,000-row `SELECT`; add 16.2 ms to decode and render them, 22.6 and 27.2 ms in total | met |
 | Frame scrolling 100,000 × 20 rows | ≤ 16 ms | 7.9 ms mean, 10.2 ms worst | met |
 | RSS with 100,000 × 20 text cells | ≤ 200 MB | 172 MB | met |
-| CSV export | ≥ 100,000 rows/s, ≤ +20 MB | 186,000 rows/s encoding 20 columns, +0 MB (client side only; not measured end to end against a server) | partial |
+| CSV export | ≥ 100,000 rows/s, ≤ +20 MB | End to end, 100,000 × 21 columns: PostgreSQL 167,811 rows/s, +0.7 MB; MySQL 132,016 rows/s, +11.8 MB (peak RSS growth, median of 3). Encoding alone: 186,000 rows/s, +0 MB | met |
 | Typing in a 5,000-line file | ≤ 16 ms | 53 ms (highlighting off); 13.7 ms at 700 lines with highlighting | **not met** |
 | 250-column table | none (spec §7) | 102 ms mean | recorded |
 
