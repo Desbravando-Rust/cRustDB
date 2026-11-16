@@ -4,7 +4,9 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crustdb_core::driver::{CancelHandle, ExecMode, ResultHeader, Session, SessionPurpose};
+use crustdb_core::driver::{
+    CancelHandle, ExecMode, ResultHeader, Session, SessionPurpose, fetch_up_to,
+};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{Completion, DriverKind, ObjectKind, ObjectRef, Row};
 use crustdb_core::safety::{Assessment, EstimateNeed, SafetyPolicy, estimate_need};

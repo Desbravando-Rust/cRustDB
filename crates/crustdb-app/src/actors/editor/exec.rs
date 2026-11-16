@@ -83,18 +83,6 @@ async fn run_stmt(
     })
 }
 
-async fn fetch_more(s: &mut dyn Session, limit: usize) -> Result<(Vec<Row>, bool), DriverError> {
-    let mut rows: Vec<Row> = Vec::new();
-    while rows.len() < limit {
-        let f = s.fetch(limit - rows.len()).await?;
-        rows.extend(f.rows);
-        if f.exhausted {
-            return Ok((rows, true));
-        }
-    }
-    Ok((rows, false))
-}
-
 /// MySQL parses before the implicit commit, so a syntax error leaves the transaction open.
 fn parse_error(e: &DriverError) -> bool {
     matches!(&e.kind, ErrorKind::Query { code: Some(c), .. } if c == "1064" || c == "1149")
@@ -326,7 +314,7 @@ impl EditorActor {
         let limit = shared.config.editor_row_limit as usize;
         let cancel = s.cancel_handle();
         let res = cancellable(inbox, cancel, async {
-            let (rows, exhausted) = fetch_more(s.as_mut(), limit).await?;
+            let (rows, exhausted) = fetch_up_to(s.as_mut(), limit).await?;
             if exhausted {
                 s.finish().await?;
             }

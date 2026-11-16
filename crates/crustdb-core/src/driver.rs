@@ -194,6 +194,22 @@ pub async fn drain_text(s: &mut dyn Session) -> Result<TextRows, DriverError> {
     Ok(rows)
 }
 
+/// Fetches up to `limit` rows; `true` when the result ran out first.
+pub async fn fetch_up_to(
+    s: &mut dyn Session,
+    limit: usize,
+) -> Result<(Vec<Row>, bool), DriverError> {
+    let mut rows = Vec::new();
+    while rows.len() < limit {
+        let f = s.fetch(limit - rows.len()).await?;
+        rows.extend(f.rows);
+        if f.exhausted {
+            return Ok((rows, true));
+        }
+    }
+    Ok((rows, false))
+}
+
 /// Column `i` of a [`TextRows`] row, empty when absent or NULL.
 pub fn text_at(r: &[Option<String>], i: usize) -> String {
     r.get(i).cloned().flatten().unwrap_or_default()

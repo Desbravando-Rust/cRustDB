@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crustdb_core::dialect::{BuiltQuery, build_table_query};
-use crustdb_core::driver::{ResultHeader, Session, SessionPurpose};
+use crustdb_core::driver::{ResultHeader, Session, SessionPurpose, fetch_up_to};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{ObjectRef, Row};
 use crustdb_core::query::TableQuery;
@@ -275,7 +275,7 @@ async fn read_page(
         message: e.to_string(),
     })?;
     let header = s.start_params(&built.sql, &built.params).await?;
-    let body = read_rows(s, want).await;
+    let body = fetch_up_to(s, want).await.map(|(rows, _)| rows);
     let done = s.finish().await;
     let rows = body?;
     done?;
@@ -297,16 +297,4 @@ async fn read_page(
         has_more,
         estimate,
     })
-}
-
-async fn read_rows(s: &mut dyn Session, want: usize) -> Result<Vec<Row>, DriverError> {
-    let mut rows = Vec::new();
-    while rows.len() < want {
-        let f = s.fetch(want - rows.len()).await?;
-        rows.extend(f.rows);
-        if f.exhausted {
-            break;
-        }
-    }
-    Ok(rows)
 }
