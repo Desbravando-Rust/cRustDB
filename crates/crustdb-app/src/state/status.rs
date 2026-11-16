@@ -393,7 +393,7 @@ mod tests {
         b.on_event(&Event::Ping { ws, latency }, &s, t0);
 
         // Assert
-        assert_eq!(b.models[&ws].latency, Some(latency));
+        assert_eq!(b.current(&s).unwrap().latency, Some(latency));
     }
 
     #[test]

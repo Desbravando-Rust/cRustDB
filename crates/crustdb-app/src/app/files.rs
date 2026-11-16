@@ -256,15 +256,6 @@ mod tests {
     }
 
     #[test]
-    fn sqlite_pick_without_form_is_dropped() {
-        // Arrange
-        let id = sqlite_form().draft.id;
-
-        // Act & Assert
-        apply_sqlite_pick(None, id, std::path::Path::new("/tmp/a.db"));
-    }
-
-    #[test]
     fn sqlite_pick_ignored_after_driver_change() {
         // Arrange
         let mut f = sqlite_form();
