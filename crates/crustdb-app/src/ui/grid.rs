@@ -123,14 +123,18 @@ fn table(
                         .horizontal(|ui| {
                             ui.add(
                                 egui::Label::new(
-                                    RichText::new(format!("{}{mark}", c.name)).strong(),
+                                    RichText::new(format!("{}{mark}", c.name))
+                                        .strong()
+                                        .size(14.0),
                                 )
                                 .selectable(false)
                                 .sense(egui::Sense::click()),
                             ) | ui.add(
-                                egui::Label::new(RichText::new(&c.type_name).small().weak())
-                                    .selectable(false)
-                                    .sense(egui::Sense::click()),
+                                egui::Label::new(
+                                    RichText::new(type_label(&c.type_name)).small().weak(),
+                                )
+                                .selectable(false)
+                                .sense(egui::Sense::click()),
                             )
                         })
                         .inner;
@@ -277,6 +281,21 @@ fn delete_button(ui: &mut egui::Ui, tab: &TableTab, out: &mut Vec<Intent>) {
     if r.clicked() {
         out.push(Intent::DeleteRows(tab.id));
     }
+}
+
+/// Short uppercase type tag of a column header (`character varying(40)` -> `VARCHAR`).
+pub(crate) fn type_label(type_name: &str) -> String {
+    let base = type_name.split('(').next().unwrap_or(type_name).trim();
+    let short = match base.to_lowercase().as_str() {
+        "character varying" => "varchar",
+        "character" => "char",
+        "integer" => "int",
+        "timestamp without time zone" => "timestamp",
+        "timestamp with time zone" => "timestamptz",
+        "boolean" => "bool",
+        _ => base,
+    };
+    short.to_uppercase()
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {

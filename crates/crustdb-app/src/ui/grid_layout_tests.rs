@@ -304,3 +304,20 @@ fn refresh_showing_zero_rows_keeps_state_id() {
     // Assert
     assert_eq!(s[0], s[2]);
 }
+
+#[test]
+fn type_label_is_short_and_uppercase() {
+    // Arrange
+    let names = [
+        "int4",
+        "character varying(40)",
+        "timestamp without time zone",
+        "boolean",
+    ];
+
+    // Act
+    let got: Vec<_> = names.iter().map(|n| super::type_label(n)).collect();
+
+    // Assert
+    assert_eq!(got, ["INT4", "VARCHAR", "TIMESTAMP", "BOOL"]);
+}

@@ -17,14 +17,13 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) {
                     .corner_radius(10.0)
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| {
-                        ui.colored_label(
-                            super::theme::ONLINE,
-                            format!(
-                                "{} Connected: {}",
-                                egui_phosphor::regular::CIRCLE,
-                                w.config.name
-                            ),
-                        );
+                        ui.horizontal(|ui| {
+                            let (rect, _) =
+                                ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                            ui.painter()
+                                .circle_filled(rect.center(), 4.0, super::theme::ONLINE);
+                            ui.label(format!("Connected: {}", w.config.name));
+                        });
                     });
             });
         }

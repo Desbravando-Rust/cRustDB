@@ -6,8 +6,13 @@ pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(234, 88, 12);
 
 /// Green of the "online" status dot and the "Connected" badge text.
 pub const ONLINE: egui::Color32 = egui::Color32::from_rgb(34, 197, 94);
-/// Background of the "Connected" badge.
-pub const BADGE_FILL: egui::Color32 = egui::Color32::from_rgb(20, 60, 40);
+/// Background of the "Connected" badge (dark pill).
+pub const BADGE_FILL: egui::Color32 = egui::Color32::from_rgb(15, 18, 26);
+
+/// Font family of the filled Phosphor icons (folders in the explorer).
+pub fn fill_family() -> egui::FontFamily {
+    egui::FontFamily::Name("phosphor-fill".into())
+}
 
 /// Faint accent tint behind active rows and tabs.
 pub fn subtle_fill() -> egui::Color32 {
@@ -33,6 +38,18 @@ pub fn install_theme(ctx: &egui::Context) {
     if let Some(keys) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
         keys.insert(keys.len().min(1), "phosphor".into());
     }
+    fonts.font_data.insert(
+        "phosphor-fill".into(),
+        egui::FontData::from_static(Variant::Fill.font_bytes()).into(),
+    );
+    // Same fallback chain as Proportional, with the filled icons second (see egui-phosphor).
+    let mut chain = fonts
+        .families
+        .get(&egui::FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    chain.insert(chain.len().min(1), "phosphor-fill".into());
+    fonts.families.insert(fill_family(), chain);
     ctx.set_fonts(fonts);
     ctx.global_style_mut(|s| {
         s.spacing.item_spacing = egui::vec2(8.0, 6.0);

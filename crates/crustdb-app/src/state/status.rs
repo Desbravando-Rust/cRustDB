@@ -31,6 +31,10 @@ pub struct StatusModel {
     pub latency: Option<Duration>,
     pub proc: Option<ProcStats>,
     pub exports: Vec<(RequestId, u64)>,
+    /// `<label or name>/<active database or schema>` (#245).
+    pub scope: Option<String>,
+    /// Rows on screen and the table estimate of the active table tab.
+    pub grid_rows: Option<(u64, Option<u64>)>,
     reconnecting: bool,
     tx_by_tab: HashMap<TabId, TxState>,
     render_from: Option<Instant>,
@@ -52,6 +56,8 @@ impl Default for StatusModel {
             latency: None,
             proc: None,
             exports: vec![],
+            scope: None,
+            grid_rows: None,
             reconnecting: false,
             tx_by_tab: HashMap::new(),
             render_from: None,
@@ -68,6 +74,30 @@ impl StatusModel {
             Status::Online(v) => Some((w.config.name.clone(), v.clone(), !self.reconnecting)),
             _ => None,
         };
+        let table = w.active_tab.and_then(|t| {
+            w.tabs
+                .iter()
+                .map(|super::Tab::Table(t)| t)
+                .find(|x| x.id == t)
+        });
+        let query = w
+            .active_tab
+            .and_then(|t| w.queries.iter().find(|q| q.id == t));
+        let place = table
+            .map(|t| t.object.schema.as_ref().unwrap_or(&t.object.database))
+            .or(query.and_then(|q| q.database.as_ref()))
+            .or(w.config.database.as_ref());
+        let head = w.config.label.as_deref().unwrap_or(&w.config.name);
+        self.scope = Some(match place {
+            Some(p) => format!("{head}/{p}"),
+            None => head.to_owned(),
+        });
+        self.grid_rows = table.filter(|t| !t.rows.is_empty()).map(|t| {
+            (
+                t.rows.len() as u64,
+                t.estimate.filter(|_| t.filters.is_empty()),
+            )
+        });
         self.tls = Some(w.config.tls.mode);
         self.ssh = w.config.ssh.is_some();
         self.threshold = w.config.safety_threshold;
@@ -233,6 +263,26 @@ mod tests {
             cpu_percent: 1.0,
             rss_bytes: 1,
         })
+    }
+
+    #[test]
+    fn scope_is_label_or_name_plus_database() {
+        // Arrange
+        let mut s = crate::state::workspace::tests::state(&["alpha"]);
+        let id = s.open_workspace(s.config.connections[0].clone());
+        let mut m = StatusModel::default();
+
+        // Act
+        s.workspaces[0].config.database = Some("main".into());
+        m.sync(&s.workspaces[0]);
+        let plain = m.scope.clone();
+        s.workspaces[0].config.label = Some("production".into());
+        m.sync(&s.workspaces[0]);
+
+        // Assert
+        assert_eq!(id, s.workspaces[0].id);
+        assert_eq!(plain.as_deref(), Some("alpha/main"));
+        assert_eq!(m.scope.as_deref(), Some("production/main"));
     }
 
     #[test]

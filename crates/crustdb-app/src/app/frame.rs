@@ -65,7 +65,6 @@ impl CrustApp {
             egui::Panel::bottom("status_bar")
                 .frame(bar)
                 .show(ui, |ui| ui::status_bar::show(ui, m));
-            egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
         }
         self.sidebar_rect = None;
         // Same panel id on both screens: the width carries over on connect.
@@ -85,10 +84,15 @@ impl CrustApp {
         if online {
             self.sidebar_rect = Some(r.response.rect);
         }
+        let metrics = self.status.current(&self.state);
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(f) = &mut self.form {
                 intents.extend(ui::connection_form::show(ui, f, &self.state.config.labels));
                 return;
+            }
+            // First bottom panel = lowest: the metrics row sits under the grid footer.
+            if let Some(m) = metrics {
+                egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
             }
             if let Some(w) = self.state.active_online() {
                 intents.extend(ui::tab_bar::show(ui, w));
