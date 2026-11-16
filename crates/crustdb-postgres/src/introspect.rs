@@ -10,7 +10,6 @@ use crustdb_core::model::{
 
 use crate::PgDialect;
 use crate::types::category_for_oid;
-use crustdb_core::error::ErrorKind;
 
 use crustdb_core::driver::{TextRows, drain_text, text_at};
 
@@ -86,13 +85,6 @@ fn fk_action(c: &str) -> &'static str {
         "d" => "SET DEFAULT",
         _ => "NO ACTION",
     }
-}
-
-fn unsupported_kind(k: ObjectKind) -> DriverError {
-    DriverError::new(
-        ErrorKind::Unsupported,
-        format!("no catalog query for {k:?}"),
-    )
 }
 
 pub struct PgIntrospector;
@@ -217,7 +209,7 @@ impl Introspector for PgIntrospector {
         schema: Option<&str>,
         kind: ObjectKind,
     ) -> Result<Vec<ObjectRef>, DriverError> {
-        let sql = objects_sql(kind).ok_or_else(|| unsupported_kind(kind))?;
+        let sql = objects_sql(kind).ok_or_else(|| DriverError::no_catalog_query(kind))?;
         let r = query_rows(s, &sql, &[schema]).await?;
         Ok(r.iter()
             .map(|r| ObjectRef {
@@ -406,7 +398,9 @@ impl Introspector for PgIntrospector {
                  END FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace \
                  WHERE n.nspname = $1 AND t.typname = $2"
             }
-            ObjectKind::Database | ObjectKind::Schema => return Err(unsupported_kind(o.kind)),
+            ObjectKind::Database | ObjectKind::Schema => {
+                return Err(DriverError::no_catalog_query(o.kind));
+            }
         };
         let r = query_rows(s, sql, &[sch, name]).await?;
         // Overloads: every definition, separated by a blank line.

@@ -2,7 +2,7 @@
 //! parameter. Only the `main` database is listed (no ATTACH).
 use async_trait::async_trait;
 use crustdb_core::driver::{Introspector, Param, Session};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::model::{
     ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
 };
@@ -29,10 +29,7 @@ fn schema_type(kind: ObjectKind) -> Result<&'static str, DriverError> {
         ObjectKind::Table => Ok("table"),
         ObjectKind::View => Ok("view"),
         ObjectKind::Trigger => Ok("trigger"),
-        k => Err(DriverError::new(
-            ErrorKind::Unsupported,
-            format!("no catalog query for {k:?}"),
-        )),
+        k => Err(DriverError::no_catalog_query(k)),
     }
 }
 

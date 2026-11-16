@@ -185,7 +185,7 @@ pub(crate) fn map_err(e: tokio_postgres::Error) -> DriverError {
             return tls_error(t, message_with_cause(&e));
         }
         if io.is_some_and(|i| i.kind() == std::io::ErrorKind::TimedOut) {
-            return DriverError::new(ErrorKind::Timeout, "connection timed out");
+            return DriverError::timeout();
         }
         cur = c.source();
     }
@@ -241,7 +241,7 @@ pub(crate) async fn connect(
     if let Some(d) = &t.database {
         cfg.dbname(d);
     }
-    let timeout = || DriverError::new(ErrorKind::Timeout, "connection timed out");
+    let timeout = || DriverError::timeout();
     let work = async {
         let client = match &tls {
             Some(tls) => {

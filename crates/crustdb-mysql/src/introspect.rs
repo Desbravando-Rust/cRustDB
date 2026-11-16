@@ -79,13 +79,6 @@ fn objects_sql(kind: ObjectKind) -> Option<&'static str> {
     })
 }
 
-fn unsupported_kind(k: ObjectKind) -> DriverError {
-    DriverError::new(
-        ErrorKind::Unsupported,
-        format!("no catalog query for {k:?}"),
-    )
-}
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MysqlIntrospector;
 
@@ -113,7 +106,7 @@ impl Introspector for MysqlIntrospector {
         _: Option<&str>,
         kind: ObjectKind,
     ) -> Result<Vec<ObjectRef>, DriverError> {
-        let sql = objects_sql(kind).ok_or_else(|| unsupported_kind(kind))?;
+        let sql = objects_sql(kind).ok_or_else(|| DriverError::no_catalog_query(kind))?;
         let r = query_rows(s, sql, &[database]).await?;
         Ok(r.iter()
             .map(|r| ObjectRef {
@@ -238,7 +231,7 @@ impl Introspector for MysqlIntrospector {
             ObjectKind::Function => ("FUNCTION", "Create Function"),
             ObjectKind::Procedure => ("PROCEDURE", "Create Procedure"),
             ObjectKind::Trigger => ("TRIGGER", "SQL Original Statement"),
-            k => return Err(unsupported_kind(k)),
+            k => return Err(DriverError::no_catalog_query(k)),
         };
         let sql = format!("SHOW CREATE {what} {}", MysqlDialect.qualified_name(o));
         let (names, rows) = query(s, &sql, &[]).await?;

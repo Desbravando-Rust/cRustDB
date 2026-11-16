@@ -140,7 +140,7 @@ pub(crate) async fn connect(
     };
     tokio::time::timeout(t.connect_timeout, work)
         .await
-        .map_err(|_| DriverError::new(ErrorKind::Timeout, "connection timed out"))?
+        .map_err(|_| DriverError::timeout())?
 }
 
 #[cfg(test)]

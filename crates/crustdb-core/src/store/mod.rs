@@ -22,10 +22,7 @@ pub struct Refused {
 
 impl From<Refused> for DriverError {
     fn from(r: Refused) -> Self {
-        DriverError {
-            kind: ErrorKind::Unsupported,
-            message: r.to_string(),
-        }
+        DriverError::new(ErrorKind::Unsupported, r.to_string())
     }
 }
 

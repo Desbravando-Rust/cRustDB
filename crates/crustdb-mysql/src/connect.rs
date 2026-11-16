@@ -76,7 +76,7 @@ pub(crate) fn map_err(e: mysql_async::Error) -> DriverError {
             if let Some(t) = tls {
                 tls_error(t, message)
             } else if io.kind() == std::io::ErrorKind::TimedOut {
-                DriverError::new(ErrorKind::Timeout, "connection timed out")
+                DriverError::timeout()
             } else {
                 DriverError::new(ErrorKind::Connect, message)
             }
@@ -124,7 +124,7 @@ pub(crate) async fn connect(
     };
     tokio::time::timeout(t.connect_timeout, work)
         .await
-        .map_err(|_| DriverError::new(ErrorKind::Timeout, "connection timed out"))?
+        .map_err(|_| DriverError::timeout())?
 }
 
 #[cfg(test)]

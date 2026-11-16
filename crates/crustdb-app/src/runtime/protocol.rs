@@ -251,7 +251,7 @@ pub enum Event {
         req: RequestId,
         error: String,
     },
-    /// `None` when the lookup failed.
+    /// `Err` carries why the lookup failed.
     Diagram {
         req: RequestId,
         tables: Result<Vec<DiagramTable>, String>,

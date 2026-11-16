@@ -280,15 +280,7 @@ impl StoreSession for RedisSession {
             .into_iter()
             .next()
             .ok_or_else(|| DriverError::new(ErrorKind::Protocol, "missing TYPE/PTTL reply"))??;
-        let gone = || {
-            DriverError::new(
-                ErrorKind::Query {
-                    code: None,
-                    position: None,
-                },
-                "key no longer exists",
-            )
-        };
+        let gone = || DriverError::query("key no longer exists");
         let kind = decode::value_kind(&ty).ok_or_else(gone)?;
         let ttl = decode::ttl(pttl).ok_or_else(gone)?;
         let (body, truncated) = self.body(&key.0, &kind, limit).await?;

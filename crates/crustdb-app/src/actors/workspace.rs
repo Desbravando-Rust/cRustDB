@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crustdb_core::driver::{Driver, Session, SessionPurpose};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex, oneshot, watch};
@@ -384,13 +384,9 @@ fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>
     // ponytail: PG template databases connect but `databases()` filters
     // `NOT datistemplate`, so they are reported missing; upgrade by letting the
     // introspector expose templates if that ever matters.
-    Err(DriverError {
-        kind: ErrorKind::Query {
-            code: None,
-            position: None,
-        },
-        message: format!("database \"{home}\" not found on server"),
-    })
+    Err(DriverError::query(format!(
+        "database \"{home}\" not found on server"
+    )))
 }
 
 async fn open(

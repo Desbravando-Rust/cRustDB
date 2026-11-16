@@ -214,10 +214,7 @@ fn lost(e: &DriverError) -> bool {
 }
 
 fn closed() -> DriverError {
-    DriverError {
-        kind: ErrorKind::Connect,
-        message: "session is closed".into(),
-    }
+    DriverError::new(ErrorKind::Connect, "session is closed")
 }
 
 /// Runs the page query while still reading the mailbox: a newer `FetchPage` or `CancelTab`
@@ -267,13 +264,8 @@ async fn read_page(
     let limit = q.limit.unwrap_or(u64::from(shared.config.page_size) + 1);
     let want = usize::try_from(limit).unwrap_or(usize::MAX);
     let (object, filtered) = (q.object.clone(), !q.filters.is_empty());
-    let built = build_table_query(shared.driver.dialect(), &q).map_err(|e| DriverError {
-        kind: ErrorKind::Query {
-            code: None,
-            position: None,
-        },
-        message: e.to_string(),
-    })?;
+    let built = build_table_query(shared.driver.dialect(), &q)
+        .map_err(|e| DriverError::query(e.to_string()))?;
     let header = s.start_params(&built.sql, &built.params).await?;
     let body = fetch_up_to(s, want).await.map(|(rows, _)| rows);
     let done = s.finish().await;
