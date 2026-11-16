@@ -186,7 +186,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
         .fill(super::theme::INPUT_FILL)
         .inner_margin(4.0)
         .show(ui, |ui| {
-            ui.add(egui::TextEdit::singleline(&mut q).hint_text("filter"))
+            let r = ui.add(egui::TextEdit::singleline(&mut q).hint_text("filter"));
+            super::a11y::name_text(&r, "Filter explorer");
+            r
         });
     if edit.inner.changed() {
         out.push(Intent::Filter(q));

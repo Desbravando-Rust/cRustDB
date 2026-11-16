@@ -14,6 +14,7 @@ pub fn show(ui: &mut egui::Ui, c: &mut CommandPane) -> Vec<Intent> {
                 .hint_text("command, e.g. GET user:1")
                 .desired_width((ui.available_width() - 120.0).max(80.0)),
         );
+        super::a11y::name_text(&r, "Command");
         let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let running = c.is_running();
         if (ui.add_enabled(!running, egui::Button::new("Run")).clicked() || enter) && !running {

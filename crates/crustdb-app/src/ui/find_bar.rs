@@ -36,6 +36,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<R
                 .hint_text("Find")
                 .desired_width(200.0),
         );
+        super::a11y::name_text(&find, "Find");
         if std::mem::take(&mut tab.find.focus) {
             find.request_focus();
         }
@@ -62,6 +63,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab, editor: egui::Id) -> Option<R
                 .hint_text("Replace with")
                 .desired_width(200.0),
         );
+        super::a11y::name_text(&replace, "Replace with");
         if ui.button("Replace").clicked() && tab.find.replace_current(&mut tab.text) {
             tab.dirty = true;
             click = true;
@@ -111,6 +113,23 @@ mod tests {
 
     use super::*;
     use crate::runtime::TabId;
+
+    #[test]
+    fn find_bar_inputs_are_named() {
+        // Arrange
+        let mut tab = QueryTab::new(TabId(1), DriverKind::Postgres, None);
+        tab.find.open = true;
+        let mut h = Harness::new_ui(|ui| {
+            show(ui, &mut tab, egui::Id::unique("editor"));
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Find");
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Replace with");
+    }
 
     #[test]
     fn find_bar_counts_matches_and_replaces_all() {

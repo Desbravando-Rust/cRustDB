@@ -46,11 +46,12 @@ fn password_id(exec: RequestId) -> egui::Id {
 
 fn password_field(ui: &mut egui::Ui, id: egui::Id, input: &mut PasswordInput, attempts: u8) {
     ui.label("Type the password (or the database name if none) to continue.");
-    ui.add(
+    let r = ui.add(
         egui::TextEdit::singleline(&mut *input.0)
             .id(id)
             .password(true),
     );
+    super::a11y::name_input(&r, egui::Role::PasswordInput, "Safety password");
     if attempts > 0 {
         ui.colored_label(
             ui.visuals().error_fg_color,
@@ -251,6 +252,21 @@ mod tests {
         // Assert
         assert_eq!(short, "\"SET\" \"a b\"");
         assert!(capped.chars().count() <= ARGV_PREVIEW_CAP + 1);
+    }
+
+    #[test]
+    fn password_field_is_named() {
+        // Arrange
+        let mut input = PasswordInput::default();
+        let mut h = Harness::new_ui(|ui| {
+            password_field(ui, egui::Id::unique("pw"), &mut input, 0);
+        });
+
+        // Act
+        h.run();
+
+        // Assert
+        h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Safety password");
     }
 
     fn delete_rows_clicks(busy: bool) -> Vec<Intent> {

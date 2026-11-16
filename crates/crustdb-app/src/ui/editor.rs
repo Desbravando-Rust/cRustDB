@@ -241,7 +241,7 @@ pub fn show(
                 .desired_rows(24)
                 .layouter(&mut layouter)
                 .show(ui);
-            let r = &edit.response;
+            let r = super::a11y::name_sql_editor(&edit.response);
             if r.changed() {
                 tab.dirty = true;
                 tab.error_marker = None;

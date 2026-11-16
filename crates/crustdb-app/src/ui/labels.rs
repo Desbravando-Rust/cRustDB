@@ -93,8 +93,9 @@ pub fn filter_combo(ui: &mut egui::Ui, labels: &[Label]) -> Option<String> {
         .width(110.0)
         .selected_text(sel.as_deref().unwrap_or("All"))
         .show_ui(ui, |ui| {
-            ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search..."))
-                .on_hover_text("Search labels");
+            let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search..."));
+            super::a11y::name_text(&r, "Search labels");
+            r.on_hover_text("Search labels");
             if ui.selectable_label(sel.is_none(), "All").clicked() {
                 sel = None;
             }
@@ -175,6 +176,7 @@ fn rows(ui: &mut egui::Ui, labels: &[Label], out: &mut Vec<Intent>) {
             let r = ui
                 .add(egui::TextEdit::singleline(&mut buf).desired_width(120.0))
                 .on_hover_text(format!("Name of label {}", l.name));
+            super::a11y::name_text(&r, format!("Label name {}", l.name));
             if r.lost_focus() {
                 ui.data_mut(|d| d.remove_temp::<String>(id));
                 if buf != l.name {
@@ -211,11 +213,12 @@ fn rows(ui: &mut egui::Ui, labels: &[Label], out: &mut Vec<Intent>) {
     ui.horizontal(|ui| {
         let id = egui::Id::unique("label_new");
         let mut buf: String = ui.data(|d| d.get_temp(id)).unwrap_or_default();
-        ui.add(
+        let r = ui.add(
             egui::TextEdit::singleline(&mut buf)
                 .hint_text("New label")
                 .desired_width(120.0),
         );
+        super::a11y::name_text(&r, "New label name");
         if ui.button("Add").clicked() {
             out.push(Intent::Label(LabelOp::Add(std::mem::take(&mut buf))));
         }

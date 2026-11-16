@@ -1,4 +1,5 @@
 //! Thin views: read the state, draw, and return intentions for `app.rs` to translate.
+mod a11y;
 pub mod autocomplete;
 pub mod blog_panel;
 pub mod command_pane;
@@ -27,6 +28,8 @@ pub mod sidebar;
 pub mod status_bar;
 pub mod structure;
 pub mod tab_bar;
+#[cfg(test)]
+mod text_input_names_tests;
 pub mod theme;
 pub mod top_bar;
 pub mod workspace_home;

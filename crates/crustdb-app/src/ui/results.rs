@@ -40,6 +40,7 @@ pub fn toolbar(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
                 .hint_text(format!("Database: {current}"))
                 .desired_width(120.0),
         );
+        super::a11y::name_text(&r, "Database name");
         let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         if (ui.button("Use").clicked() || enter) && !tab.db_draft.is_empty() {
             out.push(Intent::UseDatabase {
@@ -59,14 +60,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut QueryTab) -> Vec<Intent> {
         ui.selectable_value(&mut tab.pane.tab, ResultTab::Messages, "Messages");
         if tab.pane.header.is_some() {
             let p = &mut tab.pane;
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut p.filter)
-                        .hint_text("Filter rows")
-                        .desired_width(160.0),
-                )
-                .changed()
-            {
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut p.filter)
+                    .hint_text("Filter rows")
+                    .desired_width(160.0),
+            );
+            super::a11y::name_text(&r, "Filter rows");
+            if r.changed() {
                 p.refresh_view();
             }
             if p.filter.is_empty() {

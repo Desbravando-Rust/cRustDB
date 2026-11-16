@@ -422,3 +422,19 @@ fn integer_color_is_legible_on_selected_row() {
     assert_ne!(INT_COLOR, selection);
     assert!(luma(INT_COLOR) - luma(selection) > 80.0);
 }
+
+#[test]
+fn cell_editor_is_named_after_its_column() {
+    // Arrange
+    let mut t = tab();
+    let mut h = Harness::new_ui(|ui| {
+        crate::ui::theme::install_theme(ui.ctx());
+        show(ui, &mut t);
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Edit cell v");
+}

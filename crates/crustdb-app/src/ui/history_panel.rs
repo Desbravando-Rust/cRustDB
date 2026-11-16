@@ -13,7 +13,8 @@ pub struct HistoryPanel {
 /// The SQL of the entry that was double clicked, if any.
 pub fn show(ui: &mut egui::Ui, panel: &mut HistoryPanel) -> Option<String> {
     ui.heading("History");
-    ui.add(egui::TextEdit::singleline(&mut panel.filter).hint_text("search"));
+    let r = ui.add(egui::TextEdit::singleline(&mut panel.filter).hint_text("search"));
+    super::a11y::name_text(&r, "Search history");
     let mut picked = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
         for e in HistoryStore::search(&panel.entries, &panel.filter) {
