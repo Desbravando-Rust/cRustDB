@@ -48,18 +48,18 @@ impl CrustApp {
         }
         self.state.config.connections = all;
         if !config.save_password {
-            for kind in [
-                SecretKind::Db,
-                SecretKind::SshPassword,
-                SecretKind::SshPassphrase,
-            ] {
-                if let Err(e) = self.secrets.delete(&account(config.id, kind)) {
-                    tracing::warn!("keyring delete failed: {e}");
-                }
-            }
+            self.forget_secrets(config.id);
         }
         self.close_form();
         Some((config, typed))
+    }
+
+    pub(super) fn forget_secrets(&self, id: crustdb_core::model::ConnectionId) {
+        for kind in SecretKind::ALL {
+            if let Err(e) = self.secrets.delete(&account(id, kind)) {
+                tracing::warn!("keyring delete failed: {e}");
+            }
+        }
     }
 
     /// Applies a catalog edit (propagating to connections) and saves; keeps the old state on failure.

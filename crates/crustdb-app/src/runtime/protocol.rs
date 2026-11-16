@@ -23,6 +23,20 @@ use crate::storage::history::HistoryEntry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RequestId(pub u64);
+
+/// Request ids come from three counters that must never collide: the runtime's (from 1), the
+/// app state's internal requests, and one per workspace object tree (events like
+/// `Event::Children` carry no workspace and are offered to every tree).
+impl RequestId {
+    /// First id of the app state's internal requests.
+    pub const STATE_BASE: u64 = 1 << 62;
+
+    /// First id of workspace `ws`'s object tree.
+    // ponytail: 32 bits of counter per workspace and ws ids below 2^31; widen if ever hit.
+    pub const fn tree_base(ws: WorkspaceId) -> u64 {
+        (1 << 63) | (ws.0 << 32)
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkspaceId(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -237,10 +251,10 @@ pub enum Event {
         req: RequestId,
         error: String,
     },
-    /// `None` when the lookup failed.
+    /// `Err` carries why the lookup failed.
     Diagram {
         req: RequestId,
-        tables: Option<Vec<DiagramTable>>,
+        tables: Result<Vec<DiagramTable>, String>,
     },
     Namespaces {
         req: RequestId,
@@ -351,5 +365,10 @@ pub enum Event {
     },
     ActorCrashed {
         tab: TabId,
+    },
+    /// The editor dropped the tab's run: its evaluation went stale or the session was lost.
+    RunStopped {
+        tab: TabId,
+        text: String,
     },
 }

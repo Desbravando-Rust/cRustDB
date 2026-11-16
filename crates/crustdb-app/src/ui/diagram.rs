@@ -16,8 +16,8 @@ pub fn show(ctx: &egui::Context, diagram: &mut Option<Diagram>) {
         .show(ctx, |ui| {
             ui.strong(d.title.as_str());
             match &d.tables {
-                _ if d.failed => {
-                    ui.label("Could not load the diagram.");
+                _ if let Some(e) = &d.error => {
+                    ui.label(format!("Could not load the diagram: {e}"));
                 }
                 None => {
                     ui.label("Loading…");
@@ -106,7 +106,7 @@ mod tests {
             on_delete: "NO ACTION".into(),
         };
         let mut d = Some(Diagram::new(RequestId(1), "d.public".into()));
-        d.as_mut().unwrap().apply(Some(vec![
+        d.as_mut().unwrap().apply(Ok(vec![
             DiagramTable {
                 object: obj("customers"),
                 columns: vec![col("id", true)],

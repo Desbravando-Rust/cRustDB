@@ -156,7 +156,6 @@ const MYSQL: &[&str] = &[
 
 /// Curated completion keywords for the dialect.
 pub fn keywords(kind: DriverKind) -> &'static [&'static str] {
-    // Built once; COMMON is shared by both dialect lists.
     static PG: std::sync::LazyLock<Vec<&'static str>> =
         std::sync::LazyLock::new(|| [COMMON, POSTGRES].concat());
     static MY: std::sync::LazyLock<Vec<&'static str>> =

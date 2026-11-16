@@ -1,6 +1,9 @@
 pub mod keyspace;
 pub mod value;
 
+/// ACL user a store login uses when none is given.
+pub const DEFAULT_USER: &str = "default";
+
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -22,10 +25,7 @@ pub struct Refused {
 
 impl From<Refused> for DriverError {
     fn from(r: Refused) -> Self {
-        DriverError {
-            kind: ErrorKind::Unsupported,
-            message: r.to_string(),
-        }
+        DriverError::new(ErrorKind::Unsupported, r.to_string())
     }
 }
 

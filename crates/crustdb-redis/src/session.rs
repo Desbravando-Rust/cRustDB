@@ -19,7 +19,6 @@ use crate::classify::guard_run;
 use crate::commands::{build, scan_argv};
 use crate::connect::{from_value, is_server_error, map_err};
 use crate::decode;
-use crate::tls::err;
 
 pub(crate) struct RedisSession {
     conn: MultiplexedConnection,
@@ -81,7 +80,7 @@ impl RedisSession {
         }
         let flat: Vec<Value> = pipe.query_async(&mut self.conn).await.map_err(map_err)?;
         if flat.len() != keys.len() * 2 {
-            return Err(err(
+            return Err(DriverError::new(
                 ErrorKind::Protocol,
                 "malformed TYPE/PTTL pipeline reply",
             ));
@@ -170,7 +169,7 @@ impl RedisSession {
                 (ValueBody::Stream(v), t)
             }
             ValueKind::Other(t) => {
-                return Err(err(
+                return Err(DriverError::new(
                     ErrorKind::Unsupported,
                     format!("cannot display values of type `{t}`"),
                 ));
@@ -280,16 +279,8 @@ impl StoreSession for RedisSession {
             .await?
             .into_iter()
             .next()
-            .ok_or_else(|| err(ErrorKind::Protocol, "missing TYPE/PTTL reply"))??;
-        let gone = || {
-            err(
-                ErrorKind::Query {
-                    code: None,
-                    position: None,
-                },
-                "key no longer exists",
-            )
-        };
+            .ok_or_else(|| DriverError::new(ErrorKind::Protocol, "missing TYPE/PTTL reply"))??;
+        let gone = || DriverError::query("key no longer exists");
         let kind = decode::value_kind(&ty).ok_or_else(gone)?;
         let ttl = decode::ttl(pttl).ok_or_else(gone)?;
         let (body, truncated) = self.body(&key.0, &kind, limit).await?;
@@ -321,7 +312,7 @@ mod tests {
     use super::*;
 
     fn denied() -> DriverError {
-        err(
+        DriverError::new(
             ErrorKind::Query {
                 code: Some("NOPERM".into()),
                 position: None,

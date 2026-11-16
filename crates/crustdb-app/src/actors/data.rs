@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crustdb_core::dialect::{BuiltQuery, build_table_query};
-use crustdb_core::driver::{ResultHeader, Session, SessionPurpose};
+use crustdb_core::driver::{ResultHeader, Session, SessionPurpose, fetch_up_to};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{ObjectRef, Row};
 use crustdb_core::query::TableQuery;
@@ -92,10 +92,10 @@ impl DataActor {
     }
 
     fn shared(&self) -> Result<Arc<Shared>, DriverError> {
-        self.shared.borrow().clone().ok_or_else(|| DriverError {
-            kind: ErrorKind::Connect,
-            message: "workspace is not connected".into(),
-        })
+        self.shared
+            .borrow()
+            .clone()
+            .ok_or_else(crate::actors::not_connected)
     }
 
     async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
@@ -207,19 +207,14 @@ impl DataActor {
     }
 }
 
-/// The session is unusable after this error; the next request reconnects.
+/// The session is unusable after this error; the next request reconnects. A timed-out
+/// write may still be running server-side, so its session is not reused either.
 fn lost(e: &DriverError) -> bool {
-    matches!(
-        e.kind,
-        ErrorKind::Connect | ErrorKind::Protocol | ErrorKind::Timeout
-    )
+    e.kind.ends_session() || e.kind == ErrorKind::Timeout
 }
 
 fn closed() -> DriverError {
-    DriverError {
-        kind: ErrorKind::Connect,
-        message: "session is closed".into(),
-    }
+    DriverError::new(ErrorKind::Connect, "session is closed")
 }
 
 /// Runs the page query while still reading the mailbox: a newer `FetchPage` or `CancelTab`
@@ -269,15 +264,10 @@ async fn read_page(
     let limit = q.limit.unwrap_or(u64::from(shared.config.page_size) + 1);
     let want = usize::try_from(limit).unwrap_or(usize::MAX);
     let (object, filtered) = (q.object.clone(), !q.filters.is_empty());
-    let built = build_table_query(shared.driver.dialect(), &q).map_err(|e| DriverError {
-        kind: ErrorKind::Query {
-            code: None,
-            position: None,
-        },
-        message: e.to_string(),
-    })?;
+    let built = build_table_query(shared.driver.dialect(), &q)
+        .map_err(|e| DriverError::query(e.to_string()))?;
     let header = s.start_params(&built.sql, &built.params).await?;
-    let body = read_rows(s, want).await;
+    let body = fetch_up_to(s, want).await.map(|(rows, _)| rows);
     let done = s.finish().await;
     let rows = body?;
     done?;
@@ -299,16 +289,4 @@ async fn read_page(
         has_more,
         estimate,
     })
-}
-
-async fn read_rows(s: &mut dyn Session, want: usize) -> Result<Vec<Row>, DriverError> {
-    let mut rows = Vec::new();
-    while rows.len() < want {
-        let f = s.fetch(want - rows.len()).await?;
-        rows.extend(f.rows);
-        if f.exhausted {
-            break;
-        }
-    }
-    Ok(rows)
 }

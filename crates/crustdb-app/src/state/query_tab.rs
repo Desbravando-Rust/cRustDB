@@ -11,13 +11,13 @@ use crustdb_core::sql::{split, statement_at};
 use super::autocomplete::Autocomplete;
 use super::find::Find;
 pub use super::result_pane::{MessageLine, ResultPane, ResultTab};
-use crate::actors::{LOST, STALE_EVALUATION};
 use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState};
 
 /// Above this the editor skips highlighting (D40).
 pub const HIGHLIGHT_MAX_BYTES: usize = 1 << 20;
 /// Measured (perf.rs, release): typing stays under 16 ms up to ~750 lines with highlighting on.
 pub const HIGHLIGHT_MAX_LINES: usize = 750;
+pub const HIGHLIGHT_OFF_NOTE: &str = "Highlighting disabled for large files (1 MiB or 750 lines)";
 
 #[derive(Debug)]
 pub struct QueryTab {
@@ -84,14 +84,20 @@ impl QueryTab {
         self.running.is_some()
     }
 
-    /// PG switches database by reconnecting, which an open transaction forbids.
+    /// Switching by reconnecting would drop an open transaction.
     pub fn can_switch_db(&self) -> bool {
-        self.running.is_none() && (self.driver == DriverKind::Mysql || self.tx == TxState::Idle)
+        self.running.is_none() && (!self.driver.session_per_database() || self.tx == TxState::Idle)
     }
 
     fn idle(&mut self) {
         self.running = None;
         self.bg = false;
+    }
+
+    /// A new editor actor starts with no transaction and no statement in flight.
+    pub(super) fn session_reset(&mut self) {
+        self.tx = TxState::Idle;
+        self.idle();
     }
 
     /// Clears `running` right away; late events still reach the pane through `pane.req`.
@@ -185,21 +191,21 @@ impl QueryTab {
             Event::Notice { text, .. } => {
                 let n = self.pane.messages.len();
                 self.pane.push(n, true, text.clone(), Duration::ZERO);
-                // The actor refused an Execute (stale evaluation) or lost the session.
-                let refused = text.starts_with(LOST) || text == STALE_EVALUATION;
-                if refused || self.bg {
-                    if refused {
-                        self.pane.tab = ResultTab::Messages;
-                    }
+                if self.bg {
                     self.idle();
                 }
             }
+            Event::RunStopped { text, .. } => {
+                let n = self.pane.messages.len();
+                self.pane.push(n, true, text.clone(), Duration::ZERO);
+                self.pane.tab = ResultTab::Messages;
+                self.idle();
+            }
             Event::ActorCrashed { .. } => {
-                self.tx = TxState::Idle;
+                self.session_reset();
                 let n = self.pane.messages.len();
                 self.pane
                     .push(n, false, "connection actor crashed".into(), Duration::ZERO);
-                self.idle();
             }
             Event::StatementDone { index, .. } => {
                 self.pane.apply(e);
@@ -278,12 +284,6 @@ impl QueryTab {
             .map(at)
             .into_iter()
             .collect()
-    }
-
-    /// Byte range of the statement under the cursor, for the background tint.
-    pub fn current_range(&self, cursor_byte: usize) -> Option<Range<usize>> {
-        let spans = split(&self.text, self.driver);
-        statement_at(&spans, cursor_byte).map(|s| s.range.clone())
     }
 
     /// Marks a server error position (1-based chars) and returns nothing if out of range.

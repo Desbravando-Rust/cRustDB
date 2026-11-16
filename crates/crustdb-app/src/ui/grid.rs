@@ -1,5 +1,5 @@
 use crustdb_core::format::display_cell;
-use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, ObjectKind, Row, TypeCategory};
+use crustdb_core::model::{Cell, ColumnMeta, GRID_DISPLAY_CHARS, Row, TypeCategory};
 use crustdb_core::query::Sort;
 use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
@@ -12,8 +12,7 @@ use crate::state::{TableTab, TableView};
 const ROW_H: f32 = 20.0;
 /// Integers: light orange, legible on the dark panel and on the `ACCENT` selection fill.
 pub(crate) const INT_COLOR: Color32 = Color32::from_rgb(254, 215, 170);
-const GREEN: Color32 = Color32::from_rgb(90, 190, 110);
-pub(super) const AMBER: Color32 = Color32::from_rgb(230, 170, 60);
+use super::theme::SUCCESS;
 
 fn sort_mark(sorts: &[Sort], column: &str) -> String {
     match sorts.iter().position(|s| s.column == column) {
@@ -187,7 +186,7 @@ fn table(
                         } else {
                             let t = RichText::new(text).monospace();
                             let t = match (flag, meta.category) {
-                                (Some("true"), _) => t.color(GREEN),
+                                (Some("true"), _) => t.color(SUCCESS),
                                 (Some(_), _) => t.color(Color32::GRAY),
                                 (None, TypeCategory::Integer) => t.color(INT_COLOR),
                                 _ => t,
@@ -249,23 +248,12 @@ fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>, colu
     }
 }
 
-/// Why the tab can never be edited from the grid; `None` while the columns are still unknown.
-pub(super) fn read_only_reason(tab: &TableTab) -> Option<&'static str> {
-    if tab.object.kind != ObjectKind::Table {
-        Some("Views are read-only")
-    } else if !tab.columns.is_empty() && !tab.columns.iter().any(|c| c.is_primary_key) {
-        Some("Table has no primary key")
-    } else {
-        None
-    }
-}
-
 /// Why "Add row"/"Delete rows" cannot act on the tab right now.
 pub(super) fn write_block(tab: &TableTab) -> Option<&'static str> {
-    if let Some(why) = read_only_reason(tab) {
+    if let Some(why) = tab.read_only_reason() {
         Some(why)
     } else if tab.has_pending() {
-        Some("Save or discard pending changes")
+        Some(crate::state::table_tab_edit::PENDING_NOTICE)
     } else if tab.is_loading() || tab.edit_req.is_some() {
         Some("Wait for the current operation")
     } else {

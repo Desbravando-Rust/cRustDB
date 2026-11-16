@@ -72,7 +72,7 @@ impl CrustApp {
         egui_extras::install_image_loaders(egui_ctx);
         if !secrets.available() {
             config.warning.get_or_insert_with(|| {
-                "OS keyring unavailable: passwords cannot be saved".to_owned()
+                crate::state::connection_form::KEYRING_UNAVAILABLE.to_owned()
             });
         }
         let ctx = egui_ctx.clone();

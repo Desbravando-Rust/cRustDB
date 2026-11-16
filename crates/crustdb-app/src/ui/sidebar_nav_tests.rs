@@ -8,7 +8,7 @@ use crustdb_core::model::{ObjectKind, ObjectRef, Product, ServerVersion};
 use crate::runtime::{Command, TabId};
 use crate::state::tree::NodePath;
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Status, Tab, TableTab};
+use crate::state::{AppState, Status, TableTab};
 use crate::ui::Intent;
 use crate::ui::home::tests::ready;
 
@@ -66,11 +66,11 @@ fn with_users_leaf() -> AppState {
 }
 
 fn open_users(s: &mut AppState) {
-    s.workspaces[0].tabs.push(Tab::Table(TableTab::new(
+    s.workspaces[0].tabs.push(TableTab::new(
         TabId(1),
         obj("users", ObjectKind::Table),
         100,
-    )));
+    ));
 }
 
 fn render(s: &AppState) -> Harness<'_, ()> {

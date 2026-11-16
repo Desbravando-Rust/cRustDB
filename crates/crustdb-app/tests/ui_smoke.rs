@@ -166,8 +166,10 @@ fn run_query_shows_result_and_messages() {
         .type_text("select email from users");
     h.run();
 
+    let run = crustdb_app::keymap::hint(&h.ctx, "Run", crustdb_app::keymap::Action::Run);
+
     // Act
-    h.get_by_label("Run (Ctrl+Enter)").click();
+    h.get_by_label(&run).click();
 
     // Assert
     wait_for(&mut h, "alice@example.com");

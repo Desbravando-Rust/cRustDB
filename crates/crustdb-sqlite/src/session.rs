@@ -10,7 +10,6 @@ use rusqlite::InterruptHandle;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::conn_task::{ConnCmd, Reply};
-use crate::connect::err;
 
 pub struct SqliteSession {
     tx: mpsc::Sender<ConnCmd>,
@@ -59,7 +58,7 @@ impl SqliteSession {
 
     /// Sends a command and awaits its reply; a dead thread is a lost connection.
     async fn call<T>(&self, cmd: impl FnOnce(Reply<T>) -> ConnCmd) -> Result<T, DriverError> {
-        let lost = || err(ErrorKind::Connect, "connection thread ended");
+        let lost = || DriverError::new(ErrorKind::Connect, "connection thread ended");
         let (reply, rx) = oneshot::channel();
         self.tx.send(cmd(reply)).await.map_err(|_| lost())?;
         rx.await.map_err(|_| lost())?
@@ -132,7 +131,7 @@ impl Session for SqliteSession {
         if name == "main" {
             Ok(())
         } else {
-            Err(err(
+            Err(DriverError::new(
                 ErrorKind::Unsupported,
                 format!("SQLite has only the main database, not {name:?}"),
             ))

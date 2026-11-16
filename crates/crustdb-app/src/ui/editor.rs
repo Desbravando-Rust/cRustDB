@@ -6,15 +6,15 @@ use crustdb_core::sql::{
     Expect, StatementSpan, TokenKind, completion_context, highlight, split, statement_at,
 };
 use eframe::egui::{
-    self, Color32, FontId, Key, Modifiers, TextFormat, cache::ComputerMut, text::CCursor,
-    text::LayoutJob,
+    self, Color32, FontId, TextFormat, cache::ComputerMut, text::CCursor, text::LayoutJob,
 };
 
 use super::Intent;
 use super::autocomplete as popup;
+use crate::keymap::{self, Action};
 use crate::state::QueryTab;
 use crate::state::autocomplete::{AutocompleteAction, ColumnCache, in_literal_or_comment};
-use crate::state::query_tab::{char_to_byte, highlight_enabled};
+use crate::state::query_tab::{HIGHLIGHT_OFF_NOTE, char_to_byte, highlight_enabled};
 use crate::state::tree::ObjectTree;
 
 type Spans = Vec<(Range<usize>, TokenKind)>;
@@ -22,10 +22,9 @@ type Spans = Vec<(Range<usize>, TokenKind)>;
 #[derive(Default)]
 struct Highlighter;
 
-// `DriverKind` is not `Hash`, so the cache key carries a flag instead.
-impl ComputerMut<(&str, bool), Spans> for Highlighter {
-    fn compute(&mut self, (text, mysql): (&str, bool)) -> Spans {
-        highlight(text, kind(mysql))
+impl ComputerMut<(&str, DriverKind), Spans> for Highlighter {
+    fn compute(&mut self, (text, kind): (&str, DriverKind)) -> Spans {
+        highlight(text, kind)
     }
 }
 
@@ -34,21 +33,13 @@ type HighlightCache = egui::cache::FrameCache<Spans, Highlighter>;
 #[derive(Default)]
 struct Splitter;
 
-impl ComputerMut<(&str, bool), Vec<StatementSpan>> for Splitter {
-    fn compute(&mut self, (text, mysql): (&str, bool)) -> Vec<StatementSpan> {
-        split(text, kind(mysql))
+impl ComputerMut<(&str, DriverKind), Vec<StatementSpan>> for Splitter {
+    fn compute(&mut self, (text, kind): (&str, DriverKind)) -> Vec<StatementSpan> {
+        split(text, kind)
     }
 }
 
 type SplitCache = egui::cache::FrameCache<Vec<StatementSpan>, Splitter>;
-
-fn kind(mysql: bool) -> DriverKind {
-    if mysql {
-        DriverKind::Mysql
-    } else {
-        DriverKind::Postgres
-    }
-}
 
 fn color(k: TokenKind) -> Color32 {
     match k {
@@ -124,19 +115,21 @@ pub fn show(
             usize::from(a.index)..usize::from(b.index)
         })
         .unwrap_or(0..0);
-    let run_all =
-        ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter));
-    let run = !run_all && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
-    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Slash)) {
+    let run_all = ui.input_mut(|i| keymap::consume(i, Action::RunAll));
+    let run = !run_all && ui.input_mut(|i| keymap::consume(i, Action::Run));
+    if ui.input_mut(|i| keymap::consume(i, Action::ToggleComment)) {
         tab.toggle_comment_at(sel.clone());
     }
-    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::F)) {
+    if ui.input_mut(|i| keymap::consume(i, Action::Format)) {
         tab.format_at(sel.clone());
     }
     // Wraps so a narrow window does not push the editor and results off-screen.
     ui.horizontal_wrapped(|ui| {
         if ui
-            .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
+            .add_enabled(
+                tab.can_run(),
+                egui::Button::new(keymap::hint(ui.ctx(), "Run", Action::Run)),
+            )
             .clicked()
         {
             out.push(Intent::RunQuery {
@@ -148,7 +141,7 @@ pub fn show(
         if ui
             .add_enabled(
                 tab.can_run(),
-                egui::Button::new("Run all (Ctrl+Shift+Enter)"),
+                egui::Button::new(keymap::hint(ui.ctx(), "Run all", Action::RunAll)),
             )
             .clicked()
         {
@@ -158,7 +151,10 @@ pub fn show(
                 all: true,
             });
         }
-        if ui.button("Format (Ctrl+Shift+F)").clicked() {
+        if ui
+            .button(keymap::hint(ui.ctx(), "Format", Action::Format))
+            .clicked()
+        {
             tab.format_at(sel.clone());
         }
         out.extend(files_bar(ui, tab));
@@ -189,7 +185,7 @@ pub fn show(
     let driver = tab.driver;
     let cursor = sel.end;
     if !highlight_enabled(&tab.text) {
-        ui.weak("Highlighting disabled for large files (1 MiB or 750 lines)");
+        ui.weak(HIGHLIGHT_OFF_NOTE);
     }
     let lines = tab.text.split('\n').count();
     let err_line = tab.error_marker.as_ref().map(|(l, _)| *l);
@@ -217,7 +213,7 @@ pub fn show(
                 let text = buf.as_str();
                 let j = if highlight_enabled(text) {
                     // Derived from the text the layouter receives: it may already be edited this frame.
-                    let key = (text, driver == DriverKind::Mysql);
+                    let key = (text, driver);
                     let byte = char_to_byte(text, cursor);
                     let (current, spans) = ui.ctx().memory_mut(|m| {
                         let cur = statement_at(m.caches.cache::<SplitCache>().get(key), byte)
@@ -257,7 +253,9 @@ pub fn show(
             };
             let byte = char_to_byte(&tab.text, usize::from(cur.index));
             let force = r.has_focus()
-                && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Space));
+                && ctx.input(|i| {
+                    keymap::keymap(i, keymap::Focus::Editor) == Some(Action::Autocomplete)
+                });
             if r.changed() || force {
                 if in_literal_or_comment(&tab.text, byte, driver) {
                     tab.ac.close();

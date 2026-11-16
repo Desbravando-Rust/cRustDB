@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crustdb_core::dialect::build_table_query;
 use crustdb_core::driver::{Session, SessionPurpose};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::model::{Cell, ColumnMeta, DriverKind, Row};
 use crustdb_core::query::{QueryError, TableQuery};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -188,10 +188,11 @@ pub(super) async fn table(job: TableJob, mut rx: UnboundedReceiver<Command>) {
 }
 
 async fn run(job: TableJob, rx: &mut UnboundedReceiver<Command>) -> Result<u64, Failure> {
-    let shared = job.shared.borrow().clone().ok_or_else(|| DriverError {
-        kind: ErrorKind::Connect,
-        message: "workspace is not connected".into(),
-    })?;
+    let shared = job
+        .shared
+        .borrow()
+        .clone()
+        .ok_or_else(crate::actors::not_connected)?;
     let target = shared.target_for(&job.query.object.database);
     let mut s = shared
         .driver

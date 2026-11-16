@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crustdb_core::driver::{ConnectTarget, Driver};
-use crustdb_core::model::{DriverKind, ObjectRef};
+use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::model::ObjectRef;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{Mutex, watch};
 
@@ -16,7 +17,6 @@ use crate::storage::config::ConnectionConfig;
 
 mod data;
 mod editor;
-pub(crate) use editor::{LOST, STALE_EVALUATION};
 mod export;
 mod store;
 mod tunnel;
@@ -38,6 +38,12 @@ mod store_tests;
 mod tests;
 
 use data::DataActor;
+
+pub(crate) const NOT_CONNECTED: &str = "workspace is not connected";
+
+pub(crate) fn not_connected() -> DriverError {
+    DriverError::new(ErrorKind::Connect, NOT_CONNECTED)
+}
 use editor::EditorActor;
 use store::StoreActor;
 use workspace::{WorkspaceActor, WsMsg};
@@ -54,7 +60,7 @@ impl Shared {
     /// (`main`) there, not something to connect to.
     pub(crate) fn target_for(&self, db: &str) -> ConnectTarget {
         let mut t = self.target.clone();
-        if self.driver.kind() != DriverKind::Sqlite {
+        if !self.driver.kind().is_file() {
             t.database = Some(db.to_string());
         }
         t
@@ -66,7 +72,9 @@ pub(crate) type SharedRx = watch::Receiver<Option<Arc<Shared>>>;
 
 /// Runs an actor under a supervisor: a panic emits `ActorCrashed` and restarts it with a fresh
 /// state on the same mailbox (the message being handled is lost). Ends when the mailbox closes.
-fn supervise<M, F, Fut>(tab: TabId, out: Emitter, rx: UnboundedReceiver<M>, mk: F)
+/// A tab actor's crash is reported on its tab; a workspace actor (`tab: None`) reports its
+/// own restart.
+fn supervise<M, F, Fut>(tab: Option<TabId>, out: Emitter, rx: UnboundedReceiver<M>, mk: F)
 where
     M: Send + 'static,
     F: Fn(Arc<Mutex<UnboundedReceiver<M>>>) -> Fut + Send + 'static,
@@ -78,7 +86,9 @@ where
             if !e.is_panic() {
                 break;
             }
-            out.emit(Event::ActorCrashed { tab });
+            if let Some(tab) = tab {
+                out.emit(Event::ActorCrashed { tab });
+            }
         }
     });
 }
@@ -184,7 +194,7 @@ impl Actors {
                     Some(shared) => self.open_table(ws, tab, object, shared),
                     None => self.out.emit(Event::Notice {
                         tab,
-                        text: "workspace is not connected".into(),
+                        text: crate::actors::NOT_CONNECTED.into(),
                     }),
                 }
                 None
@@ -194,7 +204,7 @@ impl Actors {
                     Some(shared) => self.open_editor(ws, tab, database, shared),
                     None => self.out.emit(Event::Notice {
                         tab,
-                        text: "workspace is not connected".into(),
+                        text: crate::actors::NOT_CONNECTED.into(),
                     }),
                 }
                 None
@@ -290,7 +300,7 @@ impl Actors {
             Backend::Sql(driver) => {
                 let (shared_tx, shared) = watch::channel(None);
                 let shared_tx = Arc::new(shared_tx);
-                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                supervise(None, self.out.clone(), rx, move |rx| {
                     if !first_run.swap(false, Ordering::SeqCst) {
                         // Restarted after a panic: the old connection state is gone.
                         shared_tx.send_replace(None);
@@ -308,7 +318,7 @@ impl Actors {
                 shared
             }
             Backend::Store(driver) => {
-                supervise(TabId(0), self.out.clone(), rx, move |rx| {
+                supervise(None, self.out.clone(), rx, move |rx| {
                     if !first_run.swap(false, Ordering::SeqCst) {
                         out.emit(crashed(ws));
                     }
@@ -346,7 +356,7 @@ impl Actors {
     fn open_table(&mut self, ws: WorkspaceId, tab: TabId, object: ObjectRef, shared: SharedRx) {
         let (tx, rx) = unbounded_channel();
         let out = self.out.clone();
-        supervise(tab, self.out.clone(), rx, move |rx| {
+        supervise(Some(tab), self.out.clone(), rx, move |rx| {
             DataActor::new(tab, object.clone(), shared.clone(), out.clone()).run(rx)
         });
         self.tabs.insert(
@@ -368,7 +378,7 @@ impl Actors {
     ) {
         let (tx, rx) = unbounded_channel();
         let out = self.out.clone();
-        supervise(tab, self.out.clone(), rx, move |rx| {
+        supervise(Some(tab), self.out.clone(), rx, move |rx| {
             EditorActor::new(tab, database.clone(), shared.clone(), out.clone()).run(rx)
         });
         self.tabs.insert(

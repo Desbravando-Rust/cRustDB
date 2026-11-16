@@ -5,20 +5,13 @@
 use std::sync::Arc;
 
 use crustdb_core::driver::{TlsConfig, TlsMode};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::{DriverError, ErrorKind, NO_TLS12};
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, RootCertStore, SignatureScheme};
-
-pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
-    DriverError {
-        kind,
-        message: message.into(),
-    }
-}
 
 /// `VerifyCa` is enforced as `VerifyFull`: the client library cannot skip only the name check
 /// (fail-safe: never weaker than what the user asked for).
@@ -71,7 +64,7 @@ impl ServerCertVerifier for NoVerify {
 fn roots(ca_path: Option<&std::path::Path>) -> Result<RootCertStore, DriverError> {
     let mut store = RootCertStore::empty();
     let tls_err = |e: &dyn std::fmt::Display| {
-        err(ErrorKind::Tls, format!("cannot load CA certificates: {e}"))
+        DriverError::new(ErrorKind::Tls, format!("cannot load CA certificates: {e}"))
     };
     if let Some(p) = ca_path {
         for c in CertificateDer::pem_file_iter(p).map_err(|e| tls_err(&e))? {
@@ -96,14 +89,14 @@ pub(crate) fn client_config(
     let provider = Arc::new(aws_lc_rs::default_provider());
     let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
-        .map_err(|e| err(ErrorKind::Tls, e.to_string()))?;
+        .map_err(|e| DriverError::new(ErrorKind::Tls, e.to_string()))?;
     let cfg = if mode == TlsMode::VerifyFull {
         let verifier = WebPkiServerVerifier::builder_with_provider(
             Arc::new(roots(tls.ca_path.as_deref())?),
             provider,
         )
         .build()
-        .map_err(|e| err(ErrorKind::Tls, e.to_string()))?;
+        .map_err(|e| DriverError::new(ErrorKind::Tls, e.to_string()))?;
         builder.with_webpki_verifier(verifier)
     } else {
         builder
@@ -114,7 +107,6 @@ pub(crate) fn client_config(
     Ok(Some(Arc::new(cfg)))
 }
 
-/// D39: a server without TLS 1.2+ gets a fixed, actionable message.
 pub(crate) fn tls_error(e: &rustls::Error, message: String) -> DriverError {
     use rustls::{
         AlertDescription::ProtocolVersion, Error::*,
@@ -124,12 +116,8 @@ pub(crate) fn tls_error(e: &rustls::Error, message: String) -> DriverError {
         e,
         PeerIncompatible(ServerDoesNotSupportTls12Or13) | AlertReceived(ProtocolVersion)
     );
-    let message = if no_tls12 {
-        "server does not support TLS 1.2+; use an SSH tunnel or disable TLS".into()
-    } else {
-        message
-    };
-    err(ErrorKind::Tls, message)
+    let message = if no_tls12 { NO_TLS12.into() } else { message };
+    DriverError::new(ErrorKind::Tls, message)
 }
 
 #[cfg(test)]
@@ -203,7 +191,6 @@ mod tests {
     fn old_tls_maps_to_d39_message() {
         // Arrange
         use rustls::{AlertDescription, PeerIncompatible};
-        const D39: &str = "server does not support TLS 1.2+; use an SSH tunnel or disable TLS";
 
         // Act & Assert
         for e in [
@@ -211,7 +198,7 @@ mod tests {
             rustls::Error::AlertReceived(AlertDescription::ProtocolVersion),
         ] {
             let d = tls_error(&e, "x".into());
-            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, D39));
+            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, NO_TLS12));
         }
         let e = rustls::Error::PeerIncompatible(PeerIncompatible::NoCipherSuitesInCommon);
         assert_eq!(tls_error(&e, "x".into()).message, "x");

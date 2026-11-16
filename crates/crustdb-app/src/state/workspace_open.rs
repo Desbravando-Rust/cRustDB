@@ -19,7 +19,7 @@ impl AppState {
             w.status = Status::Connecting;
             // `Connect` drops this workspace's tab actors; reopen them (queued after it) so the kept
             // tabs and query texts keep working. Evaluations of the dead session never answer.
-            for Tab::Table(t) in &w.tabs {
+            for t in &w.tabs {
                 self.outbox.push(Command::OpenTable {
                     ws: id,
                     tab: t.id,
@@ -27,10 +27,7 @@ impl AppState {
                 });
             }
             for q in &mut w.queries {
-                // The new actor starts with no transaction and no statement in flight.
-                q.tx = crate::runtime::TxState::Idle;
-                q.running = None;
-                q.bg = false;
+                q.session_reset();
                 self.outbox.push(Command::OpenEditor {
                     ws: id,
                     tab: q.id,
@@ -44,7 +41,10 @@ impl AppState {
         let id = WorkspaceId(self.next_ws);
         self.next_ws += 1;
         let is_kv = config.driver.data_model() == DataModel::KeyValue;
-        let db = config.database.clone().unwrap_or_else(|| "0".into());
+        let db = config
+            .database
+            .clone()
+            .unwrap_or_else(|| crate::state::keyspace::DEFAULT_NAMESPACE.into());
         self.workspaces.push(WorkspaceState {
             id,
             tree: ObjectTree::new(id, config.driver),

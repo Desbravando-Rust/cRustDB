@@ -8,7 +8,7 @@ use futures_util::StreamExt;
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::{RowStream, SimpleQueryMessage, SimpleQueryStream, Statement};
 
-use crate::connect::{err, map_err};
+use crate::connect::map_err;
 use crate::session::PgSession;
 use crate::types::category_for_oid;
 
@@ -309,8 +309,10 @@ impl PgSession {
             SimpleQueryMessage::Row(r) => r.get(0),
             _ => None,
         });
-        let plan: serde_json::Value = serde_json::from_str(json.unwrap_or("null"))
-            .map_err(|e| err(ErrorKind::Protocol, format!("bad EXPLAIN output: {e}")))?;
+        let plan: serde_json::Value =
+            serde_json::from_str(json.unwrap_or("null")).map_err(|e| {
+                DriverError::new(ErrorKind::Protocol, format!("bad EXPLAIN output: {e}"))
+            })?;
         Ok(modify_rows(&plan))
     }
 }

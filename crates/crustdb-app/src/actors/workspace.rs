@@ -4,24 +4,22 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crustdb_core::driver::{Driver, Session, SessionPurpose};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::DriverError;
 use crustdb_core::model::{DriverKind, ObjectKind, ObjectRef};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at, sleep_until};
 
-use super::Shared;
 use super::tunnel::tunnel_target;
+use super::{Shared, not_connected};
 use crate::net::ssh::Tunnel;
-use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, TabId, WorkspaceId};
+use crate::runtime::{Command, Emitter, Event, RequestId, ResolvedSecrets, WorkspaceId};
 use crate::storage::config::ConnectionConfig;
 
 mod diagram;
 
 const PING_EVERY: Duration = Duration::from_secs(60);
-/// Workspace-level problems have no tab; they are reported on the tab 0 sentinel.
-const NO_TAB: TabId = TabId(0);
 
 /// Wait before reconnect attempt `attempt` (0-based): 1, 2, 4, 8 s ... capped at 30 s.
 pub(crate) fn backoff(attempt: u32) -> Duration {
@@ -267,6 +265,15 @@ impl WorkspaceActor {
         sh.driver.connect(&target, SessionPurpose::Metadata).await
     }
 
+    /// Metadata sessions are keyed by database where a session is bound to one, else shared.
+    fn metadata_key(&self, kind: DriverKind, database: &str) -> String {
+        if kind.session_per_database() && !database.is_empty() {
+            database.to_string()
+        } else {
+            self.home.clone()
+        }
+    }
+
     async fn ensure_metadata(&mut self, key: &str) -> Result<(), DriverError> {
         if !self.sessions.contains_key(key) {
             let s = self.open_metadata(key).await?;
@@ -279,11 +286,7 @@ impl WorkspaceActor {
     async fn load_columns(&mut self, req: RequestId, object: ObjectRef) {
         let r = async {
             let sh = self.shared.clone().ok_or_else(not_connected)?;
-            let key = if sh.driver.kind() == DriverKind::Postgres {
-                object.database.clone()
-            } else {
-                self.home.clone()
-            };
+            let key = self.metadata_key(sh.driver.kind(), &object.database);
             self.ensure_metadata(&key).await?;
             let s = self.sessions.get_mut(&key).ok_or_else(not_connected)?;
             sh.driver.introspector().columns(s.as_mut(), &object).await
@@ -306,7 +309,7 @@ impl WorkspaceActor {
         match self.children(&database, schema.as_deref(), kind).await {
             Ok(items) => self.out.emit(Event::Children { req, items }),
             Err((key, e)) => {
-                if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
+                if e.kind.ends_session() {
                     self.mark_down(key);
                 }
                 tracing::warn!("children load failed: {}", e.message);
@@ -329,12 +332,11 @@ impl WorkspaceActor {
             return Err((String::new(), not_connected()));
         };
         let listing_dbs = matches!(kind, None | Some(ObjectKind::Database));
-        let key =
-            if sh.driver.kind() == DriverKind::Postgres && !database.is_empty() && !listing_dbs {
-                database.to_string()
-            } else {
-                self.home.clone()
-            };
+        let key = if listing_dbs {
+            self.home.clone()
+        } else {
+            self.metadata_key(sh.driver.kind(), database)
+        };
         self.ensure_metadata(&key)
             .await
             .map_err(|e| (key.clone(), e))?;
@@ -386,20 +388,9 @@ fn only_home(v: Vec<String>, home: &str, kind: DriverKind) -> Result<Vec<String>
     // ponytail: PG template databases connect but `databases()` filters
     // `NOT datistemplate`, so they are reported missing; upgrade by letting the
     // introspector expose templates if that ever matters.
-    Err(DriverError {
-        kind: ErrorKind::Query {
-            code: None,
-            position: None,
-        },
-        message: format!("database \"{home}\" not found on server"),
-    })
-}
-
-fn not_connected() -> DriverError {
-    DriverError {
-        kind: ErrorKind::Connect,
-        message: "workspace is not connected".into(),
-    }
+    Err(DriverError::query(format!(
+        "database \"{home}\" not found on server"
+    )))
 }
 
 async fn open(

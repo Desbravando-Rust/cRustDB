@@ -4,7 +4,9 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crustdb_core::driver::{CancelHandle, ExecMode, ResultHeader, Session, SessionPurpose};
+use crustdb_core::driver::{
+    CancelHandle, ExecMode, ResultHeader, Session, SessionPurpose, fetch_up_to,
+};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{Completion, DriverKind, ObjectKind, ObjectRef, Row};
 use crustdb_core::safety::{Assessment, EstimateNeed, SafetyPolicy, estimate_need};
@@ -33,9 +35,8 @@ use crate::storage::history::{HistoryEntry, now_iso8601};
 /// D37: a paused cursor idle for this long is finished.
 const PAUSE_TIMEOUT: Duration = Duration::from_secs(300);
 /// Answer to an `Execute` whose evaluation is unknown or already used.
-pub(crate) const STALE_EVALUATION: &str =
-    "unknown or already used evaluation; nothing was executed";
-pub(crate) const LOST: &str = "Connection lost — open transaction was rolled back by the server";
+const STALE_EVALUATION: &str = "unknown or already used evaluation; nothing was executed";
+const LOST: &str = "Connection lost — open transaction was rolled back by the server";
 
 /// The last statement's cursor, left open for `LoadMore`.
 struct Paused {
@@ -141,7 +142,7 @@ impl EditorActor {
                 req, evaluation, ..
             } => match self.pending.take_if(|(id, _)| *id == evaluation) {
                 Some((_, stmts)) => self.execute(inbox, req, stmts).await,
-                None => self.notice(STALE_EVALUATION.into()),
+                None => self.stopped(STALE_EVALUATION),
             },
             Command::LoadMore { .. } => self.load_more(inbox).await,
             Command::Tx { op, .. } => {
@@ -153,6 +154,13 @@ impl EditorActor {
             _ => {}
         }
         true
+    }
+
+    fn stopped(&self, text: &str) {
+        self.out.emit(Event::RunStopped {
+            tab: self.tab,
+            text: text.into(),
+        });
     }
 
     fn notice(&self, text: String) {
@@ -186,7 +194,7 @@ impl EditorActor {
         self.paused = None;
         self.kept = None;
         self.tx = TxState::Idle;
-        self.notice(LOST.into());
+        self.stopped(LOST);
         self.out.emit(Event::TxChanged {
             tab: self.tab,
             state: TxState::Idle,
@@ -200,10 +208,11 @@ impl EditorActor {
     }
 
     async fn ensure_session(&mut self) -> Result<Arc<Shared>, DriverError> {
-        let shared = self.shared.borrow().clone().ok_or_else(|| DriverError {
-            kind: ErrorKind::Connect,
-            message: "workspace is not connected".into(),
-        })?;
+        let shared = self
+            .shared
+            .borrow()
+            .clone()
+            .ok_or_else(crate::actors::not_connected)?;
         if self.session.is_none() {
             let target = match &self.database {
                 Some(db) => shared.target_for(db),
@@ -234,7 +243,10 @@ impl EditorActor {
 
     async fn expire_cursor(&mut self) {
         match self.finish_paused().await {
-            Ok(()) => self.notice("Paused result closed after 5 minutes idle".into()),
+            Ok(()) => self.notice(format!(
+                "Paused result closed after {} minutes idle",
+                PAUSE_TIMEOUT.as_secs() / 60
+            )),
             Err(e) => self.failed(&e),
         }
     }
@@ -244,7 +256,7 @@ impl EditorActor {
         let Some(shared) = self.shared.borrow().clone() else {
             return self.out.emit(Event::EvaluateFailed {
                 req,
-                text: "workspace is not connected".into(),
+                text: crate::actors::NOT_CONNECTED.into(),
             });
         };
         let kind = shared.driver.kind();
@@ -324,26 +336,25 @@ impl EditorActor {
             EstimateNeed::None => return None,
             EstimateNeed::Explain => s.explain_rows(sql).await,
             EstimateNeed::TableRows => {
-                let pg = shared.driver.kind() == DriverKind::Postgres;
+                let schemas = shared.driver.kind().has_schemas();
                 // The classifier keeps only the first table: a list or CASCADE (which reaches
                 // other tables) leaves the total unknown. PG resolves an unqualified name by
                 // search_path/temp tables, which the introspector cannot reproduce.
                 let cascade = sql
                     .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
                     .any(|w| w.eq_ignore_ascii_case("cascade"));
-                let t = c
-                    .target
-                    .as_ref()
-                    .filter(|t| !sql.contains(',') && !cascade && !(pg && t.qualifier.is_none()))?;
+                let t = c.target.as_ref().filter(|t| {
+                    !sql.contains(',') && !cascade && !(schemas && t.qualifier.is_none())
+                })?;
                 let o = ObjectRef {
                     database: t
                         .qualifier
                         .clone()
-                        .filter(|_| !pg)
+                        .filter(|_| !schemas)
                         .or_else(|| self.database.clone())
                         .or_else(|| shared.target.database.clone())
                         .unwrap_or_default(),
-                    schema: t.qualifier.clone().filter(|_| pg),
+                    schema: t.qualifier.clone().filter(|_| schemas),
                     name: t.name.clone(),
                     kind: ObjectKind::Table,
                 };
@@ -354,9 +365,8 @@ impl EditorActor {
             Ok(n) => n,
             Err(e) => {
                 self.failed(&e);
-                // A failed statement aborts an open PG transaction on the server.
                 if e.kind != ErrorKind::Connect
-                    && shared.driver.kind() == DriverKind::Postgres
+                    && shared.driver.kind().error_aborts_tx()
                     && self.tx == TxState::Open
                 {
                     self.set_tx(TxState::Aborted);

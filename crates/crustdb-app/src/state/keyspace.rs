@@ -13,6 +13,9 @@ use crate::runtime::{Command, Event, RequestId, WorkspaceId};
 
 const SEP: &str = ":";
 
+/// Namespace a store connection opens when none is configured.
+pub const DEFAULT_NAMESPACE: &str = "0";
+
 /// One visible row of the key tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlatNode {
@@ -263,12 +266,6 @@ fn flatten(
 }
 
 impl AppState {
-    /// Request id for commands issued from `apply`, which has no runtime to ask.
-    pub(super) fn internal_req(&mut self) -> RequestId {
-        self.next_exec += 1;
-        RequestId(self.next_exec)
-    }
-
     /// Entry point for `Intent::SelectNamespace`; refused while a command runs or awaits approval.
     pub fn select_namespace(&mut self, ws: WorkspaceId, ns: &str) -> Vec<Command> {
         let req = self.internal_req();
@@ -287,7 +284,11 @@ impl AppState {
         let Some(w) = self.workspace_mut(ws) else {
             return;
         };
-        let db = w.config.database.clone().unwrap_or_else(|| "0".into());
+        let db = w
+            .config
+            .database
+            .clone()
+            .unwrap_or_else(|| DEFAULT_NAMESPACE.into());
         if let Some(ks) = w.keyspace.as_mut() {
             let epoch = ks.epoch + 1;
             *ks = Keyspace::new(ws, db);

@@ -6,13 +6,6 @@ use tokio::sync::{mpsc, oneshot};
 use crate::conn_task;
 use crate::session::SqliteSession;
 
-pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
-    DriverError {
-        kind,
-        message: message.into(),
-    }
-}
-
 pub(crate) fn map_err(e: rusqlite::Error) -> DriverError {
     let message = e.to_string();
     let kind = match &e {
@@ -29,7 +22,7 @@ pub(crate) fn map_err(e: rusqlite::Error) -> DriverError {
             position: None,
         },
     };
-    err(kind, message)
+    DriverError::new(kind, message)
 }
 
 /// Opens an existing file only (never creates one). Non-editor sessions are read-only.
@@ -41,7 +34,7 @@ pub(crate) async fn connect(
         .database
         .clone()
         .filter(|d| !d.is_empty())
-        .ok_or_else(|| err(ErrorKind::Connect, "no SQLite database file set"))?;
+        .ok_or_else(|| DriverError::new(ErrorKind::Connect, "no SQLite database file set"))?;
     let mode = if purpose == SessionPurpose::Editor {
         OpenFlags::SQLITE_OPEN_READ_WRITE
     } else {
@@ -53,9 +46,9 @@ pub(crate) async fn connect(
     let thread = std::thread::Builder::new()
         .name("crustdb-sqlite".into())
         .spawn(move || conn_task::run(path, flags, ready, rx))
-        .map_err(|e| err(ErrorKind::Connect, e.to_string()))?;
+        .map_err(|e| DriverError::new(ErrorKind::Connect, e.to_string()))?;
     let (interrupt, raw_version) = ready_rx
         .await
-        .map_err(|_| err(ErrorKind::Connect, "connection thread ended"))??;
+        .map_err(|_| DriverError::new(ErrorKind::Connect, "connection thread ended"))??;
     Ok(SqliteSession::new(tx, thread, interrupt, raw_version))
 }

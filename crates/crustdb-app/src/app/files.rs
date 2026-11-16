@@ -3,13 +3,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crustdb_core::model::{ConnectionId, DriverKind};
+use crustdb_core::model::ConnectionId;
 
 use super::CrustApp;
 use crate::runtime::{Command, Event, TabId};
 use crate::state::Dialog;
 use crate::state::connection_form::ConnectionForm;
-use crate::storage::secrets::{SecretKind, account};
 use crate::ui::Intent;
 use crate::ui::history_panel::HistoryPanel;
 use crate::ui::picker::Pick;
@@ -67,15 +66,7 @@ impl CrustApp {
         let labels = self.state.config.labels.clone();
         match self.state.confirm_delete(|rest| store.save(rest, &labels)) {
             Ok(Some(id)) => {
-                for kind in [
-                    SecretKind::Db,
-                    SecretKind::SshPassword,
-                    SecretKind::SshPassphrase,
-                ] {
-                    if let Err(e) = self.secrets.delete(&account(id, kind)) {
-                        tracing::warn!("keyring delete failed: {e}");
-                    }
-                }
+                self.forget_secrets(id);
             }
             Ok(None) => {}
             Err(e) => {
@@ -159,7 +150,11 @@ impl CrustApp {
         else {
             return;
         };
-        let mut entries = self.history_store.load(w.config.id).unwrap_or_default();
+        let mut entries = self
+            .history_store
+            .load(w.config.id)
+            .inspect_err(|e| tracing::warn!("history load failed: {e}"))
+            .unwrap_or_default();
         entries.reverse();
         self.history = Some(HistoryPanel {
             entries,
@@ -208,7 +203,7 @@ impl CrustApp {
 // ponytail: keyed by the draft's connection id, so reopening the same connection's edit
 // form before the dialog closes still takes the pick; add a form generation if that matters.
 fn apply_sqlite_pick(form: Option<&mut ConnectionForm>, id: ConnectionId, path: &std::path::Path) {
-    if let Some(f) = form.filter(|f| f.draft.id == id && f.draft.driver == DriverKind::Sqlite) {
+    if let Some(f) = form.filter(|f| f.draft.id == id && f.draft.driver.is_file()) {
         f.draft.database = Some(path.to_string_lossy().into_owned());
     }
 }
@@ -228,6 +223,7 @@ fn export_file_name(table: &str) -> String {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crustdb_core::model::DriverKind;
 
     #[test]
     fn export_file_name_replaces_invalid_characters() {
@@ -257,15 +253,6 @@ mod tests {
 
         // Assert
         assert_eq!(f.draft.database.as_deref(), Some("/tmp/a.db"));
-    }
-
-    #[test]
-    fn sqlite_pick_without_form_is_dropped() {
-        // Arrange
-        let id = sqlite_form().draft.id;
-
-        // Act & Assert
-        apply_sqlite_pick(None, id, std::path::Path::new("/tmp/a.db"));
     }
 
     #[test]

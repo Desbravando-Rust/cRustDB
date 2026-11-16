@@ -4,7 +4,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crustdb_core::driver::TlsConfig;
+use crustdb_core::driver::{TlsConfig, TlsMode};
 use crustdb_core::model::{ConnectionId, DriverKind};
 use serde::{Deserialize, Serialize};
 
@@ -71,6 +71,14 @@ pub struct ConnectionConfig {
     /// Redis key-tree separator; `None` means ":".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_separator: Option<String>,
+}
+
+impl ConnectionConfig {
+    /// Client certificates (mTLS) apply: PostgreSQL/MySQL with TLS on.
+    pub fn uses_client_cert(&self) -> bool {
+        matches!(self.driver, DriverKind::Postgres | DriverKind::Mysql)
+            && self.tls.mode != TlsMode::Disable
+    }
 }
 
 /// Accepts `label` (string) and legacy `labels` (array -> first string); anything else is `None`.
@@ -264,8 +272,7 @@ pub fn validate(c: &ConnectionConfig, others: &[ConnectionConfig]) -> Result<(),
     } else if others.iter().any(|o| o.id != c.id && o.name == c.name) {
         bad("name", "name already in use");
     }
-    if c.driver == DriverKind::Sqlite {
-        // A file, not a server: host and port are unused.
+    if c.driver.is_file() {
         if c.database.as_deref().is_none_or(|d| d.trim().is_empty()) {
             bad("database", "database file is required");
         }

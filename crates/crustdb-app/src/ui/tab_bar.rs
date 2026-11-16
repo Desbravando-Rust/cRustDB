@@ -3,11 +3,11 @@ use eframe::egui;
 
 use super::Intent;
 use crate::runtime::TxState;
-use crate::state::{Tab, WorkspaceState};
+use crate::state::WorkspaceState;
 
 pub fn show(ui: &mut egui::Ui, w: &WorkspaceState) -> Vec<Intent> {
     let mut out = vec![];
-    let tables = w.tabs.iter().map(|Tab::Table(t)| {
+    let tables = w.tabs.iter().map(|t| {
         (
             t.id,
             format!("{} Data: {}", egui_phosphor::regular::TABLE, t.object.name),
@@ -107,8 +107,7 @@ mod tests {
             kind: ObjectKind::Table,
         };
         let w = s.workspace_mut(ws).unwrap();
-        w.tabs
-            .push(Tab::Table(TableTab::new(TabId(1), object, 100)));
+        w.tabs.push(TableTab::new(TabId(1), object, 100));
         let mut done = false;
         let mut h = Harness::new_ui(|ui| {
             if crate::ui::home::tests::ready(ui, &mut done) {
@@ -133,10 +132,8 @@ mod tests {
             kind: ObjectKind::Table,
         };
         let w = s.workspace_mut(ws).unwrap();
-        w.tabs
-            .push(Tab::Table(TableTab::new(TabId(1), object("users"), 100)));
-        w.tabs
-            .push(Tab::Table(TableTab::new(TabId(2), object("orders"), 100)));
+        w.tabs.push(TableTab::new(TabId(1), object("users"), 100));
+        w.tabs.push(TableTab::new(TabId(2), object("orders"), 100));
         w.active_tab = Some(TabId(1));
         s
     }
@@ -182,8 +179,7 @@ mod tests {
                 name: "users".into(),
                 kind: ObjectKind::Table,
             };
-            w.tabs
-                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+            w.tabs.push(TableTab::new(TabId(id), object, 100));
         }
         let mut done = false;
         let mut got = vec![];
@@ -217,8 +213,7 @@ mod tests {
                 name: "users".into(),
                 kind: ObjectKind::Table,
             };
-            w.tabs
-                .push(Tab::Table(TableTab::new(TabId(id), object, 100)));
+            w.tabs.push(TableTab::new(TabId(id), object, 100));
         }
         let mut q1 =
             crate::state::QueryTab::new(TabId(3), crustdb_core::model::DriverKind::Postgres, None);

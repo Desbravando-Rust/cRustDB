@@ -90,7 +90,7 @@ pub(in crate::actors) fn starts(h: &H) -> Vec<String> {
 pub(in crate::actors) fn notices(ev: &[Event]) -> Vec<&str> {
     ev.iter()
         .filter_map(|e| match e {
-            Event::Notice { text, .. } => Some(text.as_str()),
+            Event::Notice { text, .. } | Event::RunStopped { text, .. } => Some(text.as_str()),
             _ => None,
         })
         .collect()

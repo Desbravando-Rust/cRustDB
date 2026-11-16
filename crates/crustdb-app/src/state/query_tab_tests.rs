@@ -149,9 +149,9 @@ fn running_spans_the_batch_and_stop_clears_it() {
         text: "implicit commit: x".into(),
     });
     assert!(t.running.is_some());
-    t.apply(&Event::Notice {
+    t.apply(&Event::RunStopped {
         tab: t.id,
-        text: "Connection lost — open transaction was rolled back by the server".into(),
+        text: "lost".into(),
     });
     assert_eq!(t.running, None);
 }
@@ -257,9 +257,9 @@ fn stale_evaluation_notice_clears_running() {
     started(&mut t, 7);
 
     // Act
-    t.apply(&Event::Notice {
+    t.apply(&Event::RunStopped {
         tab: t.id,
-        text: STALE_EVALUATION.into(),
+        text: "stale".into(),
     });
 
     // Assert
@@ -337,6 +337,17 @@ fn db_selector_disabled_with_open_tx_on_pg() {
 }
 
 #[test]
+fn sqlite_switches_database_inside_a_transaction() {
+    // Arrange
+    let mut t = tab("");
+    t.driver = DriverKind::Sqlite;
+    t.tx = TxState::Open;
+
+    // Act & Assert
+    assert!(t.can_switch_db());
+}
+
+#[test]
 fn tx_badge_state_follows_event() {
     // Arrange
     let mut t = tab("");
@@ -361,15 +372,6 @@ fn highlight_disabled_above_1mib_or_750_lines() {
     assert!(!highlight_enabled(&"a".repeat(HIGHLIGHT_MAX_BYTES + 1)));
     assert!(highlight_enabled(&"\n".repeat(HIGHLIGHT_MAX_LINES - 1)));
     assert!(!highlight_enabled(&"\n".repeat(HIGHLIGHT_MAX_LINES)));
-}
-
-#[test]
-fn current_statement_range_for_background() {
-    // Arrange
-    let t = tab("select 1;\n  select 2;");
-
-    // Act & Assert
-    assert_eq!(t.current_range(15), Some(12..20));
 }
 
 #[test]
@@ -415,9 +417,9 @@ fn actor_crash_and_lost_notice_show_messages_tab() {
 
     // Act
     crashed.apply(&Event::ActorCrashed { tab: crashed.id });
-    lost.apply(&Event::Notice {
+    lost.apply(&Event::RunStopped {
         tab: lost.id,
-        text: STALE_EVALUATION.into(),
+        text: "lost".into(),
     });
 
     // Assert

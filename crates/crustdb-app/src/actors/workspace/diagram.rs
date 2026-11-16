@@ -1,8 +1,9 @@
 //! ER diagram lookup on the Metadata session.
-use crustdb_core::error::{DriverError, ErrorKind};
-use crustdb_core::model::{DriverKind, ObjectKind};
+use crustdb_core::error::DriverError;
+use crustdb_core::model::ObjectKind;
 
-use super::{NO_TAB, WorkspaceActor, not_connected};
+use super::WorkspaceActor;
+use crate::actors::not_connected;
 use crate::runtime::{DiagramTable, Event, RequestId};
 
 impl WorkspaceActor {
@@ -13,17 +14,15 @@ impl WorkspaceActor {
         database: String,
         schema: Option<String>,
     ) {
-        let tables = match self.diagram(&database, schema.as_deref()).await {
-            Ok(t) => Some(t),
-            Err((key, e)) => {
-                if matches!(e.kind, ErrorKind::Connect | ErrorKind::Protocol) {
+        let tables = self
+            .diagram(&database, schema.as_deref())
+            .await
+            .map_err(|(key, e)| {
+                if e.kind.ends_session() {
                     self.mark_down(key);
                 }
-                let text = e.message;
-                self.out.emit(Event::Notice { tab: NO_TAB, text });
-                None
-            }
-        };
+                e.message
+            });
         self.out.emit(Event::Diagram { req, tables });
     }
 
@@ -35,11 +34,7 @@ impl WorkspaceActor {
         let Some(sh) = self.shared.clone() else {
             return Err((String::new(), not_connected()));
         };
-        let key = if sh.driver.kind() == DriverKind::Postgres {
-            database.to_string()
-        } else {
-            self.home.clone()
-        };
+        let key = self.metadata_key(sh.driver.kind(), database);
         let err = |e| (key.clone(), e);
         self.ensure_metadata(&key).await.map_err(err)?;
         let s = self

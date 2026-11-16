@@ -2,12 +2,8 @@
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
-use crustdb_core::dialect::Dialect;
 use crustdb_core::format::hex_preview;
 use crustdb_core::model::{Cell, ColumnMeta, DriverKind, TypeCategory};
-use crustdb_mysql::MysqlDialect;
-use crustdb_postgres::PgDialect;
-use crustdb_sqlite::SqliteDialect;
 
 use crate::csv_out::CsvOut;
 
@@ -32,16 +28,6 @@ impl Format {
             "sql" => Some(Self::Sql),
             _ => None,
         }
-    }
-}
-
-pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
-    match kind {
-        DriverKind::Postgres => &PgDialect,
-        DriverKind::Mysql => &MysqlDialect,
-        DriverKind::Sqlite => &SqliteDialect,
-        // unreachable: the Capabilities gate (#166) keeps Redis out of SQL paths
-        DriverKind::Redis => &PgDialect,
     }
 }
 
@@ -74,7 +60,7 @@ impl<W: Write> Out<W> {
                 if *kind == DriverKind::Postgres {
                     writeln!(w, "SET standard_conforming_strings = on;")?;
                 }
-                let d = dialect(*kind);
+                let d = crate::runtime::dialect(*kind);
                 let names: Vec<String> = cols.iter().map(|c| d.quote_ident(&c.name)).collect();
                 *prefix = format!("INSERT INTO {table} ({}) VALUES (", names.join(", "));
                 Ok(())

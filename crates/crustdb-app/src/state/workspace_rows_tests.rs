@@ -3,7 +3,7 @@ use crustdb_core::model::{Cell, ColumnMeta, ObjectKind, ObjectRef, TypeCategory}
 
 use crate::runtime::{Command, RequestId, TabId};
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Dialog, Tab};
+use crate::state::{AppState, Dialog};
 
 /// Workspace with a keyed `t(id)` tab of two rows, both selected.
 fn setup() -> (AppState, TabId) {
@@ -16,7 +16,7 @@ fn setup() -> (AppState, TabId) {
         kind: ObjectKind::Table,
     };
     s.open_table(ws, object, RequestId(1));
-    let Some(Tab::Table(t)) = s.workspace_mut(ws).unwrap().tabs.first_mut() else {
+    let Some(t) = s.workspace_mut(ws).unwrap().tabs.first_mut() else {
         panic!("no tab");
     };
     t.columns = vec![ColumnMeta {

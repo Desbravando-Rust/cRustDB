@@ -1,5 +1,5 @@
 use super::dialogs::Dialog;
-use super::workspace::{AppState, Tab};
+use super::workspace::AppState;
 use crate::runtime::{Command, TabId, TxOp, TxState, WorkspaceId};
 
 impl AppState {
@@ -21,7 +21,7 @@ impl AppState {
             .iter()
             .filter(|w| w.id == ws)
             .flat_map(|w| &w.tabs)
-            .filter(|Tab::Table(t)| t.has_pending())
+            .filter(|t| t.has_pending())
             .count();
         if !has_tx && pending_rows == 0 {
             return false;

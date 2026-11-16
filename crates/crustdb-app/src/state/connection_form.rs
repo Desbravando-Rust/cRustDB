@@ -38,6 +38,8 @@ pub struct ConnectionForm {
     pub url_error: Option<String>,
 }
 
+pub const KEYRING_UNAVAILABLE: &str = "OS keyring unavailable: passwords cannot be saved";
+
 pub fn default_port(driver: DriverKind) -> u16 {
     match driver {
         DriverKind::Postgres => 5432,
@@ -181,7 +183,7 @@ impl ConnectionForm {
     }
 
     pub fn keyring_hint(&self) -> Option<&'static str> {
-        (!self.keyring_available).then_some("OS keyring unavailable: passwords cannot be saved")
+        (!self.keyring_available).then_some(KEYRING_UNAVAILABLE)
     }
 
     fn saves_secrets(&self) -> bool {
@@ -192,16 +194,12 @@ impl ConnectionForm {
         let mut c = self.draft.clone();
         c.save_password = self.saves_secrets();
         c.database = c.database.filter(|d| !d.is_empty());
-        if c.driver == DriverKind::Sqlite {
-            // A local file: no tunnel, CA or saved password.
+        if c.driver.is_file() {
             c.ssh = None;
             c.tls.ca_path = None;
             c.save_password = false;
         }
-        if matches!(c.driver, DriverKind::Sqlite | DriverKind::Redis)
-            || c.tls.mode == TlsMode::Disable
-        {
-            // mTLS is PostgreSQL/MySQL with TLS on; the rows are hidden otherwise.
+        if !c.uses_client_cert() {
             c.tls.client_cert_path = None;
             c.tls.client_key_path = None;
         }

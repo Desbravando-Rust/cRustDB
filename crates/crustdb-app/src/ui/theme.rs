@@ -13,6 +13,10 @@ pub const INPUT_FILL: egui::Color32 = egui::Color32::from_gray(40);
 
 /// Green of the "online" status dot and the "Connected" badge text.
 pub const ONLINE: egui::Color32 = egui::Color32::from_rgb(34, 197, 94);
+/// Green of success states: saved edits, the active connection, a clean status.
+pub const SUCCESS: egui::Color32 = egui::Color32::from_rgb(90, 190, 110);
+/// Amber of pending or warning states.
+pub const WARNING: egui::Color32 = egui::Color32::from_rgb(230, 170, 60);
 /// Background of the "Connected" badge (dark pill).
 pub const BADGE_FILL: egui::Color32 = egui::Color32::from_rgb(15, 18, 26);
 

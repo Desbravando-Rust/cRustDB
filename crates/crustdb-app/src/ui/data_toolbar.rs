@@ -29,7 +29,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             icon::FUNNEL
         )));
         filters.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, FILTERS_LABEL));
-        if filters.on_hover_text("Filters (Ctrl+F)").clicked() {
+        if filters
+            .on_hover_text(crate::keymap::hint(
+                ui.ctx(),
+                "Filters",
+                crate::keymap::Action::Filter,
+            ))
+            .clicked()
+        {
             tab.toggle_filter_bar();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -54,7 +61,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
             let reload = ui.add_enabled(!tab.is_loading(), round(icon::ARROW_CLOCKWISE));
             reload
                 .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, RELOAD_LABEL));
-            if reload.on_hover_text("Reload page (F5)").clicked() {
+            if reload
+                .on_hover_text(crate::keymap::hint(
+                    ui.ctx(),
+                    "Reload page",
+                    crate::keymap::Action::Refresh,
+                ))
+                .clicked()
+            {
                 out.push(Intent::Retry(id));
             }
             let block = write_block(tab);

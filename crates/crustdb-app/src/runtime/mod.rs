@@ -1,9 +1,11 @@
 //! Bridge between the egui thread and the tokio runtime: `Command` in, `Event` out.
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 
+use crustdb_core::dialect::Dialect;
 use crustdb_core::driver::Driver;
 use crustdb_core::model::{DriverKind, Row};
 use crustdb_core::store::StoreDriver;
@@ -32,8 +34,7 @@ impl Backend {
 }
 
 #[derive(Default)]
-// `DriverKind` has no `Hash`; a few entries at most, so a Vec lookup is enough.
-pub struct DriverRegistry(Vec<Backend>);
+pub struct DriverRegistry(HashMap<DriverKind, Backend>);
 
 impl DriverRegistry {
     pub fn with(self, driver: Arc<dyn Driver>) -> Self {
@@ -45,13 +46,12 @@ impl DriverRegistry {
     }
 
     fn backend(mut self, b: Backend) -> Self {
-        self.0.retain(|d| d.kind() != b.kind());
-        self.0.push(b);
+        self.0.insert(b.kind(), b);
         self
     }
 
     pub fn get(&self, kind: DriverKind) -> Option<Backend> {
-        self.0.iter().find(|d| d.kind() == kind).cloned()
+        self.0.get(&kind).cloned()
     }
 }
 
@@ -62,6 +62,17 @@ pub fn drivers() -> DriverRegistry {
         .with(Arc::new(crustdb_mysql::MysqlDriver))
         .with(Arc::new(crustdb_sqlite::SqliteDriver))
         .with_store(Arc::new(crustdb_redis::RedisDriver))
+}
+
+/// SQL dialect of a shipped driver, for code that has only the kind.
+pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
+    match kind {
+        DriverKind::Postgres => &crustdb_postgres::PgDialect,
+        DriverKind::Mysql => &crustdb_mysql::MysqlDialect,
+        DriverKind::Sqlite => &crustdb_sqlite::SqliteDialect,
+        // unreachable: the Capabilities gate (#166) keeps Redis out of SQL paths
+        DriverKind::Redis => &crustdb_postgres::PgDialect,
+    }
 }
 
 /// Sends events to the UI and wakes it up.
@@ -209,7 +220,7 @@ fn no_actor(cmd: &Command) -> Event {
         LoadChildren { req, .. } => {
             return Event::ChildrenFailed {
                 req: *req,
-                error: "workspace is not connected".into(),
+                error: crate::actors::NOT_CONNECTED.into(),
             };
         }
         Disconnect { .. }

@@ -17,7 +17,7 @@ pub struct Diagram {
     pub title: String,
     /// `None` while loading or after a failure.
     pub tables: Option<Vec<DiagramTable>>,
-    pub failed: bool,
+    pub error: Option<String>,
 }
 
 impl Diagram {
@@ -26,13 +26,15 @@ impl Diagram {
             req,
             title,
             tables: None,
-            failed: false,
+            error: None,
         }
     }
 
-    pub fn apply(&mut self, tables: Option<Vec<DiagramTable>>) {
-        self.failed = tables.is_none();
-        self.tables = tables;
+    pub fn apply(&mut self, tables: Result<Vec<DiagramTable>, String>) {
+        (self.tables, self.error) = match tables {
+            Ok(t) => (Some(t), None),
+            Err(e) => (None, Some(e)),
+        };
     }
 }
 
@@ -198,23 +200,23 @@ mod tests {
         ));
         s.apply(Event::Diagram {
             req: RequestId(2),
-            tables: Some(vec![]),
+            tables: Ok(vec![]),
         });
         let d = |s: &mut crate::state::AppState| s.workspace_mut(ws).unwrap().diagram.take();
         let pending = d(&mut s).unwrap();
-        assert!(pending.tables.is_none() && !pending.failed);
+        assert!(pending.tables.is_none() && pending.error.is_none());
         s.workspace_mut(ws).unwrap().diagram = Some(pending);
         s.apply(Event::Diagram {
             req: RequestId(3),
-            tables: Some(vec![table("t", 1, &[])]),
+            tables: Ok(vec![table("t", 1, &[])]),
         });
         let loaded = d(&mut s).unwrap();
         assert_eq!(loaded.tables.map(|t| t.len()), Some(1));
         s.workspace_mut(ws).unwrap().diagram = Some(Diagram::new(RequestId(4), "x".into()));
         s.apply(Event::Diagram {
             req: RequestId(4),
-            tables: None,
+            tables: Err("boom".into()),
         });
-        assert!(d(&mut s).unwrap().failed);
+        assert_eq!(d(&mut s).unwrap().error.as_deref(), Some("boom"));
     }
 }

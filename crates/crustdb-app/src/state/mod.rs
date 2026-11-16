@@ -28,8 +28,8 @@ mod workspace_fk;
 mod workspace_rows;
 
 pub use dialogs::{Dialog, DialogStack};
-pub use workspace::{AppState, Status, Tab, WorkspaceState};
+pub use workspace::{AppState, Status, WorkspaceState};
 pub mod table_tab;
-mod table_tab_edit;
+pub mod table_tab_edit;
 pub use query_tab::QueryTab;
 pub use table_tab::{Structure, TableTab, TableView};

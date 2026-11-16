@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::runtime::{Command, Event, RequestId, TabId, TxOp, TxState, WorkspaceId};
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Dialog, Tab};
+use crate::state::{AppState, Dialog};
 use crustdb_core::model::{ObjectKind, ObjectRef};
 
 fn table_ref() -> ObjectRef {
@@ -74,7 +74,7 @@ fn request_disconnect_with_pending_edit_asks() {
         kind: ObjectKind::Table,
     };
     s.open_table(ws, object, RequestId(1));
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first_mut() else {
+    let Some(t) = s.workspaces[0].tabs.first_mut() else {
         panic!("expected table tab");
     };
     t.pending.push((0, Some("x".into())));
@@ -235,7 +235,7 @@ fn new_pending_edit_during_resolve_reopens_dialog() {
     s.request_disconnect(ws);
     s.resolve_disconnect(TxOp::Commit);
     s.open_table(ws, table_ref(), RequestId(1));
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first_mut() else {
+    let Some(t) = s.workspaces[0].tabs.first_mut() else {
         panic!("expected table tab");
     };
     t.pending.push((0, Some("x".into())));
@@ -316,7 +316,7 @@ fn cancel_disconnect_keeps_tx_and_pending_edit() {
     // Arrange
     let (mut s, ws, _) = with_tx();
     s.open_table(ws, table_ref(), RequestId(1));
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first_mut() else {
+    let Some(t) = s.workspaces[0].tabs.first_mut() else {
         panic!("expected table tab");
     };
     t.pending.push((0, Some("x".into())));
@@ -330,7 +330,7 @@ fn cancel_disconnect_keeps_tx_and_pending_edit() {
     assert!(s.dialogs.top().is_none());
     assert_eq!(s.workspaces.len(), 1);
     assert_eq!(s.workspaces[0].queries[0].tx, TxState::Open);
-    let Some(Tab::Table(t)) = s.workspaces[0].tabs.first() else {
+    let Some(t) = s.workspaces[0].tabs.first() else {
         panic!("expected table tab");
     };
     assert!(!t.pending.is_empty());

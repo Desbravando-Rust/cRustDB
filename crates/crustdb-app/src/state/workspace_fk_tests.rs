@@ -5,7 +5,7 @@ use crustdb_core::query::{Filter, Operator};
 use crate::runtime::{Command, RequestId, TabId, WorkspaceId};
 use crate::state::filter_draft::FilterDraft;
 use crate::state::workspace::tests::state;
-use crate::state::{AppState, Structure, Tab, TableTab, TableView};
+use crate::state::{AppState, Structure, TableTab, TableView};
 
 fn obj(name: &str) -> ObjectRef {
     ObjectRef {
@@ -58,7 +58,7 @@ fn setup(fks: Vec<ForeignKeyInfo>, row: Vec<Cell>) -> (AppState, WorkspaceId, Ta
     let ws = s.open_workspace(s.config.connections[0].clone());
     s.open_table(ws, obj("orders"), RequestId(1));
     let t = s.workspace_mut(ws).unwrap().tabs.remove(0);
-    let Tab::Table(mut t) = t;
+    let mut t = t;
     t.columns = vec![col("id"), col("customer_id"), col("region")];
     t.rows = vec![row.into()];
     t.structure = Some(Structure {
@@ -66,7 +66,7 @@ fn setup(fks: Vec<ForeignKeyInfo>, row: Vec<Cell>) -> (AppState, WorkspaceId, Ta
         ..Structure::default()
     });
     let id = t.id;
-    s.workspace_mut(ws).unwrap().tabs.push(Tab::Table(t));
+    s.workspace_mut(ws).unwrap().tabs.push(t);
     (s, ws, id)
 }
 
@@ -75,7 +75,6 @@ fn table<'a>(s: &'a mut AppState, ws: WorkspaceId, name: &str) -> &'a mut TableT
         .unwrap()
         .tabs
         .iter_mut()
-        .map(|Tab::Table(t)| t)
         .find(|t| t.object.name == name)
         .unwrap()
 }

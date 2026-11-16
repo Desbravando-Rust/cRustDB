@@ -5,8 +5,6 @@ use crustdb_core::error::{DriverError, ErrorKind};
 use rustls::pki_types::pem::{Error as PemError, PemObject};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
-use crate::connect::err;
-
 pub(crate) type ClientAuth = (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>);
 
 /// Client certificate chain and key (PEM) for mTLS; `None` when neither path is set.
@@ -16,7 +14,7 @@ pub(crate) fn client_auth(tls: &TlsConfig) -> Result<Option<ClientAuth>, DriverE
         (None, None) => return Ok(None),
         (Some(c), Some(k)) => (c, k),
         _ => {
-            return Err(err(
+            return Err(DriverError::new(
                 ErrorKind::Tls,
                 "client certificate and client key must be set together",
             ));
@@ -27,7 +25,7 @@ pub(crate) fn client_auth(tls: &TlsConfig) -> Result<Option<ClientAuth>, DriverE
 
 fn load_chain(path: &Path) -> Result<Vec<CertificateDer<'static>>, DriverError> {
     let bad = |e: PemError| {
-        err(
+        DriverError::new(
             ErrorKind::Tls,
             format!("cannot read client certificate {}: {e}", path.display()),
         )
@@ -37,7 +35,7 @@ fn load_chain(path: &Path) -> Result<Vec<CertificateDer<'static>>, DriverError> 
         .collect::<Result<Vec<_>, _>>()
         .map_err(bad)?;
     if chain.is_empty() {
-        return Err(err(
+        return Err(DriverError::new(
             ErrorKind::Tls,
             format!("no certificate in {}", path.display()),
         ));
@@ -54,7 +52,7 @@ fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>, DriverError> {
             ),
             e => format!("cannot read client key {}: {e}", path.display()),
         };
-        err(ErrorKind::Tls, message)
+        DriverError::new(ErrorKind::Tls, message)
     })
 }
 

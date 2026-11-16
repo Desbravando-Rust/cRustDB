@@ -191,10 +191,7 @@ pub(crate) fn namespaces_from_keyspace(info: &str, current: u32) -> Vec<String> 
 }
 
 fn protocol(message: &str) -> DriverError {
-    DriverError {
-        kind: ErrorKind::Protocol,
-        message: message.to_owned(),
-    }
+    DriverError::new(ErrorKind::Protocol, message)
 }
 
 #[cfg(test)]

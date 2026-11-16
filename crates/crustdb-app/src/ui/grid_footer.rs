@@ -2,8 +2,9 @@
 use eframe::egui::{self, Color32};
 
 use super::Intent;
-use super::grid::{AMBER, read_only_reason, write_block};
+use super::grid::write_block;
 use super::theme::ACCENT;
+use super::theme::WARNING;
 use crate::state::TableTab;
 use crustdb_core::model::ObjectKind;
 
@@ -45,7 +46,11 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
             }
             if ui
                 .add_enabled(!tab.is_loading(), egui::Button::new("Refresh"))
-                .on_hover_text("Refresh (F5)")
+                .on_hover_text(crate::keymap::hint(
+                    ui.ctx(),
+                    "Refresh",
+                    crate::keymap::Action::Refresh,
+                ))
                 .clicked()
             {
                 out.push(Intent::Retry(id));
@@ -62,7 +67,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
             }
             delete_button(ui, tab, &mut out);
             if tab.object.kind == ObjectKind::Table
-                && let Some(why) = read_only_reason(tab)
+                && let Some(why) = tab.read_only_reason()
             {
                 ui.colored_label(
                     Color32::YELLOW,
@@ -93,7 +98,7 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
                 ui.colored_label(ui.visuals().error_fg_color, n);
             }
             if tab.unordered() {
-                ui.colored_label(AMBER, "unordered");
+                ui.colored_label(WARNING, "unordered");
             }
         });
     });

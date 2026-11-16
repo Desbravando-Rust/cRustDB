@@ -4,7 +4,7 @@ use eframe::egui;
 use crate::news::News;
 use egui_phosphor::regular as icon;
 
-const SITE_URL: &str = "https://desbravandorust.com.br/";
+use super::home::BOOK_URL as SITE_URL;
 /// Measured in `ui_smoke`: at a 900x700 window the central area is ~566x563 (sidebar, top bar,
 /// status bar and metrics strip take the rest). The panel is drawn below the grid footer on purpose.
 /// Hide the panel when the central area is too small to leave room for the content above it.
@@ -28,13 +28,7 @@ fn book_card(ui: &mut egui::Ui) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
         ui.set_width(300.0);
         ui.horizontal_top(|ui| {
-            ui.add(
-                egui::Image::new(egui::include_image!(
-                    "../../../../assets/imgs/book-cover.png"
-                ))
-                .fit_to_exact_size(egui::vec2(80.0, 122.0))
-                .alt_text("Desbravando Rust book cover"),
-            );
+            ui.add(super::home::book_cover());
             ui.vertical(|ui| {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
