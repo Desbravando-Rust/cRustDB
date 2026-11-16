@@ -31,6 +31,7 @@ pub fn sidebar(ui: &mut egui::Ui, ks: &Keyspace) -> Vec<Intent> {
             .hint_text("pattern, e.g. user:*")
             .desired_width(f32::INFINITY),
     );
+    super::a11y::name_text(&r, "Key pattern");
     if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         out.push(Intent::KeyFilter(draft.clone()));
     }

@@ -167,7 +167,7 @@ fn table(
                         if let Some((Some((r, c, text)), op)) = edit.as_mut()
                             && (*r, *c) == (i, j)
                         {
-                            return edit_cell(ui, text, op);
+                            return edit_cell(ui, text, op, &meta.name);
                         }
                         if pending_row == Some(i)
                             && let Some((_, v)) = pending.iter().find(|(c, _)| *c == j)
@@ -228,12 +228,13 @@ fn table(
 }
 
 /// Focused single-line editor: Enter asks to commit, Esc or clicking away cancels.
-fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>) {
+fn edit_cell(ui: &mut egui::Ui, text: &mut String, op: &mut Option<CellOp>, column: &str) {
     let r = ui.add(
         egui::TextEdit::singleline(text)
             .hint_text("Cell value")
             .desired_width(f32::INFINITY),
     );
+    super::a11y::name_text(&r, format!("Edit cell {column}"));
     if r.lost_focus() {
         *op = Some(if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             // egui 0.37 reports `lost_focus` for two frames; refocus now so

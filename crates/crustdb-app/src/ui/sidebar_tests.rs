@@ -434,3 +434,21 @@ fn footer_shows_product_name() {
     // Assert
     h.get_by_label("cRustDB Desktop");
 }
+
+#[test]
+fn explorer_filter_is_named() {
+    // Arrange
+    let s = online();
+    let mut done = false;
+    let mut h = Harness::builder().build_ui(|ui| {
+        if ready(ui, &mut done) {
+            show(ui, &s);
+        }
+    });
+
+    // Act
+    h.run();
+
+    // Assert
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Filter explorer");
+}

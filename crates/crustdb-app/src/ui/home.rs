@@ -112,11 +112,12 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
     egui::ScrollArea::vertical().show(ui, |ui| {
         let mut filter = None;
         let mut query: String = ui.data(|d| d.get_temp(search_id())).unwrap_or_default();
-        ui.add(
+        let r = ui.add(
             egui::TextEdit::singleline(&mut query)
                 .hint_text("Search name, host, label...")
                 .desired_width(ui.available_width()),
         );
+        super::a11y::name_text(&r, "Search connections");
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(format!("{} New", icon::PLUS)).clicked() {
