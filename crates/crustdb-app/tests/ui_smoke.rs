@@ -122,7 +122,7 @@ fn connect_and_open_table_renders_grid() {
     let (mut h, app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
-    wait_for(&mut h, "New query"); // sidebar is up once the workspace is online
+    wait_for(&mut h, "EXPLORER"); // sidebar is up once the workspace is online
 
     let object = ObjectRef {
         database: "fake".into(),
@@ -148,8 +148,10 @@ fn run_query_shows_result_and_messages() {
     let (mut h, _app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
-    wait_for(&mut h, "New query");
-    h.get_by_label("New query").click();
+    wait_for(&mut h, "EXPLORER");
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label_contains("New query").click();
     h.run();
     let editor = h.get_by_role(eframe::egui::accesskit::Role::MultilineTextInput);
     editor.click();
@@ -180,15 +182,17 @@ fn disconnect_returns_to_saved_connections() {
     let (mut h, _app, _dir, _) = start();
     h.run();
     h.get_by_label("Connect").click();
-    wait_for(&mut h, "New query");
+    wait_for(&mut h, "EXPLORER");
 
     // Act
-    h.get_by_label("Disconnect").click();
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label_contains("Disconnect").click();
     h.run();
 
     // Assert
     wait_for(&mut h, "Connect");
-    assert!(h.query_by_label("New query").is_none());
+    assert!(h.query_by_label("EXPLORER").is_none());
 }
 
 #[test]
@@ -197,7 +201,7 @@ fn refresh_button_refetches_open_table() {
     let (mut h, app, _dir, driver) = start();
     h.run();
     h.get_by_label("Connect").click();
-    wait_for(&mut h, "New query");
+    wait_for(&mut h, "EXPLORER");
     let object = ObjectRef {
         database: "fake".into(),
         schema: Some("public".into()),
@@ -212,7 +216,7 @@ fn refresh_button_refetches_open_table() {
     let before = driver.log.ops().len();
 
     // Act
-    h.get_by_label(egui_phosphor::regular::ARROW_CLOCKWISE)
+    h.get_by_label(crustdb_app::ui::data_toolbar::RELOAD_LABEL)
         .click();
     let end = Instant::now() + Duration::from_secs(10);
     while !driver.log.ops()[before..]
@@ -272,7 +276,7 @@ fn server_level_connection_keeps_saved_list_in_center() {
 
     // Act
     h.get_by_label("Connect").click();
-    wait_for(&mut h, "New query");
+    wait_for(&mut h, "EXPLORER");
 
     // Assert
     assert!(h.query_by_label("Select a connection").is_none());

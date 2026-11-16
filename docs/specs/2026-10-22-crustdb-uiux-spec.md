@@ -66,8 +66,8 @@ Colunas: ID | Problema | Evidência | Proposta | Prio | Aceite.
 | U-B1 | Setas unicode e nenhum ícone por tipo | `ui/sidebar.rs:40` | Ícones Phosphor (`icon::` já usado em `ui/home.rs:65`) para schema/tabela/view/função | P2 | kittest: nó de tabela e de view renderizam rótulos distintos de ícone |
 | U-B2 | Folha: clique simples não faz nada, só duplo abre | `ui/sidebar.rs:53-55` | Clique seleciona; Enter abre o selecionado; tooltip "Double-click to open" | P2 | kittest: Enter com folha selecionada emite `OpenObject` |
 | U-B3 | Sem menu de contexto (Open/Refresh) | `context_menu` não é usado em `ui/` (busca vazia) | `response.context_menu` com Open e Refresh; Refresh hoje só via F5 (`keymap.rs:45`) | P2 | kittest: botão direito mostra "Refresh" e emite o mesmo intent do F5 |
-| U-B4 | "New query" sem ícone nem atalho; wireframe §4.11 mostra `[+]` | `ui/sidebar.rs:24` | Botão com ícone `+` e tooltip "New query (Ctrl+T)" | P3 | kittest: `get_by_label("New query")` continua clicável |
-| U-B5 | Combo de workspace sem status nem desconectar | `ui/sidebar.rs:12-23` | Bolinha de status por item e ação "Disconnect" | P3 | Unidade: `status_color(&Status) -> Color32` (padrão `tls_icon`, `ui/status_bar.rs:17`) devolve `WARN` para `Connecting`, `OK` para `Online`, `ERR` para `Failed` |
+| U-B4 | "New query" sem ícone nem atalho; wireframe §4.11 mostra `[+]` | `ui/sidebar.rs:24` | Resolvido (#242): "New query" saiu da sidebar e vive no menu File, com o atalho (Ctrl+T) ao lado | P3 | kittest: File > "New query" emite `NewQuery` (`ui/menu_bar_tests.rs`) |
+| U-B5 | Combo de workspace sem status nem desconectar | `ui/sidebar.rs:12-23` | Bolinha de status por item; "Disconnect" vive no menu File (#242), não na sidebar | P3 | Unidade: `status_color(&Status) -> Color32` (padrão `tls_icon`, `ui/status_bar.rs:17`) devolve `WARN` para `Connecting`, `OK` para `Online`, `ERR` para `Failed` |
 | U-B6 | Carregamento só com sufixo " …" | `ui/sidebar.rs:43` | `Spinner` pequeno ao lado do nó | P3 | kittest: nó `loading` mostra o texto de carregamento (como §5.3); Spinner em si não é verificável via AccessKit |
 
 ### 4.4 Tab bar (`ui/tab_bar.rs`)

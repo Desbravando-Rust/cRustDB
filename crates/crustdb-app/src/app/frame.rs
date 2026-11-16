@@ -57,7 +57,15 @@ impl CrustApp {
             }
             intents.extend(self.on_action(a, focus));
         }
-        egui::Panel::top("top_bar").show(ui, |ui| ui::top_bar::show(ui, &self.state));
+        let menu = egui::Panel::top("top_bar")
+            .show(ui, |ui| ui::top_bar::show(ui, &self.state))
+            .inner;
+        for c in menu {
+            match c {
+                ui::menu_bar::MenuCmd::Action(a) => intents.extend(self.on_action(a, focus)),
+                ui::menu_bar::MenuCmd::Intent(i) => intents.push(i),
+            }
+        }
         // One sync per frame: the metrics row in the central area reuses this model.
         let status = self.status.current(&self.state);
         if let Some(m) = status {
