@@ -18,6 +18,7 @@ pub enum Action {
     Cancel,
     Autocomplete,
     ToggleComment,
+    Format,
     Open,
     Save,
     SaveAs,
@@ -51,6 +52,7 @@ const TABLE: &[(Modifiers, Key, Action)] = &[
     (C, Key::Period, Action::Cancel),
     (C, Key::Space, Action::Autocomplete),
     (C, Key::Slash, Action::ToggleComment),
+    (CS, Key::F, Action::Format),
     (C, Key::O, Action::Open),
     (C, Key::S, Action::Save),
     (CS, Key::S, Action::SaveAs),
@@ -64,6 +66,20 @@ pub fn shortcut(a: Action) -> Option<eframe::egui::KeyboardShortcut> {
         .iter()
         .find(|(_, _, x)| *x == a)
         .map(|(m, k, _)| eframe::egui::KeyboardShortcut::new(*m, *k))
+}
+
+/// Takes `a`'s key press out of this frame's input, so a widget below (the text edit) never
+/// sees it. For actions the focused widget handles itself.
+pub fn consume(input: &mut InputState, a: Action) -> bool {
+    shortcut(a).is_some_and(|s| input.consume_shortcut(&s))
+}
+
+/// `text (shortcut)` for buttons, in the platform's shortcut notation.
+pub fn hint(ctx: &eframe::egui::Context, text: &str, a: Action) -> String {
+    match shortcut(a) {
+        Some(s) => format!("{text} ({})", ctx.format_shortcut(&s)),
+        None => text.to_string(),
+    }
 }
 
 pub fn keymap(input: &InputState, focus: Focus) -> Option<Action> {

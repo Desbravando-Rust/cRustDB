@@ -46,7 +46,11 @@ pub fn show(ui: &mut egui::Ui, tab: &TableTab) -> Vec<Intent> {
             }
             if ui
                 .add_enabled(!tab.is_loading(), egui::Button::new("Refresh"))
-                .on_hover_text("Refresh (F5)")
+                .on_hover_text(crate::keymap::hint(
+                    ui.ctx(),
+                    "Refresh",
+                    crate::keymap::Action::Refresh,
+                ))
                 .clicked()
             {
                 out.push(Intent::Retry(id));

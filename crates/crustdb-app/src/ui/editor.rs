@@ -6,12 +6,12 @@ use crustdb_core::sql::{
     Expect, StatementSpan, TokenKind, completion_context, highlight, split, statement_at,
 };
 use eframe::egui::{
-    self, Color32, FontId, Key, Modifiers, TextFormat, cache::ComputerMut, text::CCursor,
-    text::LayoutJob,
+    self, Color32, FontId, TextFormat, cache::ComputerMut, text::CCursor, text::LayoutJob,
 };
 
 use super::Intent;
 use super::autocomplete as popup;
+use crate::keymap::{self, Action};
 use crate::state::QueryTab;
 use crate::state::autocomplete::{AutocompleteAction, ColumnCache, in_literal_or_comment};
 use crate::state::query_tab::{
@@ -118,19 +118,21 @@ pub fn show(
             usize::from(a.index)..usize::from(b.index)
         })
         .unwrap_or(0..0);
-    let run_all =
-        ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter));
-    let run = !run_all && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
-    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Slash)) {
+    let run_all = ui.input_mut(|i| keymap::consume(i, Action::RunAll));
+    let run = !run_all && ui.input_mut(|i| keymap::consume(i, Action::Run));
+    if ui.input_mut(|i| keymap::consume(i, Action::ToggleComment)) {
         tab.toggle_comment_at(sel.clone());
     }
-    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::F)) {
+    if ui.input_mut(|i| keymap::consume(i, Action::Format)) {
         tab.format_at(sel.clone());
     }
     // Wraps so a narrow window does not push the editor and results off-screen.
     ui.horizontal_wrapped(|ui| {
         if ui
-            .add_enabled(tab.can_run(), egui::Button::new("Run (Ctrl+Enter)"))
+            .add_enabled(
+                tab.can_run(),
+                egui::Button::new(keymap::hint(ui.ctx(), "Run", Action::Run)),
+            )
             .clicked()
         {
             out.push(Intent::RunQuery {
@@ -142,7 +144,7 @@ pub fn show(
         if ui
             .add_enabled(
                 tab.can_run(),
-                egui::Button::new("Run all (Ctrl+Shift+Enter)"),
+                egui::Button::new(keymap::hint(ui.ctx(), "Run all", Action::RunAll)),
             )
             .clicked()
         {
@@ -152,7 +154,10 @@ pub fn show(
                 all: true,
             });
         }
-        if ui.button("Format (Ctrl+Shift+F)").clicked() {
+        if ui
+            .button(keymap::hint(ui.ctx(), "Format", Action::Format))
+            .clicked()
+        {
             tab.format_at(sel.clone());
         }
         out.extend(files_bar(ui, tab));
@@ -254,7 +259,9 @@ pub fn show(
             };
             let byte = char_to_byte(&tab.text, usize::from(cur.index));
             let force = r.has_focus()
-                && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Space));
+                && ctx.input(|i| {
+                    keymap::keymap(i, keymap::Focus::Editor) == Some(Action::Autocomplete)
+                });
             if r.changed() || force {
                 if in_literal_or_comment(&tab.text, byte, driver) {
                     tab.ac.close();
