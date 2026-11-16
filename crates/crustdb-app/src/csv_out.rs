@@ -19,8 +19,8 @@ impl<W: Write> CsvOut<W> {
 
     pub fn row(&mut self, cells: &[Cell]) -> io::Result<()> {
         self.line(cells.iter().map(|c| match c {
-            Cell::Text { value, .. } if !is_number(value) => field(&defuse(value), true, ','),
-            c => quoted(c, ','),
+            Cell::Text { value, .. } => field(&defuse(value), true, ','),
+            c => cell_text(c),
         }))
     }
 
@@ -67,7 +67,8 @@ pub fn to_tsv<'a>(
 
 /// OWASP CSV injection: prefix `'` when a spreadsheet would read the field as a formula.
 fn defuse(s: &str) -> std::borrow::Cow<'_, str> {
-    if s.starts_with(['=', '+', '-', '@', '\t', '\r']) {
+    // The number check runs only for trigger chars, keeping the export hot path cheap.
+    if s.starts_with(['=', '+', '-', '@', '\t', '\r']) && !is_number(s) {
         format!("'{s}").into()
     } else {
         s.into()
@@ -228,6 +229,21 @@ mod tests {
             "-5,+3.2,-1e3\n"
         );
         assert_eq!(out(&[text("hello"), text("a=b")]), "hello,a=b\n");
+        let blob = Cell::Bytes {
+            value: vec![0xab].into(),
+            total_len: 1,
+            truncated: false,
+        };
+        assert_eq!(out(&[Cell::Null, blob]), ",0xab\n");
+    }
+
+    #[test]
+    fn csv_neutralizes_non_finite_numbers_and_lone_sign() {
+        // Act & Assert
+        assert_eq!(
+            out(&[text("-inf"), text("-1e999"), text("+nan"), text("-")]),
+            "'-inf,'-1e999,'+nan,'-\n"
+        );
     }
 
     #[test]
