@@ -1,4 +1,4 @@
-//! Data tab toolbar: filter field, Advanced, round row actions and Commit Changes.
+//! Data tab toolbar: Filters button, round row actions and Commit Changes.
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as icon;
 
@@ -7,9 +7,10 @@ use super::grid::write_block;
 use super::theme::ACCENT;
 use crate::state::TableTab;
 
-pub const FILTER_HINT: &str = "Filter rows…";
+pub const FILTERS_LABEL: &str = "Filters";
+pub const RELOAD_LABEL: &str = "Reload page";
+pub const ADD_ROW_LABEL: &str = "Add row (toolbar)";
 pub const EXPORT_LABEL: &str = "Export filtered rows...";
-pub const ADVANCED_LABEL: &str = "Advanced";
 pub const COMMIT_LABEL: &str = "Commit Changes";
 
 /// Round, borderless-looking icon action.
@@ -23,22 +24,12 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
     let mut out = vec![];
     let id = tab.id;
     ui.horizontal(|ui| {
-        let text = format!("{} {}", icon::MAGNIFYING_GLASS, FILTER_HINT);
-        let field = egui::Button::new(RichText::new(text).weak())
-            .min_size(egui::vec2(220.0, 0.0))
-            .fill(ui.visuals().extreme_bg_color);
-        let field = ui.add(field);
-        field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, FILTER_HINT));
-        if field.on_hover_text("Filter rows (Ctrl+F)").clicked() {
-            tab.toggle_filter_bar();
-        }
-        let advanced = ui.add(egui::Button::new(format!(
-            "{} {ADVANCED_LABEL}",
+        let filters = ui.add(egui::Button::new(format!(
+            "{} {FILTERS_LABEL}",
             icon::FUNNEL
         )));
-        advanced
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, ADVANCED_LABEL));
-        if advanced.clicked() {
+        filters.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, FILTERS_LABEL));
+        if filters.on_hover_text("Filters (Ctrl+F)").clicked() {
             tab.toggle_filter_bar();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -61,11 +52,14 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 out.push(Intent::ExportTable(id));
             }
             let reload = ui.add_enabled(!tab.is_loading(), round(icon::ARROW_CLOCKWISE));
+            reload
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, RELOAD_LABEL));
             if reload.on_hover_text("Reload page (F5)").clicked() {
                 out.push(Intent::Retry(id));
             }
             let block = write_block(tab);
             let add = ui.add_enabled(block.is_none(), round(icon::PLUS));
+            add.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, ADD_ROW_LABEL));
             if match block {
                 Some(why) => add.on_disabled_hover_text(why),
                 None => add.on_hover_text("Add row"),

@@ -390,3 +390,6 @@ mod layout_tests;
 #[cfg(test)]
 #[path = "grid_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "grid_toolbar_tests.rs"]
+mod toolbar_tests;
