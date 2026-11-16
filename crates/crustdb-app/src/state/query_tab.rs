@@ -93,6 +93,12 @@ impl QueryTab {
         self.bg = false;
     }
 
+    /// A new editor actor starts with no transaction and no statement in flight.
+    pub(super) fn session_reset(&mut self) {
+        self.tx = TxState::Idle;
+        self.idle();
+    }
+
     /// Clears `running` right away; late events still reach the pane through `pane.req`.
     pub fn stop(&mut self) -> Option<Command> {
         self.running?;
@@ -195,11 +201,10 @@ impl QueryTab {
                 self.idle();
             }
             Event::ActorCrashed { .. } => {
-                self.tx = TxState::Idle;
+                self.session_reset();
                 let n = self.pane.messages.len();
                 self.pane
                     .push(n, false, "connection actor crashed".into(), Duration::ZERO);
-                self.idle();
             }
             Event::StatementDone { index, .. } => {
                 self.pane.apply(e);

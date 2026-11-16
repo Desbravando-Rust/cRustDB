@@ -150,7 +150,11 @@ impl CrustApp {
         else {
             return;
         };
-        let mut entries = self.history_store.load(w.config.id).unwrap_or_default();
+        let mut entries = self
+            .history_store
+            .load(w.config.id)
+            .inspect_err(|e| tracing::warn!("history load failed: {e}"))
+            .unwrap_or_default();
         entries.reverse();
         self.history = Some(HistoryPanel {
             entries,

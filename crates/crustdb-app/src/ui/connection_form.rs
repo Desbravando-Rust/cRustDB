@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 use crustdb_core::driver::TlsMode;
-use crustdb_core::model::DriverKind;
+use crustdb_core::model::{DataModel, DriverKind};
 use eframe::egui;
 use secrecy::zeroize::Zeroizing;
 use secrecy::{ExposeSecret, SecretString};
@@ -73,7 +73,7 @@ fn network_fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
         ui.end_row();
     }
 
-    if f.draft.driver == DriverKind::Redis {
+    if f.draft.driver.data_model() == DataModel::KeyValue {
         super::connection_form_redis::fields(ui, f);
     } else {
         let l = ui.label("Database");

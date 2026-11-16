@@ -117,7 +117,8 @@ pub fn parse_connection_url(s: &str) -> Result<ParsedUrl, UrlError> {
 /// Redis specifics: ACL user defaults to `default`, the path is a numeric db index,
 /// and TLS follows the scheme (`redis` plain, `rediss` verified unless `sslmode=require`).
 fn redis_rules(p: &mut ParsedUrl, tls: bool) -> Result<(), UrlError> {
-    p.user.get_or_insert_with(|| "default".to_owned());
+    p.user
+        .get_or_insert_with(|| crate::store::DEFAULT_USER.to_owned());
     if p.database
         .as_ref()
         .is_some_and(|d| !d.bytes().all(|b| b.is_ascii_digit()) || d.parse::<u32>().is_err())

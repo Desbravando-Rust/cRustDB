@@ -265,6 +265,15 @@ impl WorkspaceActor {
         sh.driver.connect(&target, SessionPurpose::Metadata).await
     }
 
+    /// Metadata sessions are keyed by database where a session is bound to one, else shared.
+    fn metadata_key(&self, kind: DriverKind, database: &str) -> String {
+        if kind.session_per_database() && !database.is_empty() {
+            database.to_string()
+        } else {
+            self.home.clone()
+        }
+    }
+
     async fn ensure_metadata(&mut self, key: &str) -> Result<(), DriverError> {
         if !self.sessions.contains_key(key) {
             let s = self.open_metadata(key).await?;
@@ -277,11 +286,7 @@ impl WorkspaceActor {
     async fn load_columns(&mut self, req: RequestId, object: ObjectRef) {
         let r = async {
             let sh = self.shared.clone().ok_or_else(not_connected)?;
-            let key = if sh.driver.kind().session_per_database() {
-                object.database.clone()
-            } else {
-                self.home.clone()
-            };
+            let key = self.metadata_key(sh.driver.kind(), &object.database);
             self.ensure_metadata(&key).await?;
             let s = self.sessions.get_mut(&key).ok_or_else(not_connected)?;
             sh.driver.introspector().columns(s.as_mut(), &object).await
@@ -327,11 +332,10 @@ impl WorkspaceActor {
             return Err((String::new(), not_connected()));
         };
         let listing_dbs = matches!(kind, None | Some(ObjectKind::Database));
-        let key = if sh.driver.kind().session_per_database() && !database.is_empty() && !listing_dbs
-        {
-            database.to_string()
-        } else {
+        let key = if listing_dbs {
             self.home.clone()
+        } else {
+            self.metadata_key(sh.driver.kind(), database)
         };
         self.ensure_metadata(&key)
             .await

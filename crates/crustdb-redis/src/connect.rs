@@ -47,7 +47,7 @@ pub(crate) fn connection_info(t: &ConnectTarget) -> Result<RedisConnectionInfo, 
     let mut info = RedisConnectionInfo::default().set_db(database_index(t)?.into());
     if let Some(p) = &t.password {
         let user = if t.user.is_empty() {
-            "default"
+            crustdb_core::store::DEFAULT_USER
         } else {
             &t.user
         };

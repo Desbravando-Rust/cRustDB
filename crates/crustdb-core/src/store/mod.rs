@@ -1,6 +1,9 @@
 pub mod keyspace;
 pub mod value;
 
+/// ACL user a store login uses when none is given.
+pub const DEFAULT_USER: &str = "default";
+
 use std::time::Duration;
 
 use async_trait::async_trait;

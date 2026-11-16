@@ -4,7 +4,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crustdb_core::driver::TlsConfig;
+use crustdb_core::driver::{TlsConfig, TlsMode};
 use crustdb_core::model::{ConnectionId, DriverKind};
 use serde::{Deserialize, Serialize};
 
@@ -71,6 +71,14 @@ pub struct ConnectionConfig {
     /// Redis key-tree separator; `None` means ":".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_separator: Option<String>,
+}
+
+impl ConnectionConfig {
+    /// Client certificates (mTLS) apply: PostgreSQL/MySQL with TLS on.
+    pub fn uses_client_cert(&self) -> bool {
+        matches!(self.driver, DriverKind::Postgres | DriverKind::Mysql)
+            && self.tls.mode != TlsMode::Disable
+    }
 }
 
 /// Accepts `label` (string) and legacy `labels` (array -> first string); anything else is `None`.

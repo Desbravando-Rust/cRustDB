@@ -1,14 +1,11 @@
 //! Client certificate (mTLS) rows of the connection form.
-use crustdb_core::driver::TlsMode;
-use crustdb_core::model::DriverKind;
 use eframe::egui;
 
 use super::connection_form::{error_for, path_edit};
 use crate::state::connection_form::ConnectionForm;
 
-/// Only for PostgreSQL/MySQL with TLS on.
 pub fn fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
-    if f.draft.driver == DriverKind::Redis || f.draft.tls.mode == TlsMode::Disable {
+    if !f.draft.uses_client_cert() {
         return;
     }
     let l = ui.label("Client certificate").on_hover_text(
@@ -31,6 +28,8 @@ pub fn fields(ui: &mut egui::Ui, f: &mut ConnectionForm) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use crustdb_core::driver::TlsMode;
+    use crustdb_core::model::DriverKind;
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 

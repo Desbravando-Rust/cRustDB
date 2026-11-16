@@ -34,11 +34,7 @@ impl WorkspaceActor {
         let Some(sh) = self.shared.clone() else {
             return Err((String::new(), not_connected()));
         };
-        let key = if sh.driver.kind().session_per_database() {
-            database.to_string()
-        } else {
-            self.home.clone()
-        };
+        let key = self.metadata_key(sh.driver.kind(), database);
         let err = |e| (key.clone(), e);
         self.ensure_metadata(&key).await.map_err(err)?;
         let s = self
