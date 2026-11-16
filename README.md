@@ -48,7 +48,7 @@
 - **Transactions**: autocommit by default, Begin / Commit / Rollback per tab, state shown in the status bar. Disconnecting with an open transaction asks to commit, roll back or cancel.
 - **Safety policy**: destructive or multi-row statements ask for confirmation; DML estimated (via `EXPLAIN`) above a per-connection threshold asks for the password. SQLite has no row estimate, so its DML always takes the strictest path.
 - **Redis**: keyspace tree loaded in `SCAN` batches (never `KEYS`) with a key filter, database selector, read-only value viewer (type, TTL, size), and a command editor on its own session. Dangerous commands ask for confirmation or the password; blocking, transaction and Pub/Sub commands are refused.
-- **Export** to CSV (RFC 4180), JSON Lines or SQL `INSERT` (picked by file extension), streamed with constant memory and cancellable. From a table tab, the toolbar export button writes every row matching the current filter and sort; from a query tab it exports the last result.
+- **Export** to CSV (RFC 4180; text cells and headers starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` so spreadsheets do not run them as formulas, plain numbers are left as is), JSON Lines or SQL `INSERT` (picked by file extension), streamed with constant memory and cancellable. From a table tab, the toolbar export button writes every row matching the current filter and sort; from a query tab it exports the last result.
 - **Status bar**: TLS/SSH state, transaction badge, query timings, ping latency, process CPU% and RSS.
 
 ## Supported databases
@@ -178,7 +178,6 @@ Typing: highlighting turns off above 750 lines (measured limit). The 5,000-line 
 
 - The local port of the SSH tunnel is reachable by other local users while the session is open.
 - Query history stores SQL in plain text, including any secret typed into a query.
-- CSV export does not neutralize spreadsheet formulas (CSV injection).
 - When the sort key does not allow keyset pagination, the table falls back to `OFFSET`, so very deep pages are slow.
 - SQLite: only the `main` database is listed (no `ATTACH`); no SQLCipher or loadable extensions.
 - Redis: no Cluster, Sentinel, Pub/Sub, `MULTI`/`EXEC`, value editing or mTLS. Cancelling drops the connection but does not stop the command on the server.
