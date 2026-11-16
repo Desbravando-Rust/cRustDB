@@ -59,7 +59,7 @@ impl TableTab {
             return None;
         }
         let cells = self.rows.get(self.pending_row?)?;
-        let d = crate::export_fmt::dialect(self.driver);
+        let d = crate::runtime::dialect(self.driver);
         let built = if self.inserting {
             build_insert(d, &self.object, &self.columns, &self.pending)
         } else {
@@ -147,7 +147,7 @@ impl TableTab {
         }
         let (lo, hi) = self.selection()?;
         let rows: Vec<&[Cell]> = self.rows.get(lo..=hi)?.iter().map(|r| &r[..]).collect();
-        let d = crate::export_fmt::dialect(self.driver);
+        let d = crate::runtime::dialect(self.driver);
         match build_delete(d, &self.object, &self.columns, &rows) {
             Ok(update) => {
                 self.edit_req = Some(req);
@@ -225,7 +225,7 @@ impl TableTab {
             (Some(Cell::Text { value: old, .. }), Some(new)) => **old == **new,
             _ => false,
         };
-        let d = crate::export_fmt::dialect(self.driver);
+        let d = crate::runtime::dialect(self.driver);
         // ponytail: builds a throwaway one-column UPDATE just to reuse its validation.
         let check = build_update(d, &self.object, &self.columns, cells, &[(col, None)]);
         if let Err(e) = check

@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 
+use crustdb_core::dialect::Dialect;
 use crustdb_core::driver::Driver;
 use crustdb_core::model::{DriverKind, Row};
 use crustdb_core::store::StoreDriver;
@@ -62,6 +63,17 @@ pub fn drivers() -> DriverRegistry {
         .with(Arc::new(crustdb_mysql::MysqlDriver))
         .with(Arc::new(crustdb_sqlite::SqliteDriver))
         .with_store(Arc::new(crustdb_redis::RedisDriver))
+}
+
+/// SQL dialect of a shipped driver, for code that has only the kind.
+pub fn dialect(kind: DriverKind) -> &'static dyn Dialect {
+    match kind {
+        DriverKind::Postgres => &crustdb_postgres::PgDialect,
+        DriverKind::Mysql => &crustdb_mysql::MysqlDialect,
+        DriverKind::Sqlite => &crustdb_sqlite::SqliteDialect,
+        // unreachable: the Capabilities gate (#166) keeps Redis out of SQL paths
+        DriverKind::Redis => &crustdb_postgres::PgDialect,
+    }
 }
 
 /// Sends events to the UI and wakes it up.
