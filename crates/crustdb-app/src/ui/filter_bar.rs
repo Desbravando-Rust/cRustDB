@@ -43,6 +43,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                 });
             named(&op.response, "Filter operator", label(d.op));
             let r = ui.text_edit_singleline(&mut d.input);
+            r.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter value")
+            });
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Intent::ApplyFilters(tab.id));
             }
@@ -92,11 +95,9 @@ mod tests {
         };
         let mut tab = TableTab::new(TabId(1), object, 100);
         tab.add_draft();
-        let mut h = Harness::builder()
-            .with_accessibility_check(false) // value text input is unnamed (#186)
-            .build_ui(|ui| {
-                show(ui, &mut tab);
-            });
+        let mut h = Harness::builder().build_ui(|ui| {
+            show(ui, &mut tab);
+        });
 
         // Act
         h.run();
@@ -105,5 +106,6 @@ mod tests {
         for name in ["Filter column", "Filter operator"] {
             h.get_by_role_and_label(egui::accesskit::Role::ComboBox, name);
         }
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Filter value");
     }
 }
