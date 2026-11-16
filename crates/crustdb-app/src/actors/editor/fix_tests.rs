@@ -181,3 +181,27 @@ async fn mysql_ddl_parse_error_keeps_tx_open() {
     assert!(tx_states(&ev).is_empty());
     assert!(!notices(&ev).iter().any(|n| n.contains("implicit commit")));
 }
+
+#[tokio::test(start_paused = true)]
+async fn sqlite_failed_ddl_in_open_tx_keeps_it_open() {
+    // Arrange
+    let mut h = harness_with(FakeDriver::with_kind(script(0), DriverKind::Sqlite));
+    let mut cfg = config(Some("/tmp/a.db"));
+    cfg.driver = DriverKind::Sqlite;
+    h.actors.dispatch(Command::Connect {
+        ws: WS,
+        config: cfg,
+        secrets: ResolvedSecrets::default(),
+    });
+    assert!(matches!(next(&h.rx).await, Event::Connected { .. }));
+    open_editor(&mut h);
+    run(&mut h, 1, &["BEGIN"]).await;
+    query_err(&h, "CREATE");
+
+    // Act
+    let ev = run(&mut h, 2, &["CREATE TABLE x (a int)"]).await;
+
+    // Assert
+    assert!(tx_states(&ev).is_empty());
+    assert!(!notices(&ev).iter().any(|n| n.contains("implicit commit")));
+}

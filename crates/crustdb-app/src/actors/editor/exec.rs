@@ -274,7 +274,8 @@ impl EditorActor {
         took: Duration,
     ) {
         let history = self.history(sql, took, None, Some(e.message.clone()));
-        let pg = self.kind() == DriverKind::Postgres;
+        let kind = self.kind();
+        let pg = kind == DriverKind::Postgres;
         let alive = e.kind != ErrorKind::Connect;
         let ends_tx = matches!(c.class, StatementClass::Tx(TxOp::Commit | TxOp::Rollback));
         if alive {
@@ -287,7 +288,11 @@ impl EditorActor {
                 self.set_tx(TxState::Idle); // a failed COMMIT/ROLLBACK leaves no transaction
             } else if pg && self.tx == TxState::Open && !matches!(c.class, StatementClass::Tx(_)) {
                 self.set_tx(TxState::Aborted);
-            } else if !pg && c.is_ddl && self.tx == TxState::Open && !parse_error(&e) {
+            } else if kind == DriverKind::Mysql
+                && c.is_ddl
+                && self.tx == TxState::Open
+                && !parse_error(&e)
+            {
                 self.set_tx(TxState::Idle);
                 self.notice(
                     "implicit commit (statement failed): DDL ended the open transaction".into(),
