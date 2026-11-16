@@ -328,3 +328,7 @@ pub fn show(ui: &mut egui::Ui, f: &mut ConnectionForm, labels: &[Label]) -> Vec<
 #[cfg(test)]
 #[path = "connection_form_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "connection_form_a11y_tests.rs"]
+mod a11y_tests;

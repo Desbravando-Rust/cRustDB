@@ -4,9 +4,9 @@ use super::Intent;
 use crate::state::TableTab;
 use crate::state::filter_draft::label;
 
-fn named(r: &egui::Response, name: &'static str, selected: &str) {
+fn named(r: &egui::Response, name: String, selected: &str) {
     r.widget_info(|| {
-        let mut i = egui::WidgetInfo::labeled(egui::Role::ComboBox, r.enabled(), name);
+        let mut i = egui::WidgetInfo::labeled(egui::Role::ComboBox, r.enabled(), name.clone());
         i.current_text_value = Some(selected.into());
         i
     });
@@ -30,7 +30,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                         }
                     }
                 });
-            named(&col.response, "Filter column", &d.column);
+            named(&col.response, format!("Filter column {}", i + 1), &d.column);
             if let Some(n) = picked {
                 d.set_column(&tab.columns, tab.driver, &n);
             }
@@ -41,10 +41,15 @@ pub fn show(ui: &mut egui::Ui, tab: &mut TableTab) -> Vec<Intent> {
                         ui.selectable_value(&mut d.op, *op, label(*op));
                     }
                 });
-            named(&op.response, "Filter operator", label(d.op));
+            named(
+                &op.response,
+                format!("Filter operator {}", i + 1),
+                label(d.op),
+            );
             let r = ui.text_edit_singleline(&mut d.input);
             r.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter value")
+                let name = format!("Filter value {}", i + 1);
+                egui::WidgetInfo::labeled(egui::Role::TextInput, true, name)
             });
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Intent::ApplyFilters(tab.id));
@@ -95,6 +100,7 @@ mod tests {
         };
         let mut tab = TableTab::new(TabId(1), object, 100);
         tab.add_draft();
+        tab.add_draft();
         let mut h = Harness::builder().build_ui(|ui| {
             show(ui, &mut tab);
         });
@@ -103,9 +109,15 @@ mod tests {
         h.run();
 
         // Assert
-        for name in ["Filter column", "Filter operator"] {
+        for name in [
+            "Filter column 1",
+            "Filter operator 1",
+            "Filter column 2",
+            "Filter operator 2",
+        ] {
             h.get_by_role_and_label(egui::accesskit::Role::ComboBox, name);
         }
-        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Filter value");
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Filter value 1");
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Filter value 2");
     }
 }
