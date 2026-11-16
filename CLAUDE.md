@@ -6,14 +6,7 @@ Spec and plan (Portuguese, `§n`/`Dn` refs): `docs/specs/2026-10-17-crustdb-spec
 
 ## Gates
 
-Run in this order; all must pass (`/gates` runs them):
-
-```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo deny check
-```
+`make test` runs every gate in order, and all must pass: `make lint` (format check and clippy with warnings denied), then `cargo deny`, then the workspace tests with nextest. The commands live in the `Makefile` only; `/gates` and the pre-commit hook call the same targets.
 
 - Driver integration tests are `#[ignore = "docker"]` and start their own containers via testcontainers (no `DATABASE_URL`). Run them only for the driver crate you touched: `cargo test -p crustdb-postgres -- --include-ignored` (same for `crustdb-mysql`). Images: `CRUSTDB_PG_IMAGE` (default `postgres:latest`), `CRUSTDB_MYSQL_IMAGE` (default `mysql:8.4`; MariaDB works).
 - Binary: `cargo run -p crustdb-app` (binary is `crustdb`). Benches: `cargo bench -p crustdb-core`.
