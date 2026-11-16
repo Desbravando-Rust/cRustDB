@@ -5,54 +5,28 @@ use crustdb_core::dialect::Dialect;
 use crustdb_core::driver::{Introspector, Param, Session};
 use crustdb_core::error::DriverError;
 use crustdb_core::model::{
-    Cell, ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
+    ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef,
 };
 
 use crate::PgDialect;
-use crate::connect::err;
 use crate::types::category_for_oid;
 use crustdb_core::error::ErrorKind;
 
-type Rows = Vec<Vec<Option<String>>>;
+use crustdb_core::driver::{TextRows, drain_text, text_at};
 
 async fn query_rows(
     s: &mut dyn Session,
     sql: &str,
     params: &[Option<&str>],
-) -> Result<Rows, DriverError> {
+) -> Result<TextRows, DriverError> {
     let params: Vec<_> = params.iter().map(|p| Param(p.map(String::from))).collect();
     s.start_params(sql, &params).await?;
-    let mut rows = Rows::new();
-    loop {
-        let f = match s.fetch(1000).await {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = s.finish().await;
-                return Err(e);
-            }
-        };
-        rows.extend(f.rows.iter().map(|r| {
-            r.iter()
-                .map(|c| match c {
-                    Cell::Text { value, .. } => Some(value.to_string()),
-                    _ => None,
-                })
-                .collect()
-        }));
-        if f.exhausted {
-            break;
-        }
-    }
-    s.finish().await?;
+    let rows = drain_text(s).await?;
     Ok(rows)
 }
 
-fn col(r: &[Option<String>], i: usize) -> String {
-    r.get(i).cloned().flatten().unwrap_or_default()
-}
-
 fn is_true(r: &[Option<String>], i: usize) -> bool {
-    col(r, i) == "true"
+    text_at(r, i) == "true"
 }
 
 fn schema_of(o: &ObjectRef) -> &str {
@@ -115,7 +89,7 @@ fn fk_action(c: &str) -> &'static str {
 }
 
 fn unsupported_kind(k: ObjectKind) -> DriverError {
-    err(
+    DriverError::new(
         ErrorKind::Unsupported,
         format!("no catalog query for {k:?}"),
     )
@@ -143,7 +117,7 @@ impl PgIntrospector {
         .await?;
         if let Some(m) = meta.first().filter(|m| is_true(m, 1)) {
             // Partition: only the bound; columns come from the parent.
-            let parent = col(m, 3);
+            let parent = text_at(m, 3);
             let (ps, pn) = parent.split_once('.').unwrap_or(("public", &parent));
             let parent = d.qualified_name(&ObjectRef {
                 schema: Some(ps.into()),
@@ -153,7 +127,7 @@ impl PgIntrospector {
             return Ok(format!(
                 "CREATE TABLE {} PARTITION OF {parent} {};",
                 d.qualified_name(o),
-                col(m, 4)
+                text_at(m, 4)
             ));
         }
         let partition_by = meta.first().and_then(|m| m[2].clone());
@@ -183,7 +157,7 @@ impl PgIntrospector {
         .await?;
         let lines: Vec<_> = cols
             .into_iter()
-            .chain(cons.iter().map(|r| col(r, 0)))
+            .chain(cons.iter().map(|r| text_at(r, 0)))
             .collect();
         let mut ddl = format!(
             "CREATE TABLE {} (\n{}\n);",
@@ -205,7 +179,7 @@ impl PgIntrospector {
         )
         .await?;
         for r in &idx {
-            ddl.push_str(&format!("\n{}", col(r, 0)));
+            ddl.push_str(&format!("\n{}", text_at(r, 0)));
         }
         Ok(ddl)
     }
@@ -220,7 +194,7 @@ impl Introspector for PgIntrospector {
             &[],
         )
         .await?;
-        Ok(r.iter().map(|r| col(r, 0)).collect())
+        Ok(r.iter().map(|r| text_at(r, 0)).collect())
     }
 
     async fn schemas(&self, s: &mut dyn Session, _: &str) -> Result<Vec<String>, DriverError> {
@@ -232,7 +206,7 @@ impl Introspector for PgIntrospector {
             &[None],
         )
         .await?;
-        Ok(r.iter().map(|r| col(r, 0)).collect())
+        Ok(r.iter().map(|r| text_at(r, 0)).collect())
     }
 
     // The session is already connected to `database`; it only fills ObjectRef.database.
@@ -248,8 +222,8 @@ impl Introspector for PgIntrospector {
         Ok(r.iter()
             .map(|r| ObjectRef {
                 database: database.into(),
-                schema: Some(col(r, 0)),
-                name: col(r, 1),
+                schema: Some(text_at(r, 0)),
+                name: text_at(r, 1),
                 kind,
             })
             .collect())
@@ -278,10 +252,10 @@ impl Introspector for PgIntrospector {
         Ok(r.iter()
             .map(|r| ColumnDetail {
                 meta: ColumnMeta {
-                    name: col(r, 0),
+                    name: text_at(r, 0),
                     // format_type output is quoted/qualified; PgDialect::param interpolates it.
-                    type_name: col(r, 1),
-                    category: category_for_oid(col(r, 2).parse().unwrap_or(0)),
+                    type_name: text_at(r, 1),
+                    category: category_for_oid(text_at(r, 2).parse().unwrap_or(0)),
                     nullable: Some(is_true(r, 3)),
                     is_primary_key: is_true(r, 6),
                 },
@@ -311,7 +285,7 @@ impl Introspector for PgIntrospector {
         .await?;
         let mut out: Vec<IndexInfo> = Vec::new();
         for r in &r {
-            let name = col(r, 0);
+            let name = text_at(r, 0);
             if out.last().is_none_or(|l| l.name != name) {
                 out.push(IndexInfo {
                     name,
@@ -322,7 +296,7 @@ impl Introspector for PgIntrospector {
                 });
             }
             if let Some(l) = out.last_mut() {
-                l.columns.push(col(r, 4));
+                l.columns.push(text_at(r, 4));
             }
         }
         Ok(out)
@@ -351,25 +325,25 @@ impl Introspector for PgIntrospector {
         .await?;
         let mut out: Vec<ForeignKeyInfo> = Vec::new();
         for r in &r {
-            let name = col(r, 0);
+            let name = text_at(r, 0);
             if out.last().is_none_or(|l| l.name != name) {
                 out.push(ForeignKeyInfo {
                     name,
                     columns: vec![],
                     ref_table: ObjectRef {
                         database: o.database.clone(),
-                        schema: Some(col(r, 3)),
-                        name: col(r, 4),
+                        schema: Some(text_at(r, 3)),
+                        name: text_at(r, 4),
                         kind: ObjectKind::Table,
                     },
                     ref_columns: vec![],
-                    on_update: fk_action(&col(r, 1)).into(),
-                    on_delete: fk_action(&col(r, 2)).into(),
+                    on_update: fk_action(&text_at(r, 1)).into(),
+                    on_delete: fk_action(&text_at(r, 2)).into(),
                 });
             }
             if let Some(l) = out.last_mut() {
-                l.columns.push(col(r, 5));
-                l.ref_columns.push(col(r, 6));
+                l.columns.push(text_at(r, 5));
+                l.ref_columns.push(text_at(r, 6));
             }
         }
         Ok(out)
@@ -392,7 +366,7 @@ impl Introspector for PgIntrospector {
                 } else {
                     "MATERIALIZED "
                 };
-                let body = r.first().map(|r| col(r, 0)).unwrap_or_default();
+                let body = r.first().map(|r| text_at(r, 0)).unwrap_or_default();
                 return Ok(format!("CREATE {m}VIEW {q} AS\n{}", body.trim_end()));
             }
             ObjectKind::Function => {
@@ -436,7 +410,10 @@ impl Introspector for PgIntrospector {
         };
         let r = query_rows(s, sql, &[sch, name]).await?;
         // Overloads: every definition, separated by a blank line.
-        Ok(r.iter().map(|r| col(r, 0)).collect::<Vec<_>>().join("\n\n"))
+        Ok(r.iter()
+            .map(|r| text_at(r, 0))
+            .collect::<Vec<_>>()
+            .join("\n\n"))
     }
 
     async fn row_estimate(
@@ -456,9 +433,9 @@ impl Introspector for PgIntrospector {
         )
         .await?;
         let Some(r) = r.first() else { return Ok(None) };
-        let tuples: f64 = col(r, 0).parse().unwrap_or(-1.0);
+        let tuples: f64 = text_at(r, 0).parse().unwrap_or(-1.0);
         // PG < 14 reports 0/0 (not -1) for a never-analyzed table.
-        if tuples < 0.0 || (tuples == 0.0 && col(r, 1) == "0") {
+        if tuples < 0.0 || (tuples == 0.0 && text_at(r, 1) == "0") {
             return Ok(None);
         }
         Ok(Some(tuples as u64))

@@ -5,20 +5,19 @@ use crustdb_core::dialect::Dialect;
 use crustdb_core::driver::{ExecMode, Introspector, Param, Session};
 use crustdb_core::error::{DriverError, ErrorKind};
 use crustdb_core::model::{
-    Cell, ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef, TypeCategory,
+    ColumnDetail, ColumnMeta, ForeignKeyInfo, IndexInfo, ObjectKind, ObjectRef, TypeCategory,
 };
 
 use crate::MysqlDialect;
-use crate::connect::err;
 
-type Rows = Vec<Vec<Option<String>>>;
+use crustdb_core::driver::{TextRows, drain_text, text_at};
 
 /// Returns the result's column names and its rows as optional text.
 async fn query(
     s: &mut dyn Session,
     sql: &str,
     params: &[&str],
-) -> Result<(Vec<String>, Rows), DriverError> {
+) -> Result<(Vec<String>, TextRows), DriverError> {
     let header = if params.is_empty() {
         s.start(sql, ExecMode::Other).await?
     } else {
@@ -26,37 +25,16 @@ async fn query(
         s.start_params(sql, &params).await?
     };
     let names = header.columns.into_iter().map(|c| c.name).collect();
-    let mut rows = Rows::new();
-    loop {
-        let f = match s.fetch(1000).await {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = s.finish().await;
-                return Err(e);
-            }
-        };
-        rows.extend(f.rows.iter().map(|r| {
-            r.iter()
-                .map(|c| match c {
-                    Cell::Text { value, .. } => Some(value.to_string()),
-                    _ => None,
-                })
-                .collect()
-        }));
-        if f.exhausted {
-            break;
-        }
-    }
-    s.finish().await?;
+    let rows = drain_text(s).await?;
     Ok((names, rows))
 }
 
-async fn query_rows(s: &mut dyn Session, sql: &str, params: &[&str]) -> Result<Rows, DriverError> {
+async fn query_rows(
+    s: &mut dyn Session,
+    sql: &str,
+    params: &[&str],
+) -> Result<TextRows, DriverError> {
     Ok(query(s, sql, params).await?.1)
-}
-
-fn col(r: &[Option<String>], i: usize) -> String {
-    r.get(i).cloned().flatten().unwrap_or_default()
 }
 
 fn category(data_type: &str) -> TypeCategory {
@@ -102,7 +80,7 @@ fn objects_sql(kind: ObjectKind) -> Option<&'static str> {
 }
 
 fn unsupported_kind(k: ObjectKind) -> DriverError {
-    err(
+    DriverError::new(
         ErrorKind::Unsupported,
         format!("no catalog query for {k:?}"),
     )
@@ -120,7 +98,7 @@ impl Introspector for MysqlIntrospector {
             &[],
         )
         .await?;
-        Ok(r.iter().map(|r| col(r, 0)).collect())
+        Ok(r.iter().map(|r| text_at(r, 0)).collect())
     }
 
     // MySQL has no schema level.
@@ -141,7 +119,7 @@ impl Introspector for MysqlIntrospector {
             .map(|r| ObjectRef {
                 database: database.into(),
                 schema: None,
-                name: col(r, 0),
+                name: text_at(r, 0),
                 kind,
             })
             .collect())
@@ -164,12 +142,12 @@ impl Introspector for MysqlIntrospector {
         Ok(r.iter()
             .map(|r| ColumnDetail {
                 meta: ColumnMeta {
-                    name: col(r, 0),
+                    name: text_at(r, 0),
                     // Display only: MySQL params are `?`, so this is never put into SQL.
-                    type_name: col(r, 1),
-                    category: category(&col(r, 2).to_lowercase()),
-                    nullable: Some(col(r, 3) == "YES"),
-                    is_primary_key: col(r, 6) == "PRI",
+                    type_name: text_at(r, 1),
+                    category: category(&text_at(r, 2).to_lowercase()),
+                    nullable: Some(text_at(r, 3) == "YES"),
+                    is_primary_key: text_at(r, 6) == "PRI",
                 },
                 default: r[4].clone(),
                 comment: r[5].clone().filter(|c| !c.is_empty()),
@@ -192,18 +170,18 @@ impl Introspector for MysqlIntrospector {
         .await?;
         let mut out: Vec<IndexInfo> = Vec::new();
         for r in &r {
-            let name = col(r, 0);
+            let name = text_at(r, 0);
             if out.last().is_none_or(|l| l.name != name) {
                 out.push(IndexInfo {
                     primary: name == "PRIMARY",
-                    unique: col(r, 1) == "0",
+                    unique: text_at(r, 1) == "0",
                     method: r[2].clone(),
                     name,
                     columns: vec![],
                 });
             }
             if let Some(l) = out.last_mut() {
-                l.columns.push(col(r, 3));
+                l.columns.push(text_at(r, 3));
             }
         }
         Ok(out)
@@ -229,25 +207,25 @@ impl Introspector for MysqlIntrospector {
         .await?;
         let mut out: Vec<ForeignKeyInfo> = Vec::new();
         for r in &r {
-            let name = col(r, 0);
+            let name = text_at(r, 0);
             if out.last().is_none_or(|l| l.name != name) {
                 out.push(ForeignKeyInfo {
                     name,
                     columns: vec![],
                     ref_table: ObjectRef {
-                        database: col(r, 3),
+                        database: text_at(r, 3),
                         schema: None,
-                        name: col(r, 4),
+                        name: text_at(r, 4),
                         kind: ObjectKind::Table,
                     },
                     ref_columns: vec![],
-                    on_update: col(r, 1),
-                    on_delete: col(r, 2),
+                    on_update: text_at(r, 1),
+                    on_delete: text_at(r, 2),
                 });
             }
             if let Some(l) = out.last_mut() {
-                l.columns.push(col(r, 5));
-                l.ref_columns.push(col(r, 6));
+                l.columns.push(text_at(r, 5));
+                l.ref_columns.push(text_at(r, 6));
             }
         }
         Ok(out)
@@ -268,12 +246,12 @@ impl Introspector for MysqlIntrospector {
             .iter()
             .position(|n| n.eq_ignore_ascii_case(column))
             .ok_or_else(|| {
-                err(
+                DriverError::new(
                     ErrorKind::Protocol,
                     format!("SHOW CREATE has no `{column}` column"),
                 )
             })?;
-        Ok(rows.first().map(|r| col(r, i)).unwrap_or_default())
+        Ok(rows.first().map(|r| text_at(r, i)).unwrap_or_default())
     }
 
     async fn row_estimate(

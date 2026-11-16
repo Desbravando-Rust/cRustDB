@@ -19,3 +19,15 @@ pub struct DriverError {
     pub kind: ErrorKind,
     pub message: String,
 }
+
+impl DriverError {
+    pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+        }
+    }
+}
+
+/// D39: a server without TLS 1.2+ gets a fixed, actionable message.
+pub const NO_TLS12: &str = "server does not support TLS 1.2+; use an SSH tunnel or disable TLS";

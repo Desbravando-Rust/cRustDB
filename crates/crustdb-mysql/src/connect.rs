@@ -1,18 +1,11 @@
 use crustdb_core::driver::{ConnectTarget, SessionPurpose, TlsMode};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::{DriverError, ErrorKind, NO_TLS12};
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, IoError, Opts, OptsBuilder, SslOpts, TlsError};
 use secrecy::ExposeSecret;
 
 use crate::client_auth::client_identity;
 use crate::session::MysqlSession;
-
-pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
-    DriverError {
-        kind,
-        message: message.into(),
-    }
-}
 
 /// `None` for `Disable`. No LOCAL INFILE handler is ever registered.
 fn ssl_opts(t: &ConnectTarget) -> Result<Option<SslOpts>, DriverError> {
@@ -74,25 +67,24 @@ pub(crate) fn map_err(e: mysql_async::Error) -> DriverError {
                     position: None,
                 },
             };
-            err(kind, s.message.clone())
+            DriverError::new(kind, s.message.clone())
         }
         Io(IoError::Tls(TlsError::Tls(t))) => tls_error(t, message),
-        Io(IoError::Tls(_)) => err(ErrorKind::Tls, message),
+        Io(IoError::Tls(_)) => DriverError::new(ErrorKind::Tls, message),
         Io(IoError::Io(io)) => {
             let tls = io.get_ref().and_then(|i| i.downcast_ref::<rustls::Error>());
             if let Some(t) = tls {
                 tls_error(t, message)
             } else if io.kind() == std::io::ErrorKind::TimedOut {
-                err(ErrorKind::Timeout, "connection timed out")
+                DriverError::new(ErrorKind::Timeout, "connection timed out")
             } else {
-                err(ErrorKind::Connect, message)
+                DriverError::new(ErrorKind::Connect, message)
             }
         }
-        _ => err(ErrorKind::Connect, message),
+        _ => DriverError::new(ErrorKind::Connect, message),
     }
 }
 
-/// D39: a server without TLS 1.2+ gets a fixed, actionable message.
 fn tls_error(e: &rustls::Error, message: String) -> DriverError {
     use rustls::{
         AlertDescription::ProtocolVersion, Error::*,
@@ -102,12 +94,8 @@ fn tls_error(e: &rustls::Error, message: String) -> DriverError {
         e,
         PeerIncompatible(ServerDoesNotSupportTls12Or13) | AlertReceived(ProtocolVersion)
     );
-    let message = if no_tls12 {
-        "server does not support TLS 1.2+; use an SSH tunnel or disable TLS".into()
-    } else {
-        message
-    };
-    err(ErrorKind::Tls, message)
+    let message = if no_tls12 { NO_TLS12.into() } else { message };
+    DriverError::new(ErrorKind::Tls, message)
 }
 
 pub(crate) async fn connect(
@@ -136,7 +124,7 @@ pub(crate) async fn connect(
     };
     tokio::time::timeout(t.connect_timeout, work)
         .await
-        .map_err(|_| err(ErrorKind::Timeout, "connection timed out"))?
+        .map_err(|_| DriverError::new(ErrorKind::Timeout, "connection timed out"))?
 }
 
 #[cfg(test)]
@@ -185,7 +173,6 @@ mod tests {
     fn old_tls_maps_to_d39_message() {
         // Arrange
         use rustls::{AlertDescription, PeerIncompatible};
-        const D39: &str = "server does not support TLS 1.2+; use an SSH tunnel or disable TLS";
 
         // Act & Assert
         for e in [
@@ -193,7 +180,7 @@ mod tests {
             rustls::Error::AlertReceived(AlertDescription::ProtocolVersion),
         ] {
             let d = tls_error(&e, "x".into());
-            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, D39));
+            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, NO_TLS12));
         }
         let e = rustls::Error::PeerIncompatible(PeerIncompatible::NoCipherSuitesInCommon);
         assert_eq!(tls_error(&e, "x".into()).message, "x");

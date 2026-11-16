@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crustdb_core::driver::{ConnectTarget, SessionPurpose, TlsMode};
-use crustdb_core::error::{DriverError, ErrorKind};
+use crustdb_core::error::{DriverError, ErrorKind, NO_TLS12};
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
@@ -15,13 +15,6 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::client_auth::client_auth;
 use crate::session::PgSession;
-
-pub(crate) fn err(kind: ErrorKind, message: impl Into<String>) -> DriverError {
-    DriverError {
-        kind,
-        message: message.into(),
-    }
-}
 
 /// Verifies handshake signatures but accepts any certificate (`Require`), or any
 /// certificate chain-valid for a different name (`VerifyCa`, when `inner` is set).
@@ -89,7 +82,7 @@ impl ServerCertVerifier for Lenient {
 fn roots(ca_path: Option<&std::path::Path>) -> Result<RootCertStore, DriverError> {
     let mut store = RootCertStore::empty();
     let tls_err = |e: &dyn std::fmt::Display| {
-        err(ErrorKind::Tls, format!("cannot load CA certificates: {e}"))
+        DriverError::new(ErrorKind::Tls, format!("cannot load CA certificates: {e}"))
     };
     if let Some(p) = ca_path {
         for c in CertificateDer::pem_file_iter(p).map_err(|e| tls_err(&e))? {
@@ -111,14 +104,14 @@ fn tls_connector(t: &ConnectTarget) -> Result<Option<MakeRustlsConnect>, DriverE
     let provider = Arc::new(aws_lc_rs::default_provider());
     let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
-        .map_err(|e| err(ErrorKind::Tls, e.to_string()))?;
+        .map_err(|e| DriverError::new(ErrorKind::Tls, e.to_string()))?;
     let webpki = || -> Result<Arc<WebPkiServerVerifier>, DriverError> {
         WebPkiServerVerifier::builder_with_provider(
             Arc::new(roots(t.tls.ca_path.as_deref())?),
             provider.clone(),
         )
         .build()
-        .map_err(|e| err(ErrorKind::Tls, e.to_string()))
+        .map_err(|e| DriverError::new(ErrorKind::Tls, e.to_string()))
     };
     let wants_auth = match t.tls.mode {
         TlsMode::VerifyFull => builder.with_webpki_verifier(webpki()?),
@@ -143,7 +136,7 @@ fn tls_connector(t: &ConnectTarget) -> Result<Option<MakeRustlsConnect>, DriverE
                     .map(|p| p.display().to_string())
                     .unwrap_or_default()
             };
-            err(
+            DriverError::new(
                 ErrorKind::Tls,
                 format!(
                     "invalid client certificate {} / key {}: {e}",
@@ -179,7 +172,7 @@ pub(crate) fn map_err(e: tokio_postgres::Error) -> DriverError {
                 position,
             }
         };
-        return err(kind, message);
+        return DriverError::new(kind, message);
     }
     let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(&e);
     while let Some(c) = cur {
@@ -192,14 +185,13 @@ pub(crate) fn map_err(e: tokio_postgres::Error) -> DriverError {
             return tls_error(t, message_with_cause(&e));
         }
         if io.is_some_and(|i| i.kind() == std::io::ErrorKind::TimedOut) {
-            return err(ErrorKind::Timeout, "connection timed out");
+            return DriverError::new(ErrorKind::Timeout, "connection timed out");
         }
         cur = c.source();
     }
-    err(ErrorKind::Connect, message_with_cause(&e))
+    DriverError::new(ErrorKind::Connect, message_with_cause(&e))
 }
 
-/// D39: a server without TLS 1.2+ gets a fixed, actionable message.
 fn tls_error(e: &rustls::Error, message: String) -> DriverError {
     use rustls::{
         AlertDescription::ProtocolVersion, Error::*,
@@ -209,12 +201,8 @@ fn tls_error(e: &rustls::Error, message: String) -> DriverError {
         e,
         PeerIncompatible(ServerDoesNotSupportTls12Or13) | AlertReceived(ProtocolVersion)
     );
-    let message = if no_tls12 {
-        "server does not support TLS 1.2+; use an SSH tunnel or disable TLS".into()
-    } else {
-        message
-    };
-    err(ErrorKind::Tls, message)
+    let message = if no_tls12 { NO_TLS12.into() } else { message };
+    DriverError::new(ErrorKind::Tls, message)
 }
 
 /// `tokio_postgres::Error` displays only a generic text; append the root cause.
@@ -253,7 +241,7 @@ pub(crate) async fn connect(
     if let Some(d) = &t.database {
         cfg.dbname(d);
     }
-    let timeout = || err(ErrorKind::Timeout, "connection timed out");
+    let timeout = || DriverError::new(ErrorKind::Timeout, "connection timed out");
     let work = async {
         let client = match &tls {
             Some(tls) => {
@@ -293,7 +281,6 @@ mod tests {
     fn old_tls_maps_to_d39_message() {
         // Arrange
         use rustls::{AlertDescription, PeerIncompatible};
-        const D39: &str = "server does not support TLS 1.2+; use an SSH tunnel or disable TLS";
 
         // Act & Assert
         for e in [
@@ -301,7 +288,7 @@ mod tests {
             rustls::Error::AlertReceived(AlertDescription::ProtocolVersion),
         ] {
             let d = tls_error(&e, "x".into());
-            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, D39));
+            assert_eq!((d.kind, d.message.as_str()), (ErrorKind::Tls, NO_TLS12));
         }
         let e = rustls::Error::PeerIncompatible(PeerIncompatible::NoCipherSuitesInCommon);
         assert_eq!(tls_error(&e, "x".into()).message, "x");

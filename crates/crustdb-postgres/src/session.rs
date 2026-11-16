@@ -9,7 +9,7 @@ use crustdb_core::sql::{StatementClass, TxOp, classify};
 use tokio_postgres::{Client, NoTls};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
-use crate::connect::{err, map_err};
+use crate::connect::map_err;
 use crate::exec::Active;
 
 pub struct PgSession {
@@ -77,7 +77,7 @@ impl CancelHandle for PgCancel {
         };
         tokio::time::timeout(Duration::from_secs(10), cancel)
             .await
-            .map_err(|_| err(ErrorKind::Timeout, "cancel timed out"))?
+            .map_err(|_| DriverError::new(ErrorKind::Timeout, "cancel timed out"))?
     }
 }
 
@@ -147,7 +147,7 @@ impl Session for PgSession {
     }
     async fn use_database(&mut self, _: &str) -> Result<(), DriverError> {
         self.finish_active().await?;
-        Err(err(
+        Err(DriverError::new(
             ErrorKind::Unsupported,
             "PostgreSQL needs a new connection to switch database",
         ))

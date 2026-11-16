@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::conn_task::{self, ConnCmd, Reply};
-use crate::connect::{err, map_err};
+use crate::connect::map_err;
 
 pub struct MysqlSession {
     tx: mpsc::Sender<ConnCmd>,
@@ -70,7 +70,7 @@ impl MysqlSession {
 
     /// Sends a command and awaits its reply; a dead task is a lost connection.
     async fn call<T>(&self, cmd: impl FnOnce(Reply<T>) -> ConnCmd) -> Result<T, DriverError> {
-        let lost = || err(ErrorKind::Connect, "connection task ended");
+        let lost = || DriverError::new(ErrorKind::Connect, "connection task ended");
         let (reply, rx) = oneshot::channel();
         self.tx.send(cmd(reply)).await.map_err(|_| lost())?;
         rx.await.map_err(|_| lost())?
@@ -89,7 +89,7 @@ impl MysqlSession {
                 if matches!(alive, Ok(Ok(_))) {
                     Err(e)
                 } else {
-                    Err(err(ErrorKind::Connect, e.message))
+                    Err(DriverError::new(ErrorKind::Connect, e.message))
                 }
             }
             r => r,
@@ -116,7 +116,7 @@ impl CancelHandle for MysqlCancel {
         };
         tokio::time::timeout(Duration::from_secs(10), kill)
             .await
-            .map_err(|_| err(ErrorKind::Timeout, "cancel timed out"))?
+            .map_err(|_| DriverError::new(ErrorKind::Timeout, "cancel timed out"))?
     }
 }
 

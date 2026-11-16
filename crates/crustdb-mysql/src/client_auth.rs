@@ -6,8 +6,6 @@ use mysql_async::ClientIdentity;
 use rustls::pki_types::pem::{Error as PemError, PemObject};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
-use crate::connect::err;
-
 /// Validated client certificate chain and key (PEM bytes); `None` when neither path is set.
 // ponytail: duplicated in crustdb-postgres (core does no IO); share a crate if a third driver needs it.
 pub(crate) fn client_identity(tls: &TlsConfig) -> Result<Option<ClientIdentity>, DriverError> {
@@ -15,7 +13,7 @@ pub(crate) fn client_identity(tls: &TlsConfig) -> Result<Option<ClientIdentity>,
         (None, None) => return Ok(None),
         (Some(c), Some(k)) => (c, k),
         _ => {
-            return Err(err(
+            return Err(DriverError::new(
                 ErrorKind::Tls,
                 "client certificate and client key must be set together",
             ));
@@ -24,7 +22,7 @@ pub(crate) fn client_identity(tls: &TlsConfig) -> Result<Option<ClientIdentity>,
     let cert_pem = read(cert, "client certificate")?;
     let key_pem = read(key, "client key")?;
     let bad_cert = |e: PemError| {
-        err(
+        DriverError::new(
             ErrorKind::Tls,
             format!("cannot read client certificate {}: {e}", cert.display()),
         )
@@ -33,7 +31,7 @@ pub(crate) fn client_identity(tls: &TlsConfig) -> Result<Option<ClientIdentity>,
         .collect::<Result<Vec<_>, _>>()
         .map_err(bad_cert)?;
     if chain.is_empty() {
-        return Err(err(
+        return Err(DriverError::new(
             ErrorKind::Tls,
             format!("no certificate in {}", cert.display()),
         ));
@@ -46,14 +44,14 @@ pub(crate) fn client_identity(tls: &TlsConfig) -> Result<Option<ClientIdentity>,
             ),
             e => format!("cannot read client key {}: {e}", key.display()),
         };
-        err(ErrorKind::Tls, message)
+        DriverError::new(ErrorKind::Tls, message)
     })?;
     Ok(Some(ClientIdentity::new(cert_pem.into(), key_pem.into())))
 }
 
 fn read(path: &Path, what: &str) -> Result<Vec<u8>, DriverError> {
     std::fs::read(path).map_err(|e| {
-        err(
+        DriverError::new(
             ErrorKind::Tls,
             format!("cannot read {what} {}: {e}", path.display()),
         )

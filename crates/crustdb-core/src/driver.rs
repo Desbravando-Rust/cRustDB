@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::dialect::Dialect;
 use crate::error::DriverError;
 use crate::model::{
-    ColumnDetail, ColumnMeta, Completion, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind,
+    Cell, ColumnDetail, ColumnMeta, Completion, DriverKind, ForeignKeyInfo, IndexInfo, ObjectKind,
     ObjectRef, Row, ServerVersion,
 };
 
@@ -162,6 +162,41 @@ pub trait Introspector: Send + Sync {
         s: &mut dyn Session,
         o: &ObjectRef,
     ) -> Result<Option<u64>, DriverError>;
+}
+
+/// Catalog rows as text: `None` for NULL and non-text cells.
+pub type TextRows = Vec<Vec<Option<String>>>;
+
+/// Reads a started result to the end as [`TextRows`]. A failed fetch still releases it.
+pub async fn drain_text(s: &mut dyn Session) -> Result<TextRows, DriverError> {
+    let mut rows = TextRows::new();
+    loop {
+        let f = match s.fetch(1000).await {
+            Ok(f) => f,
+            Err(e) => {
+                let _ = s.finish().await;
+                return Err(e);
+            }
+        };
+        rows.extend(f.rows.iter().map(|r| {
+            r.iter()
+                .map(|c| match c {
+                    Cell::Text { value, .. } => Some(value.to_string()),
+                    _ => None,
+                })
+                .collect()
+        }));
+        if f.exhausted {
+            break;
+        }
+    }
+    s.finish().await?;
+    Ok(rows)
+}
+
+/// Column `i` of a [`TextRows`] row, empty when absent or NULL.
+pub fn text_at(r: &[Option<String>], i: usize) -> String {
+    r.get(i).cloned().flatten().unwrap_or_default()
 }
 
 #[cfg(test)]

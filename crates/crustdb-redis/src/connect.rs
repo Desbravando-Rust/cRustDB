@@ -13,7 +13,7 @@ use tokio_rustls::TlsConnector;
 
 use crate::decode;
 use crate::session::RedisSession;
-use crate::tls::{self, err};
+use crate::tls;
 
 trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
@@ -30,7 +30,7 @@ pub(crate) fn dial_addr(t: &ConnectTarget) -> String {
 /// The TLS name is always the real host, never the tunnel address.
 fn tls_server_name(t: &ConnectTarget) -> Result<ServerName<'static>, DriverError> {
     ServerName::try_from(t.host.clone())
-        .map_err(|e| err(ErrorKind::Tls, format!("invalid TLS server name: {e}")))
+        .map_err(|e| DriverError::new(ErrorKind::Tls, format!("invalid TLS server name: {e}")))
 }
 
 fn database_index(t: &ConnectTarget) -> Result<u32, DriverError> {
@@ -38,7 +38,7 @@ fn database_index(t: &ConnectTarget) -> Result<u32, DriverError> {
         None | Some("") => Ok(0),
         Some(d) => d
             .parse()
-            .map_err(|_| err(ErrorKind::Connect, "database must be a numeric index")),
+            .map_err(|_| DriverError::new(ErrorKind::Connect, "database must be a numeric index")),
     }
 }
 
@@ -79,7 +79,7 @@ pub(crate) fn map_err(e: RedisError) -> DriverError {
     } else {
         ErrorKind::Protocol
     };
-    err(kind, message)
+    DriverError::new(kind, message)
 }
 
 /// The server answered with an error reply (as opposed to I/O or protocol failures).
@@ -96,7 +96,7 @@ fn handshake_error(e: std::io::Error) -> DriverError {
     let message = format!("TLS handshake failed: {e}");
     match e.get_ref().and_then(|i| i.downcast_ref::<rustls::Error>()) {
         Some(t) => tls::tls_error(t, message),
-        None => err(ErrorKind::Tls, message),
+        None => DriverError::new(ErrorKind::Tls, message),
     }
 }
 
@@ -104,7 +104,7 @@ async fn open(t: &ConnectTarget) -> Result<Box<dyn AsyncStream>, DriverError> {
     let tls = tls::client_config(&t.tls)?;
     let tcp = TcpStream::connect(dial_addr(t))
         .await
-        .map_err(|e| err(ErrorKind::Connect, e.to_string()))?;
+        .map_err(|e| DriverError::new(ErrorKind::Connect, e.to_string()))?;
     // Best effort: only affects latency.
     let _ = tcp.set_nodelay(true);
     Ok(match tls {
@@ -140,7 +140,7 @@ pub(crate) async fn connect(
     };
     tokio::time::timeout(t.connect_timeout, work)
         .await
-        .map_err(|_| err(ErrorKind::Timeout, "connection timed out"))?
+        .map_err(|_| DriverError::new(ErrorKind::Timeout, "connection timed out"))?
 }
 
 #[cfg(test)]
