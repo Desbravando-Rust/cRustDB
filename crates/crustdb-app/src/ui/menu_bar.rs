@@ -64,11 +64,16 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<MenuCmd> {
     let online = state.active_online();
     let on = online.is_some();
     let tab = online.is_some_and(|w| w.active_tab.is_some());
+    let table = online.is_some_and(|w| {
+        w.tabs
+            .iter()
+            .any(|crate::state::Tab::Table(t)| Some(t.id) == w.active_tab)
+    });
     let sql = online.is_some_and(|w| w.capabilities().sql_editor);
     egui::MenuBar::new().ui(ui, |ui| {
         ui.menu_button("File", |ui| {
             let mut m = Item { ui, out: &mut out };
-            m.action("New connection", Action::NewConnection, true);
+            m.action("New connection…", Action::NewConnection, true);
             let why = online.map(|w| super::home::unsupported_for(w.config.driver));
             if m.entry_hint(
                 "New query",
@@ -79,8 +84,8 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<MenuCmd> {
                 m.out.push(MenuCmd::Action(Action::NewQuery));
             }
             m.action("Open file…", Action::Open, on);
-            m.action("Save", Action::Save, tab);
-            m.action("Save as…", Action::SaveAs, tab);
+            m.action("Save file", Action::Save, tab);
+            m.action("Save file as…", Action::SaveAs, tab);
             m.action("Export CSV…", Action::ExportCsv, tab);
             m.action("Close tab", Action::CloseTab, tab);
             if let Some(w) = online {
@@ -98,11 +103,11 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<MenuCmd> {
         });
         ui.menu_button("View", |ui| {
             let mut m = Item { ui, out: &mut out };
-            m.action("Refresh", Action::Refresh, on);
+            m.action("Refresh data", Action::Refresh, on);
             m.action("Next tab", Action::NextTab, tab);
             m.action("Previous tab", Action::PrevTab, tab);
-            m.action("Next page", Action::NextPage, tab);
-            m.action("Previous page", Action::PrevPage, tab);
+            m.action("Next page", Action::NextPage, table);
+            m.action("Previous page", Action::PrevPage, table);
         });
         ui.menu_button("Tools", |ui| {
             let mut m = Item { ui, out: &mut out };
