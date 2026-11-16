@@ -66,14 +66,15 @@ impl CrustApp {
                 ui::menu_bar::MenuCmd::Intent(i) => intents.push(i),
             }
         }
-        if let Some(m) = self.status.current(&self.state) {
+        // One sync per frame: the metrics row in the central area reuses this model.
+        let status = self.status.current(&self.state);
+        if let Some(m) = status {
             let bar = egui::Frame::new()
-                .fill(ui::theme::ACCENT)
+                .fill(ui::theme::STATUS_BAR_FILL)
                 .inner_margin(egui::Margin::symmetric(8, 2));
             egui::Panel::bottom("status_bar")
                 .frame(bar)
                 .show(ui, |ui| ui::status_bar::show(ui, m));
-            egui::Panel::bottom("metrics_strip").show(ui, |ui| ui::status_bar::metrics(ui, m));
         }
         self.sidebar_rect = None;
         // Same panel id on both screens: the width carries over on connect.
@@ -97,6 +98,11 @@ impl CrustApp {
             if let Some(f) = &mut self.form {
                 intents.extend(ui::connection_form::show(ui, f, &self.state.config.labels));
                 return;
+            }
+            // First bottom panel = lowest: the metrics row sits under the grid footer.
+            // Online connections only (see `metrics_panel`).
+            if let Some(m) = status {
+                ui::status_bar::metrics_panel(ui, m, online);
             }
             if let Some(w) = self.state.active_online() {
                 intents.extend(ui::tab_bar::show(ui, w));

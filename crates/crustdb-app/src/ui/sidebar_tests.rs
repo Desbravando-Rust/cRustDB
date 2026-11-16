@@ -191,7 +191,7 @@ fn sidebar_filter_sits_in_gray_frame() {
     let input = h.get_by_role(egui::accesskit::Role::TextInput).rect();
     let framed = h.output().shapes.iter().any(|s| match &s.shape {
         egui::Shape::Rect(r) => {
-            r.fill == egui::Color32::from_gray(40) && r.rect.contains_rect(input)
+            r.fill == crate::ui::theme::INPUT_FILL && r.rect.contains_rect(input)
         }
         _ => false,
     });

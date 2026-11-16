@@ -156,3 +156,63 @@ pub fn bool_text(meta: &ColumnMeta, text: &str) -> Option<&'static str> {
         None
     }
 }
+
+/// Short uppercase type tag of a column header (`character varying(40)[]` -> `VARCHAR[]`).
+/// Drops `(...)` arguments, keeps `[]` and `unsigned`, folds aliases; `None` for an empty name.
+pub(crate) fn type_label(type_name: &str) -> Option<String> {
+    let mut depth = 0usize;
+    let bare: String = type_name
+        .chars()
+        .filter(|&c| match c {
+            '(' => {
+                depth += 1;
+                false
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                false
+            }
+            _ => depth == 0,
+        })
+        .collect();
+    let lower = bare.to_lowercase();
+    let mut t = lower
+        .replace(" without time zone", "")
+        .replace(" with time zone", "tz");
+    let mut arrays = String::new();
+    while let Some(rest) = t.trim_end().strip_suffix("[]") {
+        arrays.push_str("[]");
+        t = rest.to_owned();
+    }
+    let mut words: Vec<&str> = t.split_whitespace().collect();
+    let mut flags = vec![];
+    while let Some(&w) = words
+        .last()
+        .filter(|w| matches!(**w, "unsigned" | "zerofill"))
+    {
+        flags.insert(0, w);
+        words.pop();
+    }
+    let base = words.join(" ");
+    let base = match base.as_str() {
+        "character varying" => "varchar",
+        "character" => "char",
+        "integer" | "int4" => "int",
+        "int2" => "smallint",
+        "int8" => "bigint",
+        "float4" => "real",
+        "float8" | "double precision" => "double",
+        "boolean" => "bool",
+        b => b,
+    };
+    if base.is_empty() {
+        return None;
+    }
+    let mut out = base.to_owned();
+    for f in flags {
+        out.push(' ');
+        out.push_str(f);
+    }
+    out.push_str(&arrays);
+    Some(out.to_uppercase())
+}

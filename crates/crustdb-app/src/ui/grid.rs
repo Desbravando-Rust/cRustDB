@@ -5,7 +5,7 @@ use crustdb_core::sql::{TokenKind, highlight};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 
-use super::grid_layout::{bool_text, layout};
+use super::grid_layout::{bool_text, layout, type_label};
 use super::{Intent, grid_copy};
 use crate::state::{TableTab, TableView};
 
@@ -120,17 +120,26 @@ fn table(
                     let mark = sort_mark(sorts, &c.name);
                     let r = ui
                         .horizontal(|ui| {
-                            ui.add(
+                            let name = ui.add(
                                 egui::Label::new(
-                                    RichText::new(format!("{}{mark}", c.name)).strong(),
+                                    RichText::new(format!("{}{mark}", c.name))
+                                        .strong()
+                                        .size(14.0),
                                 )
                                 .selectable(false)
                                 .sense(egui::Sense::click()),
-                            ) | ui.add(
-                                egui::Label::new(RichText::new(&c.type_name).small().weak())
-                                    .selectable(false)
-                                    .sense(egui::Sense::click()),
-                            )
+                            );
+                            // An unnamed type renders no tag.
+                            match type_label(&c.type_name) {
+                                Some(t) => {
+                                    name | ui.add(
+                                        egui::Label::new(RichText::new(t).small().weak())
+                                            .selectable(false)
+                                            .sense(egui::Sense::click()),
+                                    )
+                                }
+                                None => name,
+                            }
                         })
                         .inner;
                     if r.clicked() {
