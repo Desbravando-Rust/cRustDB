@@ -53,7 +53,9 @@ fn sidebar_has_no_logo() {
     h.run();
 
     // Assert
-    h.get_by_label("New query");
+    h.get_by_label("EXPLORER");
+    assert!(h.query_by_label("New query").is_none());
+    assert!(h.query_by_label("Disconnect").is_none());
     assert!(h.query_by_role(egui::accesskit::Role::Image).is_none());
     assert!(h.query_by_label("cRustDB logo").is_none());
 }
@@ -160,26 +162,6 @@ fn sidebar_chip_gone_after_label_delete() {
 
     // Assert
     assert_eq!(shown, (false, false));
-}
-
-#[test]
-fn sidebar_buttons_are_spaced() {
-    // Arrange
-    let s = online();
-    let mut done = false;
-    let mut h = Harness::builder().build_ui(|ui| {
-        if ready(ui, &mut done) {
-            show(ui, &s);
-        }
-    });
-
-    // Act
-    h.run();
-
-    // Assert
-    let new = h.get_by_label("New query").rect();
-    let disc = h.get_by_label("Disconnect").rect();
-    assert!(disc.left() - new.right() >= 8.0 + h.ctx.global_style().spacing.item_spacing.x);
 }
 
 #[test]

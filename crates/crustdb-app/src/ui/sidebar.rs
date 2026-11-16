@@ -162,18 +162,6 @@ pub fn show(ui: &mut egui::Ui, state: &AppState) -> Vec<Intent> {
                 }
             }
         });
-    ui.horizontal(|ui| {
-        let new_query = ui
-            .add_enabled(caps.sql_editor, egui::Button::new("New query"))
-            .on_disabled_hover_text(super::home::unsupported_for(active.config.driver));
-        if new_query.clicked() {
-            out.push(Intent::NewQuery);
-        }
-        ui.add_space(8.0);
-        if ui.button("Disconnect").clicked() {
-            out.push(Intent::Disconnect(active.id));
-        }
-    });
     if let Some(ks) = &active.keyspace {
         out.extend(super::keyspace::sidebar(ui, ks));
         return out;
