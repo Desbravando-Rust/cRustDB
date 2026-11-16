@@ -98,4 +98,37 @@ mod tests {
         assert_eq!(with_query, "alpha/main");
         assert_eq!(with_query, without_tab);
     }
+
+    #[test]
+    fn table_tab_database_counts_only_for_postgres_and_mysql() {
+        // Arrange
+        use crate::runtime::TabId;
+        use crate::state::{Tab, TableTab};
+        use crustdb_core::model::{ObjectKind, ObjectRef};
+        let cases = [
+            (DriverKind::Postgres, Some("main"), "alpha/other"),
+            (DriverKind::Mysql, Some("shop"), "alpha/other"),
+            (DriverKind::Sqlite, Some("/tmp/app.db"), "alpha/app.db"),
+            (DriverKind::Redis, Some("3"), "alpha/3"),
+        ];
+
+        // Act & Assert
+        for (d, db, want) in cases {
+            let mut s = crate::state::workspace::tests::state(&["alpha"]);
+            s.open_workspace(s.config.connections[0].clone());
+            let w = &mut s.workspaces[0];
+            w.config.driver = d;
+            w.config.database = db.map(Into::into);
+            let object = ObjectRef {
+                database: "other".into(),
+                schema: Some("public".into()),
+                name: "t".into(),
+                kind: ObjectKind::Table,
+            };
+            w.tabs
+                .push(Tab::Table(TableTab::new(TabId(9), object, 300)));
+            w.active_tab = Some(TabId(9));
+            assert_eq!(scope_of(w), want, "{d:?}");
+        }
+    }
 }

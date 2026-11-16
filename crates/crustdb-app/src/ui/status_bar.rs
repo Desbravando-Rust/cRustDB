@@ -162,10 +162,10 @@ pub fn show(ui: &mut egui::Ui, m: &StatusModel) {
 }
 
 /// Metrics row panel for the central area. Added before the tab content so it is the lowest
-/// bottom panel: under the grid footer, as in the prototype. Only for an online connection and
-/// never over the connection form.
-pub fn metrics_panel(ui: &mut egui::Ui, m: &StatusModel, online: bool, form_open: bool) {
-    if online && !form_open {
+/// bottom panel: under the grid footer, as in the prototype. Only for an online connection; the
+/// caller returns before this on the connection form.
+pub fn metrics_panel(ui: &mut egui::Ui, m: &StatusModel, online: bool) {
+    if online {
         egui::Panel::bottom("metrics_strip").show(ui, |ui| metrics(ui, m));
     }
 }
@@ -178,10 +178,15 @@ pub fn metrics(ui: &mut egui::Ui, m: &StatusModel) {
                 .on_hover_text(tip);
         };
         if let Some((_, v, up)) = &m.connection {
-            let c = if *up { GREEN } else { AMBER };
+            // Different glyph when reconnecting: not colour-only.
+            let (g, c) = if *up {
+                (icon::CIRCLE, GREEN)
+            } else {
+                (icon::WARNING, AMBER)
+            };
             put(
                 ui,
-                format!("{} {}", icon::CIRCLE, v.raw),
+                format!("{g} {}", v.raw),
                 c,
                 &format!("Server: {}", engine(v)),
             );
@@ -358,31 +363,25 @@ mod tests {
         assert_eq!(rows_text(&m).as_deref(), Some("Rows: 99"));
     }
 
-    fn panel_harness<'a>(
-        m: &'a StatusModel,
-        online: bool,
-        form: bool,
-    ) -> egui_kittest::Harness<'a> {
+    fn panel_harness<'a>(m: &'a StatusModel, online: bool) -> egui_kittest::Harness<'a> {
         egui_kittest::Harness::new_ui(move |ui| {
             crate::ui::theme::install_theme(ui.ctx());
             egui::CentralPanel::default().show(ui, |ui| {
-                metrics_panel(ui, m, online, form);
+                metrics_panel(ui, m, online);
                 egui::Panel::bottom("footer").show(ui, |ui| ui.label("grid footer"));
             });
         })
     }
 
     #[test]
-    fn metrics_panel_sits_under_footer_and_hides_on_form_or_offline() {
+    fn metrics_panel_sits_under_footer_and_hides_when_offline() {
         // Arrange
         let m = model();
-        let mut shown = panel_harness(&m, true, false);
-        let mut on_form = panel_harness(&m, true, true);
-        let mut offline = panel_harness(&m, false, false);
+        let mut shown = panel_harness(&m, true);
+        let mut offline = panel_harness(&m, false);
 
         // Act
         shown.run();
-        on_form.run();
         offline.run();
 
         // Assert
@@ -391,9 +390,11 @@ mod tests {
             .get_by_label(&format!("{} 1000", icon::SHIELD_CHECK))
             .rect();
         assert!(metric.top() >= footer.bottom());
-        for h in [&on_form, &offline] {
-            assert!(h.query_by_label_contains(icon::SHIELD_CHECK).is_none());
-        }
+        assert!(
+            offline
+                .query_by_label_contains(icon::SHIELD_CHECK)
+                .is_none()
+        );
     }
 
     #[test]

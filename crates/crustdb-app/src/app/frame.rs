@@ -102,7 +102,7 @@ impl CrustApp {
             // First bottom panel = lowest: the metrics row sits under the grid footer.
             // Online connections only (see `metrics_panel`).
             if let Some(m) = status {
-                ui::status_bar::metrics_panel(ui, m, online, false);
+                ui::status_bar::metrics_panel(ui, m, online);
             }
             if let Some(w) = self.state.active_online() {
                 intents.extend(ui::tab_bar::show(ui, w));
